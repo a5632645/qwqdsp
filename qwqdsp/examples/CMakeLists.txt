@@ -1,3 +1,5 @@
+cmake_policy(SET CMP0076 NEW)
+
 function(add_qwqdsp_example ex_file)
     add_executable(qwqdsp-${ex_file}
         ${ex_file}.cpp
