@@ -1,0 +1,16 @@
+cmake_minimum_required(VERSION 3.11)
+project(qwqdsp)
+
+find_package(raylib QUIET)
+set(qwqdsp_have_raylib TRUE)
+if(raylib_FOUND)
+    message(STATUS "raylib found, using internal copy")
+else()
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/raylib")
+        add_subdirectory(raylib)
+    else()
+        set(qwqdsp_have_raylib FALSE)
+    endif()
+endif()
+
+add_subdirectory(qwqdsp)
