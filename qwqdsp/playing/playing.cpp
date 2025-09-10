@@ -6,9 +6,9 @@ constexpr auto kPath = R"(C:\Users\Kawai\Music\sweep.wav)";
     AudioFile<float> infile;
     infile.load(kPath);
 
-    constexpr auto target_fs = 8000;
+    constexpr auto target_fs = 44100;
     qwqdsp::fx::Resample resample;
-    resample.Init(infile.getSampleRate(), target_fs, 100, 1023);
+    resample.Init(infile.getSampleRate(), target_fs, 130, 255);
 
     AudioFile<float>::AudioBuffer output;
     output.resize(1);

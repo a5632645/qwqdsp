@@ -57,6 +57,27 @@ public:
             }
         }
     }
+
+    void Process(std::span<float> in, std::span<float> out) noexcept {
+        segement::Slice1D slice{in};
+        size_t wpos = 0;
+        while (!slice.IsEnd()) {
+            // 首先向左移动缓冲区m个采样，复制m个采样到末尾，然后移动系数相加
+            auto block = slice.GetSome(kBatchSize);
+            for (size_t i = 0; i < latch_.size() - block.size(); ++i) {
+                latch_[i] = latch_[i + block.size()];
+            }
+            std::copy(block.begin(), block.end(), latch_.end() - block.size());
+
+            for (size_t i = 0; i < block.size(); ++i) {
+                float sum = 0.0f;
+                for (size_t j = 0; j < coeff_.size(); ++j) {
+                    sum += coeff_[j] * latch_[i + j];
+                }
+                out[wpos++] = sum;
+            }
+        }
+    }
 private:
     std::vector<float> coeff_;
     std::vector<float> latch_;

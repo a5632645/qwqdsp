@@ -8,6 +8,8 @@
 namespace qwqdsp::fx {
 class Resample {
 public:
+    static constexpr size_t kOversample = 128;
+
     /**
      * @param atten >0
      * @param kernel_len 必须是奇数
@@ -16,65 +18,66 @@ public:
         assert(kernel_len % 2 == 1);
 
         phase_inc_ = source_fs / target_fs;
-        kernel_.resize(kernel_len + 3);
+        kernel_len_ = kernel_len;
+
+        kernel_.resize(kernel_len * kOversample);
         float const beta = qwqdsp::window::Kaiser::Beta(atten);
         float const width = qwqdsp::window::Kaiser::MainLobeWidth(beta) * std::numbers::pi_v<float> * 2.0f / static_cast<float>(kernel_len);
 
-        std::span kernel_org{kernel_.data() + 1, kernel_len};
         if (target_fs < source_fs) {
             float const cutoff = std::numbers::pi_v<float> * target_fs / source_fs - width;
-            qwqdsp::filter::WindowFIR::Lowpass(kernel_org, cutoff);
+            qwqdsp::filter::WindowFIR::Lowpass(kernel_, cutoff / kOversample);
         }
         else {
             float const cutoff = std::numbers::pi_v<float> - width;
-            qwqdsp::filter::WindowFIR::Lowpass(kernel_org, cutoff);
+            qwqdsp::filter::WindowFIR::Lowpass(kernel_, cutoff / kOversample);
+        }
+        
+        for (auto& s : kernel_) {
+            s *= kOversample;
         }
 
-        qwqdsp::window::Kaiser::ApplyWindow(kernel_org, beta, false);
-        std::reverse(kernel_org.begin(), kernel_org.end());
-        kernel_[0] = kernel_org.front();
-        kernel_[kernel_len + 1] = kernel_org[0];
-        kernel_[kernel_len + 2] = kernel_org[1];
+        qwqdsp::window::Kaiser::ApplyWindow(kernel_, beta, false);
+        std::reverse(kernel_.begin(), kernel_.end());
+        kernel_.push_back(0);
+        kernel_.push_back(0);
     }
 
     std::vector<float> Process(std::span<float> x) noexcept {
         std::vector<float> r;
 
         float phase = 0.0f;
-        int const kernel_len = static_cast<int>(kernel_.size() - 3);
-        int const xend = static_cast<int>(x.size());
-        int const half_len = (kernel_len - 1) / 2;
-        int rpos = -half_len;
-        while (rpos < xend) {
-            int const x_rbegin = std::max(0, rpos);
-            int const x_rend = std::min(xend - 1, rpos + kernel_len);
-            int const kernel_offset = x_rbegin - rpos;
-            int const convo_len = x_rend - x_rbegin;
-            float const frac = phase;
+        int const ikernel_len = static_cast<int>(kernel_len_);
+        int const xsize = static_cast<int>(x.size());
+        int xrpos = -(kernel_len_ - 1) / 2;
+
+        while (xrpos < xsize) {
+            float const frac = 1.0f - phase;
+
             float sum{};
-            for (int i = 0; i < convo_len; ++i) {
-                float const xx = x[static_cast<size_t>(x_rbegin + i)];
-                size_t const kernel_rpos = static_cast<size_t>(kernel_offset + i + 1);
-                float const yy = qwqdsp::Interpolation::PCHIP(kernel_[kernel_rpos - 1], kernel_[kernel_rpos], kernel_[kernel_rpos + 1], kernel_[kernel_rpos + 2], frac);
-                sum += xx * yy;
+            int const begin = std::max(0, -xrpos);
+            int const xibegin = std::max(0, frac == 0.0f ? xrpos : xrpos + 1);
+            int const len = std::min(ikernel_len, xsize - xibegin);
+            for (int i = begin; i < len; ++i) {
+                float const krpos = (i + frac) * kOversample;
+                size_t const ikrpos = static_cast<size_t>(krpos);
+                float const frac_krpos = krpos - std::floor(krpos);
+                float const kernel_v = qwqdsp::Interpolation::Linear(kernel_[ikrpos], kernel_[ikrpos + 1], frac_krpos);
+                sum += kernel_v * x[xibegin + i];
             }
             r.push_back(sum);
 
             phase += phase_inc_;
-            while (phase >= 1.0f) {
-                phase -= 1.0f;
-                ++rpos;
-            }
+            xrpos += std::floor(phase);
+            phase = phase - std::floor(phase);
         }
 
         return r;
     }
 
-    std::span<const float> GetKernel() const {
-        return {kernel_.data(), kernel_.size() - 3};
-    }
 private:
     float phase_inc_{};
+    size_t kernel_len_{};
     std::vector<float> kernel_;
 };
 }
