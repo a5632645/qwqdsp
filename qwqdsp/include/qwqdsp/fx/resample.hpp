@@ -1,12 +1,9 @@
 #pragma once
 #include <vector>
 #include <span>
-#include <cmath>
 #include "qwqdsp/filter/window_fir.hpp"
 #include "qwqdsp/interpolation.hpp"
 #include "qwqdsp/window/kaiser.hpp"
-
-// qwqfixme: 内核的位置不正确
 
 namespace qwqdsp::fx {
 class Resample {
@@ -15,7 +12,7 @@ public:
      * @param atten >0
      * @param kernel_len 必须是奇数
      */
-    void Init(float source_fs, float target_fs, float atten, size_t kernel_len) noexcept {
+    void Init(float source_fs, float target_fs, float atten, size_t kernel_len) {
         assert(kernel_len % 2 == 1);
 
         phase_inc_ = source_fs / target_fs;

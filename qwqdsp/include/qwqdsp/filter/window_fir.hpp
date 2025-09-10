@@ -9,18 +9,18 @@
 namespace qwqdsp::filter {
 struct WindowFIR {
     static void Lowpass(std::span<float> x, float wc) noexcept {
-        float center = (x.size() - 1.0f) / 2.0f;
+        float center = (static_cast<float>(x.size()) - 1.0f) / 2.0f;
         for (size_t i = 0; i < x.size(); ++i) {
-            float t = i - center;
+            float t = static_cast<float>(i) - center;
             x[i] = Sinc(wc, t);
         }
     }
 
     static void Highpass(std::span<float> x, float wc) noexcept {
         assert(x.size() % 2 == 1);
-        float center = (x.size() - 1.0f) / 2.0f;
+        float center = (static_cast<float>(x.size()) - 1.0f) / 2.0f;
         for (size_t i = 0; i < x.size(); ++i) {
-            float t = i - center;
+            float t = static_cast<float>(i) - center;
             x[i] = -Sinc(wc, t);
         }
         x[x.size() / 2] += 1;
@@ -30,9 +30,9 @@ struct WindowFIR {
         if (w1 < w2) {
             std::swap(w1, w2);
         }
-        float center = (x.size() - 1.0f) / 2.0f;
+        float center = (static_cast<float>(x.size()) - 1.0f) / 2.0f;
         for (size_t i = 0; i < x.size(); ++i) {
-            float t = i - center;
+            float t = static_cast<float>(i) - center;
             x[i] = Sinc(w2, t) - Sinc(w1, t);
         }
     }
@@ -42,9 +42,9 @@ struct WindowFIR {
         if (w1 < w2) {
             std::swap(w1, w2);
         }
-        float center = (x.size() - 1.0f) / 2.0f;
+        float center = (static_cast<float>(x.size()) - 1.0f) / 2.0f;
         for (size_t i = 0; i < x.size(); ++i) {
-            float t = i - center;
+            float t = static_cast<float>(i) - center;
             x[i] = -(Sinc(w2, t) - Sinc(w1, t));
         }
         x[x.size() / 2] -= 1;
