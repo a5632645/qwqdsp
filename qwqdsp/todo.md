@@ -23,3 +23,7 @@
   - [ ] DPW
   - [ ] 优化BLIT的噪声
   - [x] BLEP硬同步
+  - [ ] BLEP三角波硬同步
+  - [ ] 优化BLEP代码的分支
+
+- [ ] B-spline
