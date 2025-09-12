@@ -23,6 +23,9 @@ struct IIRDesign {
     // --------------------------------------------------------------------------------
     // 原型滤波器
     // --------------------------------------------------------------------------------
+    /**
+     * @brief (-3.01)dB at (1)rad/sec
+     */
     static double Butterworth(std::span<ZPK> ret, size_t num_filter) {
         assert(ret.size() >= num_filter);
 
@@ -37,6 +40,7 @@ struct IIRDesign {
     }
 
     /**
+     * @brief (-ripple)dB at (1)rad/sec
      * @param ripple >0 dB
      * @ref https://en.wikipedia.org/wiki/Chebyshev_filter
      */
@@ -45,7 +49,7 @@ struct IIRDesign {
 
         size_t n = 2 * num_filter;
         size_t i = 0;
-        double eps = std::sqrt(std::pow(10.0, -ripple / 10.0) - 1.0);
+        double eps = std::sqrt(std::pow(10.0, ripple / 10.0) - 1.0);
         double A = 1.0 / n * std::asinh(1.0 / eps);
         double k_re = std::sinh(A);
         double k_im = std::cosh(A);
@@ -69,6 +73,7 @@ struct IIRDesign {
     }
 
     /**
+     * @brief (-3.01)dB at (1)rad/sec
      * @param ripple >0 dB
      * @ref https://en.wikipedia.org/wiki/Chebyshev_filter
      * @ref https://en.wikipedia.org/wiki/Chebyshev_nodes#Even_order_modified_Chebyshev_nodes
