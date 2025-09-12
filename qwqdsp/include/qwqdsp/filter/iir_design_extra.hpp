@@ -32,7 +32,7 @@ private:
             ret[i].p = g * std::complex{-std::sin(phi), std::cos(phi)};
             ++i;
         }
-        return g * g;
+        return 1.0 / std::sqrt(square_epsi);
     }
 };
 }
