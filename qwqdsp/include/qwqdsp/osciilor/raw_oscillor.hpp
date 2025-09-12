@@ -5,17 +5,17 @@
 namespace qwqdsp::oscillor {
 class RawOscillor {
 public:
-    void Init(float fs) noexcept {
-        fs_ = fs;
+    void Reset(float phase) noexcept {
+        phase_ = phase - std::floor(phase);
     }
 
-    void SetFreq(float freq) noexcept {
-        inc_ = freq / fs_;
+    void SetFreq(float freq, float fs) noexcept {
+        inc_ = freq / fs;
     }
 
     float Tick() noexcept {
         phase_ += inc_;
-        phase_ -= static_cast<int>(phase_);
+        phase_ -= std::floor(phase_);
         return phase_;
     }
 
@@ -39,7 +39,6 @@ public:
         return Tick() > 0.5f ? 1.0f : -1.0f;
     }
 private:
-    float fs_{};
     float inc_{};
     float phase_{};
 };

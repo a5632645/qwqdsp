@@ -8,7 +8,7 @@
 #include "biquad.hpp"
 
 namespace qwqdsp {
-struct TraditionalDesign {
+struct IIRDesign {
     static constexpr auto pi = std::numbers::pi;
 
     struct ZPK {
