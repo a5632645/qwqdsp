@@ -23,7 +23,7 @@ int main() {
     qwqdsp::fx::ResampleIIRDynamic resample;
     resample.Init(infile.getSampleRate(), 10000.0f);
     // resample.Set(infile.getSampleRate(), 48000.0f);
-    resample.SetPitchShift(-24.0f);
+    resample.SetPitchShift(-12.0f);
 
     auto it_in = input.begin();
     while (it_in != input.end()) {

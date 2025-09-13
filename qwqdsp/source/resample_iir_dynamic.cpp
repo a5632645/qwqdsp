@@ -8,7 +8,7 @@ ResampleIIRDynamic::~ResampleIIRDynamic() = default;
 void ResampleIIRDynamic::Init(float source_fs, float max_cutoff) {
     source_fs_ = source_fs;
     blep_ = std::make_unique<signalsmith::blep::EllipticBlep<float>>(
-        true, source_fs, max_cutoff, 255
+        true, source_fs, max_cutoff, 127
     );
     Reset();
 }
