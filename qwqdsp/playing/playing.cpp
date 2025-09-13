@@ -13,9 +13,9 @@ int main() {
 
     static constexpr float kOutputFs = 8000.0f;
 
-    qwqdsp::fx::Resample resample;
-    resample.Init(infile.getSampleRate(), kOutputFs, 100, 127);
-    // resample.Init(infile.getSampleRate(), kOutputFs);
+    qwqdsp::fx::ResampleIIR resample;
+    // resample.Init(infile.getSampleRate(), kOutputFs, 100, 127);
+    resample.Init(infile.getSampleRate(), kOutputFs);
     output.front() = resample.Process(input);
 
     AudioFile<float> outfile;

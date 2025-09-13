@@ -8,7 +8,7 @@ class ResampleIIRImpl {
 public:
     void Init(float source_fs, float target_fs) {
         blep_ = std::make_unique<signalsmith::blep::EllipticBlep<float>>(
-            true, source_fs, target_fs * 20000.0f / 44100.0f, 255
+            true, source_fs, target_fs / 2.0f - (44100.0f / 2.0f - 20000.0f), 255
         );
         phase_inc_ = source_fs / target_fs;
     }
@@ -19,11 +19,16 @@ public:
         blep_->reset();
 
         float phase{};
+        float max_one_{};
         size_t rpos{};
         blep_->add(x[0], 0);
         while (rpos < x.size() - 1) {
             float const frac = phase;
-            ret.push_back(blep_->get(frac));
+            float const v = blep_->get(frac);
+            if (std::abs(v) > max_one_) {
+                max_one_ = std::abs(v);
+            }
+            ret.push_back(v);
 
             phase += phase_inc_;
             size_t new_rpos = rpos + static_cast<size_t>(std::floor(phase));
@@ -35,6 +40,16 @@ public:
                 blep_->add(x[i + 1], 0);
             }
             rpos = new_rpos;
+        }
+
+        if (max_one_ == 0.0f) {
+            max_one_ = 1.0f;
+        }
+        else {
+            max_one_ = 0.9f / max_one_;
+        }
+        for (auto& s : ret) {
+            s *= max_one_;
         }
 
         return ret;
