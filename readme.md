@@ -48,7 +48,8 @@
   - 延迟线
   - 重采样器
     - 凯泽尔窗重采样
-    - elliptic blep IIR重采样（相位很严重，速度很快，归一化音量，-100dB抑制（见elliptic-blep仓库滤波器设计））
+    - elliptic blep IIR重采样（非线性相位，速度很快，归一化音量，约-100dB抑制（见elliptic-blep仓库滤波器设计））
+    - elliptic blep IIR动态重采样（可能是为采样器实现的）
   - uniform分块卷积
 - 插值
   - catmull-rom-spline
