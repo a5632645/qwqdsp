@@ -7,13 +7,15 @@ struct EllipticBlep;
 }
 
 namespace qwqdsp::fx {
-
+/**
+ * @brief holters-parker IIR重采样器，使用Elliptic-blep库实现，移除了高通滤波器系数
+ */
 class ResampleIIRDynamic {
 public:
     ResampleIIRDynamic();
     ~ResampleIIRDynamic();
 
-    void Init(float source_fs, float max_cutoff);
+    void Init(float source_fs);
     void Reset() noexcept;
 
     void Set(float source_fs, float target_fs) noexcept;
@@ -22,6 +24,10 @@ public:
 
     void Push(float x) noexcept;
     float Read() noexcept;
+    /**
+     * @return false 请调用Push给予更多数据
+     *          true 可以调用Read直到返回false
+     */
     bool IsReady() const noexcept;
 private:
     std::unique_ptr<signalsmith::blep::EllipticBlep<float>> blep_;

@@ -5,10 +5,10 @@ namespace qwqdsp::fx {
 ResampleIIRDynamic::ResampleIIRDynamic() = default;
 ResampleIIRDynamic::~ResampleIIRDynamic() = default;
 
-void ResampleIIRDynamic::Init(float source_fs, float max_cutoff) {
+void ResampleIIRDynamic::Init(float source_fs) {
     source_fs_ = source_fs;
     blep_ = std::make_unique<signalsmith::blep::EllipticBlep<float>>(
-        true, source_fs, max_cutoff, 127
+        true, source_fs, 20000.0f, 127
     );
     Reset();
 }

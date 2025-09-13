@@ -8,11 +8,12 @@
 namespace qwqdsp::fx {
 class Resample {
 public:
+    // 内核的过采样量，越大质量越好
     static constexpr size_t kOversample = 128;
 
     /**
-     * @param atten >0
-     * @param kernel_len 必须是奇数
+     * @param atten (>0)dB 这决定了target_fs/2处的衰减值
+     * @param kernel_len 必须是奇数，越大过渡带越小，计算量越大
      */
     void Init(float source_fs, float target_fs, float atten, size_t kernel_len) {
         assert(kernel_len % 2 == 1);
