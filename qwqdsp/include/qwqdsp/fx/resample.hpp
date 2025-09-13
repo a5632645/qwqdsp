@@ -42,7 +42,7 @@ public:
         std::reverse(kernel_block.begin(), kernel_block.end());
     }
 
-    std::vector<float> Process(std::span<float> x) noexcept {
+    std::vector<float> Process(std::span<float> x) {
         std::vector<float> r;
 
         float phase = 0.0f;
