@@ -1,5 +1,6 @@
 #include "qwqdsp/fx/resample_iir.hpp"
 #include "qwqdsp/fx/resample.hpp"
+#include "qwqdsp/fx/resample_iir_dynamic.hpp"
 #include "AudioFile.h"
 
 int main() {
@@ -10,13 +11,34 @@ int main() {
 
     AudioFile<float>::AudioBuffer output;
     output.resize(1);
+    auto& out = output.front();
 
-    static constexpr float kOutputFs = 192000.0f;
+    static constexpr float kOutputFs = 48000.0f;
 
-    qwqdsp::fx::ResampleIIR resample;
+    // qwqdsp::fx::ResampleIIR resample;
     // resample.Init(infile.getSampleRate(), kOutputFs, 100, 127);
-    resample.Init(infile.getSampleRate(), kOutputFs);
-    output.front() = resample.Process(input);
+    // resample.Init(infile.getSampleRate(), kOutputFs);
+    // output.front() = resample.Process(input);
+
+    qwqdsp::fx::ResampleIIRDynamic resample;
+    resample.Init(infile.getSampleRate(), 10000.0f);
+    resample.Set(infile.getSampleRate(), 48000.0f);
+    resample.Reset();
+
+    auto it_in = input.begin();
+    while (it_in != input.end()) {
+        while (!resample.IsReady()) {
+            resample.Push(*it_in);
+            ++it_in;
+            if (it_in == input.end()) {
+                break;
+            }
+        }
+
+        while (resample.IsReady()) {
+            out.push_back(resample.Read());
+        }
+    }
 
     AudioFile<float> outfile;
     outfile.setAudioBuffer(output);
