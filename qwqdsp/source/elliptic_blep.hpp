@@ -102,7 +102,7 @@ struct EllipticBlep {
 
     EllipticBlep(bool direct, Sample srate, Sample cutoff, size_t partialStepCount=127) : partialStepCount(partialStepCount) {
         Coeffs sCoeffs; // S-plane (continuous time) filter
-        Sample hzToAngular = (2*M_PI)/srate;
+        hzToAngular = (2*M_PI)/srate;
 
         // 截止频率低于20khz时需要缩放系数
         Sample scale = 1.0;
@@ -142,6 +142,41 @@ struct EllipticBlep {
             addPole(i + Coeffs::realCount, sCoeffs.complexPoles[i] * scale, complexCoeffs[i] * scale, complexImpulseCoeffs[i] * scale);
         }
         reset();
+    }
+
+    void SetCutoff(float cutoff) {
+        Coeffs sCoeffs; // S-plane (continuous time) filter
+
+        Sample scale = cutoff / 20000;
+
+        auto addPole = [&](size_t index, Complex pole, Complex coeff, Complex impulseCoeff){
+            // Set up partial powers of the pole (so we can move forward/back by fractional samples)
+            for (size_t s = 0; s <= partialStepCount; ++s) {
+                Sample partial = Sample(s)/partialStepCount;
+                partialStepPoles[s][index] = std::exp(partial*pole*hzToAngular);
+            }
+
+            // Impulse coeffs are always direct
+            blepCoeffs[0][index] = impulseCoeff*hzToAngular;
+
+            // Integrate to get BLEP coeffs
+            Complex blepCoeff = coeff*hzToAngular;
+            for (size_t o = 1; o <= maxBlepOrder; ++o) {
+                blepCoeff /= pole*hzToAngular; // factor from integrating
+                blepCoeffs[o][index] = blepCoeff;
+            }
+        };
+        // For now, just cast real poles to complex ones
+        const auto &realCoeffs = (sCoeffs.realCoeffsDirect);
+        const auto &realImpulseCoeffs = (sCoeffs.realCoeffsDirect);
+        for (size_t i = 0; i < Coeffs::realCount; ++i) {
+            addPole(i, sCoeffs.realPoles[i] * scale, realCoeffs[i] * scale, realImpulseCoeffs[i] * scale);
+        }
+        const auto &complexCoeffs = (sCoeffs.complexCoeffsDirect);
+        const auto &complexImpulseCoeffs = (sCoeffs.complexCoeffsDirect);
+        for (size_t i = 0; i < Coeffs::complexCount; ++i) {
+            addPole(i + Coeffs::realCount, sCoeffs.complexPoles[i] * scale, complexCoeffs[i] * scale, complexImpulseCoeffs[i] * scale);
+        }
     }
     
     void reset() {
@@ -233,6 +268,7 @@ private:
     using Array = std::array<Complex, count>;
     Array state;
     std::array<Array, maxBlepOrder + 1> blepCoeffs;
+    Sample hzToAngular;
     
     // Lookup table for std::pow(pole, fractional)
     size_t partialStepCount;

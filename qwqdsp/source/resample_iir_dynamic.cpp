@@ -6,6 +6,7 @@ ResampleIIRDynamic::ResampleIIRDynamic() = default;
 ResampleIIRDynamic::~ResampleIIRDynamic() = default;
 
 void ResampleIIRDynamic::Init(float source_fs, float max_cutoff) {
+    source_fs_ = source_fs;
     blep_ = std::make_unique<signalsmith::blep::EllipticBlep<float>>(
         true, source_fs, max_cutoff, 255
     );
@@ -13,10 +14,32 @@ void ResampleIIRDynamic::Init(float source_fs, float max_cutoff) {
 }
 
 void ResampleIIRDynamic::Set(float source_fs, float target_fs) noexcept {
-    phase_inc_ = source_fs / target_fs;
+    SetRatio(source_fs / target_fs);
+}
+
+void ResampleIIRDynamic::SetRatio(float ratio) noexcept {
+    if (!first_init_) {
+        float const last_phase = static_cast<float>(need_) + phase_ - phase_inc_;
+        float new_phase = last_phase + ratio;
+        need_ = static_cast<size_t>(std::floor(new_phase));
+        phase_ = new_phase - std::floor(new_phase);
+    }
+    phase_inc_ = ratio;
+
+    if (ratio > 1.0f) {
+        blep_->SetCutoff(std::min(20000.0f, source_fs_ * 0.5f / ratio));
+    }
+    else {
+        blep_->SetCutoff(std::min(20000.0f, source_fs_ * 0.5f));
+    }
+}
+
+void ResampleIIRDynamic::SetPitchShift(float shift) noexcept {
+    SetRatio(std::exp2(shift / 12.0f));
 }
 
 void ResampleIIRDynamic::Reset() noexcept {
+    first_init_ = true;
     need_ = 1;
     wpos_ = 0;
     rpos_ = 0;
@@ -32,6 +55,11 @@ void ResampleIIRDynamic::Push(float x) noexcept {
 }
 
 float ResampleIIRDynamic::Read() noexcept {
+    [[unlikely]]
+    if (first_init_) {
+        first_init_ = false;
+    }
+
     for (size_t i = 0; i < need_; ++i) {
         blep_->step();
         blep_->add(buffer_[rpos_++], 0);

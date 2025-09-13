@@ -15,7 +15,11 @@ public:
 
     void Init(float source_fs, float max_cutoff);
     void Reset() noexcept;
+
     void Set(float source_fs, float target_fs) noexcept;
+    void SetRatio(float ratio) noexcept;
+    void SetPitchShift(float shift) noexcept;
+
     void Push(float x) noexcept;
     float Read() noexcept;
     bool IsReady() const noexcept;
@@ -29,5 +33,7 @@ private:
     float phase_inc_{};
     float phase_{};
     size_t need_{};
+    bool first_init_{};
+    float source_fs_{};
 };
 }
