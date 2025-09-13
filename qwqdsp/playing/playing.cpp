@@ -11,7 +11,7 @@ int main() {
     AudioFile<float>::AudioBuffer output;
     output.resize(1);
 
-    static constexpr float kOutputFs = 8000.0f;
+    static constexpr float kOutputFs = 192000.0f;
 
     qwqdsp::fx::ResampleIIR resample;
     // resample.Init(infile.getSampleRate(), kOutputFs, 100, 127);
