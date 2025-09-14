@@ -55,10 +55,7 @@ void ResampleIIRDynamic::Push(float x) noexcept {
 }
 
 float ResampleIIRDynamic::Read() noexcept {
-    [[unlikely]]
-    if (first_init_) {
-        first_init_ = false;
-    }
+    first_init_ = false;
 
     for (size_t i = 0; i < need_; ++i) {
         blep_->step();
