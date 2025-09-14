@@ -49,9 +49,10 @@ public:
         float phase = 0.0f;
         int const ikernel_len = static_cast<int>(kernel_len_);
         int const xsize = static_cast<int>(x.size());
+        int const half_len = (static_cast<int>(kernel_len_) - 1) / 2;
         int xrpos = -(static_cast<int>(kernel_len_) - 1) / 2;
 
-        while (xrpos < xsize) {
+        while (xrpos < xsize - half_len) {
             float const frac = 1.0f - phase;
 
             float sum{};
