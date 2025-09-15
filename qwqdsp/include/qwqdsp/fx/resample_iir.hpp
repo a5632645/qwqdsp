@@ -10,28 +10,27 @@ namespace qwqdsp::fx {
 template<class TCoeff, size_t kPartialStep>
 class ResampleIIR {
 public:
-    void Init(float source_fs, float target_fs) {
+    using T = typename TCoeff::TSample;
+
+    void Init(T source_fs, T target_fs) {
         blep_.Init(source_fs);
         blep_.SetCutoff(target_fs / 2 * TCoeff::fpass / TCoeff::fstop);
         phase_inc_ = source_fs / target_fs;
     }
 
-    std::vector<float> Process(std::span<float> x) {
-        std::vector<float> ret;
+    template<std::floating_point IOSample>
+    std::vector<IOSample> Process(std::span<IOSample> x) {
+        std::vector<IOSample> ret;
 
         blep_.Reset();
 
-        float phase{};
-        float max_one_{};
+        T phase{};
         size_t rpos{};
-        blep_.Add(x[0]);
+        blep_.Add(static_cast<T>(x[0]));
         while (rpos < x.size() - 1) {
-            float const frac = phase;
-            float const v = blep_.Get(frac);
-            if (std::abs(v) > max_one_) {
-                max_one_ = std::abs(v);
-            }
-            ret.push_back(v);
+            T const frac = phase;
+            T const v = blep_.Get(frac);
+            ret.push_back(static_cast<IOSample>(v));
 
             phase += phase_inc_;
             size_t new_rpos = rpos + static_cast<size_t>(std::floor(phase));
@@ -40,25 +39,15 @@ public:
             new_rpos = std::min(new_rpos, x.size() - 1);
             for (size_t i = rpos; i < new_rpos; ++i) {
                 blep_.Step();
-                blep_.Add(x[i + 1]);
+                blep_.Add(static_cast<T>(x[i + 1]));
             }
             rpos = new_rpos;
-        }
-
-        if (max_one_ == 0.0f) {
-            max_one_ = 1.0f;
-        }
-        else {
-            max_one_ = 0.9f / max_one_;
-        }
-        for (auto& s : ret) {
-            s *= max_one_;
         }
 
         return ret;
     }
 private:
-    float phase_inc_{};
-    signalsmith::blep::EllipticBlep<TCoeff, float, kPartialStep> blep_;
+    T phase_inc_{};
+    signalsmith::blep::EllipticBlep<TCoeff, T, kPartialStep> blep_;
 };
 }

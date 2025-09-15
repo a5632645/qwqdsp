@@ -1,5 +1,4 @@
 #pragma once
-#include <memory>
 #include "../source/elliptic_blep.hpp"
 
 namespace qwqdsp::fx {
@@ -9,7 +8,9 @@ namespace qwqdsp::fx {
 template<class TCoeff, size_t kPartialSteps>
 class ResampleIIRDynamic {
 public:
-    void Init(float source_fs) {
+    using T = typename TCoeff::TSample;
+
+    void Init(T source_fs) {
         source_fs_ = source_fs;
         blep_.Init(source_fs);
         Reset();
@@ -24,34 +25,34 @@ public:
         blep_.Reset();
     }
 
-    void Set(float source_fs, float target_fs) noexcept {
+    void Set(T source_fs, T target_fs) noexcept {
         SetRatio(source_fs / target_fs);
     }
-    void SetRatio(float ratio) noexcept {
+    void SetRatio(T ratio) noexcept {
         if (!first_init_) {
-            float const last_phase = static_cast<float>(need_) + phase_ - phase_inc_;
-            float new_phase = last_phase + ratio;
+            T const last_phase = static_cast<T>(need_) + phase_ - phase_inc_;
+            T new_phase = last_phase + ratio;
             need_ = static_cast<size_t>(std::floor(new_phase));
             phase_ = new_phase - std::floor(new_phase);
         }
         phase_inc_ = ratio;
 
-        float cutoff = source_fs_ * 0.5f;
+        T cutoff = source_fs_ * 0.5f;
         if (ratio > 1.0f) {
             cutoff /= ratio;
         }
         blep_.SetCutoff(cutoff * TCoeff::fpass / TCoeff::fstop);
     }
-    void SetPitchShift(float shift) noexcept {
+    void SetPitchShift(T shift) noexcept {
         SetRatio(std::exp2(shift / 12.0f));
     }
 
-    void Push(float x) noexcept {
+    void Push(T x) noexcept {
         buffer_[wpos_++] = x;
         wpos_ &= 63;
         ++buffer_size_;
     }
-    float Read() noexcept {
+    T Read() noexcept {
         first_init_ = false;
 
         for (size_t i = 0; i < need_; ++i) {
@@ -61,7 +62,7 @@ public:
         }
         buffer_size_ -= need_;
 
-        float const frac = phase_;
+        T const frac = phase_;
         phase_ += phase_inc_;
         need_ = static_cast<size_t>(std::floor(phase_));
         phase_ -= std::floor(phase_);
@@ -76,16 +77,16 @@ public:
         return buffer_size_ >= need_;
     }
 private:
-    signalsmith::blep::EllipticBlep<TCoeff, float, kPartialSteps> blep_;
-    float buffer_[64]{};
+    signalsmith::blep::EllipticBlep<TCoeff, T, kPartialSteps> blep_;
+    T buffer_[64]{};
     size_t wpos_{};
     size_t rpos_{};
     size_t buffer_size_{};
 
-    float phase_inc_{};
-    float phase_{};
+    T phase_inc_{};
+    T phase_{};
     size_t need_{};
     bool first_init_{};
-    float source_fs_{};
+    T source_fs_{};
 };
 }
