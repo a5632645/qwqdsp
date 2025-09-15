@@ -26,7 +26,7 @@ struct EllipticBlep {
         Reset();
     }
 
-    void SetCutoff(float cutoff) noexcept {
+    void SetCutoff(Sample cutoff) noexcept {
         Sample scale = cutoff / 20000;
 
         auto addPole = [&](size_t index, Complex pole, Complex coeff, Complex impulseCoeff){
@@ -72,7 +72,7 @@ struct EllipticBlep {
     /// Future (≤ 1 sample) filter output (as if we called `.step(samplesInFuture)` before `.get()`)
     Sample Get(Sample samplesInFuture) const {
         Sample tableIndex = samplesInFuture * kPartialLUTSize;
-        size_t intIndex = std::floor(tableIndex);
+        size_t intIndex = static_cast<size_t>(std::floor(tableIndex));
         Sample fracIndex = tableIndex - std::floor(tableIndex);
 
         auto &lowPoles = partial_step_poles_[intIndex];
