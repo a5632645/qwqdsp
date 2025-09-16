@@ -3,7 +3,7 @@
 #include <numbers>
 #include <complex>
 
-namespace qwqdsp::fastmath {
+namespace qwqdsp::polymath {
 /**
  * @param x [0, pi]
  * .\lolremez.exe --degree 4 --range 1e-50:pi*pi "sin(sqrt(x))/(sqrt(x)*x)-1/x" "1/(x*sqrt(x))"

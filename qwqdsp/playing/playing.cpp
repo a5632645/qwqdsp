@@ -1,25 +1,70 @@
-#include "qwqdsp/fx/resample.hpp"
-#include "AudioFile.h"
+#include <algorithm>
+#include <array>
+#include <cstddef>
+#include <span>
 
-int main() {
-    constexpr auto kPath = R"(C:\Users\Kawai\Music\sweep.wav)";
-    AudioFile<float> infile;
-    infile.load(kPath);
-    auto& input = infile.samples.front();
+#include "raylib.h"
+#include "../playing/slider.hpp"
 
-    AudioFile<float>::AudioBuffer output;
-    output.resize(1);
-    auto& out = output.front();
+#include "qwqdsp/osciilor/poly_sine_osc.hpp"
 
-    static constexpr float kOutputFs = 8000.0f;
+static constexpr int kWidth = 500;
+static constexpr int kHeight = 400;
+static constexpr float kFs = 48000.0f;
 
-    qwqdsp::fx::Resample resample;
-    resample.Init(infile.getSampleRate(), kOutputFs, 160, 513, 512);
-    out = resample.Process(infile.samples.front());
+static qwqdsp::oscillor::PolySineOsc dsp;
 
-    AudioFile<float> outfile;
-    outfile.setAudioBuffer(output);
-    outfile.setSampleRate(kOutputFs);
-    outfile.setBitDepth(32);
-    outfile.save(R"(C:\Users\Kawai\Music\resample.wav)");
+static void AudioInputCallback(void* _buffer, unsigned int frames) {
+    struct T {
+        float l;
+        float r;
+    };
+    std::span buffer{reinterpret_cast<T*>(_buffer), frames};
+    for (auto& s : buffer) {
+        dsp.Tick();
+        s.l = dsp.Sine();
+        s.r = dsp.Cosine();
+    }
+}
+
+int main(void) {
+    InitWindow(kWidth, kHeight, "formant");
+
+    InitAudioDevice();
+    SetAudioStreamBufferSizeDefault(512);
+    AudioStream stream = LoadAudioStream(48000, 32, 2);
+    SetAudioStreamCallback(stream, AudioInputCallback);
+    PlayAudioStream(stream);
+    
+    Rectangle dsf_bound;
+    dsf_bound.x = 0;
+    dsf_bound.y = 0;
+    dsf_bound.width = 50;
+    dsf_bound.height = 50;
+
+    Knob w;
+    w.on_value_change = [](float v) {
+        dsp.SetW(v);
+    };
+    dsf_bound.y += dsf_bound.height;
+    w.set_bound(dsf_bound);
+    w.set_range(0.0f, 3.14f, 0.001f, 0.01f);
+    w.set_bg_color(BLACK);
+    w.set_fore_color(RAYWHITE);
+    w.set_title("w");
+    
+    SetTargetFPS(30);
+    while (!WindowShouldClose()) {
+        BeginDrawing();
+        {
+            ClearBackground(BLACK);
+
+            w.display();
+        }
+        EndDrawing();
+    }
+
+    UnloadAudioStream(stream);
+    CloseAudioDevice();
+    CloseWindow();
 }
