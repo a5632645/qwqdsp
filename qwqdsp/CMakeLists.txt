@@ -5,9 +5,11 @@ add_library(qwqdsp
         "./source/oouras.cpp"
         "./source/resample_iir.cpp"
         "./source/resample_iir_dynamic.cpp"
+        "./source/fir_design.cpp"
 )
 target_include_directories(qwqdsp PUBLIC "./include")
 set_target_properties(qwqdsp PROPERTIES CXX_STANDARD 20)
+target_link_libraries(qwqdsp PRIVATE Eigen3::Eigen)
 qwqdsp_set_warning(qwqdsp)
 
 if (qwqdsp_have_raylib)
