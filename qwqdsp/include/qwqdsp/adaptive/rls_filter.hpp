@@ -3,6 +3,7 @@
 #include <Eigen/Dense>
 
 namespace qwqdsp::adaptive {
+// qwqfixme: 不工作
 template <int ORDER>
 class RLSFIlter {
 public:
@@ -30,16 +31,16 @@ public:
             latch_[i] = latch_[i - 1];
         }
         latch_[0] = source;
-        
+
         // prediate
         double const pred = w_.transpose() * latch_;
         err_ = target - pred;
-        
+
         double const lamda_inv = 1.0 / forget_;
-        auto wtf = p_ * lamda_inv;
-        k_ = (p_ * latch_) / (forget_ + (latch_.transpose() * (p_ * latch_)).value());
-        w_ += k_ * err_;
-        p_ = (identity_ - k_ * latch_.transpose()) * wtf;
+        p2_.noalias() = p_ * lamda_inv;
+        k_.noalias() = (p_ * latch_) / (forget_ + (latch_.transpose() * p_ * latch_).value());
+        p_.noalias() = (identity_ - k_ * latch_.transpose()) * p2_;
+        w_.noalias() += k_ * err_;
         
         return pred;
     }
@@ -67,6 +68,7 @@ private:
     double err_{};
     double identity_val_{};
     mat p_;
+    mat p2_;
     mat identity_;
     vec w_;
     vec latch_;
