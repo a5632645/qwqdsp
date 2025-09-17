@@ -1,7 +1,7 @@
 #pragma once
 #include <cmath>
 
-namespace qwqdsp {
+namespace qwqdsp::misc {
 class ExpSmoother {
 public:
     void Reset() noexcept {
@@ -12,8 +12,19 @@ public:
         target_ = x;
     }
 
+    void SetTargetImmediately(float x) noexcept {
+        now_ = x;
+        target_ = x;
+    }
+
     void SetSmoothTime(float ms, float fs) noexcept {
-        a_ = std::exp(-1.0f / (fs * ms / 1000.0f));
+        float samples = fs * ms / 1000.0f;
+        if (samples < 1.0f) {
+            a_ = 0;
+        }
+        else {
+            a_ = std::exp(-1.0f / (fs * ms / 1000.0f));
+        }
     }
 
     float Tick() noexcept {

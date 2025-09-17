@@ -15,8 +15,16 @@ public:
         size_ = new_size;
     }
 
+    size_t GetSize() const noexcept {
+        return size_;
+    }
+
     void SetHop(size_t hop) noexcept {
         hop_size_ = hop;
+    }
+
+    size_t GetHop() const noexcept {
+        return hop_size_;
     }
 
     void Push(std::span<const float> block) noexcept {
