@@ -1,6 +1,6 @@
 #pragma once
 
-namespace qwqdsp {
+namespace qwqdsp::filter {
 class Biquad {
 public:
     void Reset() noexcept {
