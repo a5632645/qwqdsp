@@ -108,7 +108,7 @@ public:
         std::copy(time.begin(), time.end(), buffer_.begin());
         internal::rdft(fft_size_, 1, buffer_.data(), ip_.data(), w_.data());
         if (phase.empty()) {
-            gain.front() = buffer_[0];
+            gain.front() = std::abs(buffer_[0]);
             gain[fft_size_ / 2] = std::abs(buffer_[1]);
             const size_t n = fft_size_ / 2;
             for (size_t i = 1; i < n; ++i) {
@@ -118,7 +118,7 @@ public:
             }
         }
         else {
-            gain.front() = buffer_[0];
+            gain.front() = std::abs(buffer_[0]);
             phase.front() = 0.0f;
             gain[fft_size_ / 2] = std::abs(buffer_[1]);
             phase[fft_size_ / 2] = 0.0f;
