@@ -3,6 +3,7 @@
 #include <numbers>
 #include <span>
 #include <cmath>
+#include <cassert>
 
 namespace qwqdsp::window {
 struct Kaiser {
@@ -73,6 +74,7 @@ struct Kaiser {
      * @ref https://ww2.mathworks.cn/help/signal/ref/kaiser.html
      */
     static float Beta(float side_lobe) noexcept {
+        assert(side_lobe > 0);
         if (side_lobe < 21.0f) {
             return 0.0f;
         }
