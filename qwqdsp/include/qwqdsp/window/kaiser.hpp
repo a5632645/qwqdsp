@@ -35,6 +35,12 @@ struct Kaiser {
     }
 
     static void ApplyWindow(std::span<float> x, float beta, bool for_analyze_not_fir) noexcept {
+        [[unlikely]]
+        if (x.size() == 1) {
+            x[0] = 1;
+            return;
+        }
+
         const size_t N = x.size();
         auto inc = 2.0f / (static_cast<float>(N) - 1.0f);
         if (for_analyze_not_fir) {
