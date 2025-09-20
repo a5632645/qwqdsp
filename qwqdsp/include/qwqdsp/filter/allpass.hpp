@@ -83,7 +83,7 @@ public:
 
     std::complex<float> GetResponce(std::complex<float> z) noexcept {
         auto z2 = z * z;
-        auto up = a2_ * z2 +a1_ * z + 1.0f;
+        auto up = a2_ * z2 + a1_ * z + 1.0f;
         auto down = z2 + a1_ * z + a2_;
         return up / down;
     }

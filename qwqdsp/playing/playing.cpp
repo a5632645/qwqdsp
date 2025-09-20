@@ -1,37 +1,24 @@
-#include "AudioFile.h"
-#include "qwqdsp/osciilor/vic_sine_osc.hpp"
-#include "qwqdsp/filter/fir_hilbert.hpp"
-#include "qwqdsp/filter/fir_hilbert_coeffs.h"
+#include "qwqdsp/filter/parallel_allpass.hpp"
+#include "qwqdsp/convert.hpp"
 
-static constexpr auto kInputFile 
-= R"(C:\Users\Kawai\Music\speech.wav)";
-static constexpr auto kOutputFile 
-= R"(C:\Users\Kawai\Music\gunge_slice-shift.wav)";
-static constexpr auto kShift = 150; //hz
-
-static void FreqShifter() {
-    qwqdsp::filter::FirHilbert<qwqdsp::filter::fircoeff::Hilbert<float>> hilbert;
-    qwqdsp::oscillor::VicSineOsc osc_;
-    
-    AudioFile<float> file;
-    if (file.load(kInputFile)) {
-        osc_.Reset(0);
-        osc_.SetFreq(kShift, file.getSampleRate());
-
-        auto& io = file.samples.front();
-        for (auto& s : io) {
-            auto analyze_signal = hilbert.Tick(s);
-            osc_.Tick();
-            auto quad = osc_.GetCpx();
-            analyze_signal *= quad;
-            s = analyze_signal.real();
-        }
-
-        file.setNumChannels(1);
-        file.save(kOutputFile);
-    }
-}
 
 int main() {
-    FreqShifter();
+    qwqdsp::filter::ParallelAllpass apf;
+    qwqdsp::filter::ParallelAllpass apf2;
+    apf.BuildButterworth(9, std::numbers::pi_v<float> / 4);
+    apf2.BuildButterworth(9, std::numbers::pi_v<float> / 4);
+
+    float gains[1024];
+    for (size_t i = 0; i < 1024; ++i) {
+        float const w = std::numbers::pi_v<float> * i / 1024.0f;
+        auto[up, down] = apf.GetResponce(std::polar(1.0f, w));
+        up *= up;
+        down *= down;
+        up *= up;
+        down *= down;
+
+        gains[i] = std::abs(up + down);
+        gains[i] = qwqdsp::convert::Gain2Db(gains[i]);
+        gains[i] = std::max(-80.0f, gains[i]);
+    }
 }
