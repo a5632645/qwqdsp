@@ -12,7 +12,7 @@
 #include "qwqdsp/filter/rbj.hpp"
 #include "qwqdsp/osciilor/dsf.hpp"
 
-static qwqdsp::Biquad filters[5];
+static qwqdsp::filter::Biquad filters[5];
 static std::array<float, 5> gains{};
 static qwqdsp::oscillor::DSFClassic<13> dsf;
 static float output_gain{1.0f};

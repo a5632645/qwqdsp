@@ -49,6 +49,7 @@ public:
         }
     }
 
+    // qwqfixme: 幅度谱对但是不稳定
     void BuildChebyshev1(size_t order, float w, float ripple) {
         assert(order % 2 == 1);
         order_ = order;
@@ -108,6 +109,23 @@ public:
         }
         // down
         float down = x;
+        for (size_t i = 0; i < num_down2_; ++i) {
+            down = allpass_[i + num_up2_].Tick(down);
+        }
+        return {up, down};
+    }
+
+        /**
+     * @note up + down = LP, up - down = HP
+     * @return {up, down}
+     */
+    std::pair<float, float> Tick(float up, float down) noexcept {
+        // up
+        up = allpass1_.Tick(up);
+        for (size_t i = 0; i < num_up2_; ++i) {
+            up = allpass_[i].Tick(up);
+        }
+        // down
         for (size_t i = 0; i < num_down2_; ++i) {
             down = allpass_[i + num_up2_].Tick(down);
         }
