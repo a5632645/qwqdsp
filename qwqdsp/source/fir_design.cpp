@@ -3,6 +3,7 @@
 #include <cassert>
 #include <numbers>
 #include <cmath>
+#include <complex>
 #include <Eigen/Dense>
 
 static inline double Sinc(double x) {
@@ -138,6 +139,20 @@ void FirDesign::LowpassLeastSquare(
             x[M - i - 1] = static_cast<float> (h[i] * 0.25);
             x[M + i]     = static_cast<float> (h[i] * 0.25);
         }
+    }
+}
+
+void FirDesign::GainResponce(std::span<float> coeffs, std::span<float> gains) {
+    for (size_t i = 0; i < gains.size(); ++i) {
+        auto w = static_cast<float>(i) * std::numbers::pi_v<float> / static_cast<float>(gains.size());
+        auto z = std::polar(1.0f, -w);
+        std::complex<float> e = 1;
+        std::complex<float> sum = 0;
+        for (auto& h : coeffs) {
+            sum += h * e;
+            e *= z;
+        }
+        gains[i] = std::abs(sum);
     }
 }
 

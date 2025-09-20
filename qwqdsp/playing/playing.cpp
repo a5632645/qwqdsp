@@ -1,28 +1,37 @@
-#include <vector>
+#include "AudioFile.h"
+#include "qwqdsp/osciilor/vic_sine_osc.hpp"
+#include "qwqdsp/filter/fir_hilbert.hpp"
+#include "qwqdsp/filter/fir_hilbert_coeffs.h"
 
-#include "qwqdsp/filter/window_fir.hpp"
-#include "qwqdsp/window/kaiser.hpp"
+static constexpr auto kInputFile 
+= R"(C:\Users\Kawai\Music\speech.wav)";
+static constexpr auto kOutputFile 
+= R"(C:\Users\Kawai\Music\gunge_slice-shift.wav)";
+static constexpr auto kShift = 150; //hz
+
+static void FreqShifter() {
+    qwqdsp::filter::FirHilbert<qwqdsp::filter::fircoeff::Hilbert<float>> hilbert;
+    qwqdsp::oscillor::VicSineOsc osc_;
+    
+    AudioFile<float> file;
+    if (file.load(kInputFile)) {
+        osc_.Reset(0);
+        osc_.SetFreq(kShift, file.getSampleRate());
+
+        auto& io = file.samples.front();
+        for (auto& s : io) {
+            auto analyze_signal = hilbert.Tick(s);
+            osc_.Tick();
+            auto quad = osc_.GetCpx();
+            analyze_signal *= quad;
+            s = analyze_signal.real();
+        }
+
+        file.setNumChannels(1);
+        file.save(kOutputFile);
+    }
+}
 
 int main() {
-    size_t num_subspan = 4;
-    size_t n = 3;
-    size_t size = n + (n - 1) * num_subspan;
-    size_t toal = n * (num_subspan + 2);
-
-    std::vector<float> kenerl;
-    kenerl.resize(size);
-    qwqdsp::filter::WindowFIR::Lowpass(kenerl, std::numbers::pi_v<float> / 4 / (num_subspan + 1));
-    qwqdsp::window::Kaiser::ApplyWindow(kenerl, qwqdsp::window::Kaiser::Beta(60), false);
-
-    std::vector<float> lut;
-    lut.resize(toal);
-    for (size_t i = 0; i < num_subspan + 1; ++i) {
-        size_t const aa = i == 0 ? n : n - 1;
-        for (size_t j = 0; j < aa; ++j) {
-            lut[i * n + j] = kenerl[i + (num_subspan + 1) * j];
-        }
-    }
-    for (size_t i = 0; i < n - 1; ++i) {
-        lut[(num_subspan + 1) * n + i] = lut[i + 1];
-    }
+    FreqShifter();
 }
