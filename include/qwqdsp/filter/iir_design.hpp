@@ -134,10 +134,12 @@ struct IIRDesign {
         }
 
         double CompleteIntegral() {
+#ifndef __APPLE__
             if constexpr (kUseStd) {
                 return std::comp_ellint_1(k_.front());
             }
             else {
+#endif
                 const double a = std::sqrt(1.0 - 1.0e-3);
                 const double k0 = k_.front();
                 if (k0 <= a) {
@@ -153,7 +155,9 @@ struct IIRDesign {
                     double L = -std::log(kdot / 4.0);
                     return L + (L - 1.0) * (kdot * kdot) / 2.0;
                 }
+#ifndef __APPLE__
             }
+#endif
         }
 
         std::complex<double> Cd(std::complex<double> u) {
