@@ -5,26 +5,32 @@
 #include <qwqdsp/filter/biquad.hpp>
 #include <qwqdsp/spectral/real_fft.hpp>
 
-
 int main() {
-    constexpr int N = 16;
-    constexpr int kIrLen = 1024;
+    constexpr int N = 4;
+    constexpr int kIrLen = 2048;
     constexpr double ripple = 6.0;
-    constexpr double cutoff = std::numbers::pi_v<float> / 8;
+    double cutoff = qwqdsp::convert::DigitalFreq2AnalogBilinear(0.5 * 0.5 * 0.4, 0.5) * std::numbers::pi_v<float> * 2;
     double eps = std::sqrt(std::pow(10.0, ripple / 10.0) - 1.0);
     double A = 1.0 / static_cast<double>(2 * N) * std::asinh(1.0 / eps);
     double k_re = std::sinh(A);
     double k_im = std::cosh(A);
+    bool highpass = false;
 
     // s域
     double k = 1;
     std::complex<double> half_spoles[N];
     for (int i = 0; i < N; ++i) {
         double phi = (2.0 * static_cast<double>(i + 1) - 1.0) * std::numbers::pi_v<double> / static_cast<double>(4 * N);
-        double re = k_re * std::sin(phi);
-        double im = k_im * std::cos(phi);
-        half_spoles[i] = cutoff * std::complex{k_re * -std::sin(phi), k_im * std::cos(phi)};
-        k *= std::norm(half_spoles[i]);
+        auto pole = std::complex{k_re * -std::sin(phi), k_im * std::cos(phi)};
+        if (!highpass) {
+            half_spoles[i] = pole * cutoff;
+            k *= std::norm(pole);
+            k *= cutoff;
+            k *= cutoff;
+        }
+        else {
+            half_spoles[i] = cutoff / pole;
+        }
     }
     k /= std::sqrt(1.0 + eps * eps);
 
@@ -42,6 +48,9 @@ int main() {
 
         std::complex<double> up = 1.0;
         std::complex<double> tmp_up = zpole + 1.0;
+        if (highpass) {
+            tmp_up = zpole - 1.0;
+        }
         for (int j = 0; j < N; ++j) {
             up *= tmp_up;
             up *= tmp_up;
@@ -64,7 +73,7 @@ int main() {
     qwqdsp_filter::Biquad cascade[N];
     float ir[kIrLen]{1.0f};
     for (int i = 0; i < N; ++i) {
-        cascade[i].Set(1, 2, 1, -2 * half_zpoles[i].real(), std::norm(half_zpoles[i]));
+        cascade[i].Set(1, highpass ? -2 : 2, 1, -2 * half_zpoles[i].real(), std::norm(half_zpoles[i]));
     }
     for (int i = 0; i < kIrLen; ++i) {
         for (int j = 0; j < N; ++j) {

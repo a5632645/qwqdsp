@@ -60,6 +60,5 @@ if (qwqdsp_have_raylib)
     else()
         target_compile_options(playing PUBLIC -mavx2)
     endif()
-
-    add_subdirectory(tests)
 endif()
+add_subdirectory(tests)
