@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.11)
 project(qwqdsp)
 
+option(QWQDSP_DONT_BUILD_TESTS "Disable building tests" OFF)
+
 # check for raylib
 set(qwqdsp_have_raylib TRUE)
 if (NOT TARGET raylib)
@@ -45,20 +47,22 @@ if (TARGET simde)
 endif()
 
 # enable tests
-if (qwqdsp_have_raylib)
-    add_executable(playing
-        "playing/playing.cpp"
-        "playing/slider.cpp"
-        # "playing/miniaudio.c"
-    )
-    target_link_libraries(playing PUBLIC qwqdsp raylib)
-    set_target_properties(playing PROPERTIES CXX_STANDARD 20)
-    qwqdsp_set_warning(playing)
+if (QWQDSP_DONT_BUILD_TESTS)
+    if (qwqdsp_have_raylib)
+        add_executable(playing
+            "playing/playing.cpp"
+            "playing/slider.cpp"
+            # "playing/miniaudio.c"
+        )
+        target_link_libraries(playing PUBLIC qwqdsp raylib)
+        set_target_properties(playing PROPERTIES CXX_STANDARD 20)
+        qwqdsp_set_warning(playing)
 
-    if (MSVC)
-        target_compile_options(playing PUBLIC /arch:AVX2)
-    else()
-        target_compile_options(playing PUBLIC -mavx2)
+        if (MSVC)
+            target_compile_options(playing PUBLIC /arch:AVX2)
+        else()
+            target_compile_options(playing PUBLIC -mavx2)
+        endif()
     endif()
+    add_subdirectory(tests)
 endif()
-add_subdirectory(tests)
