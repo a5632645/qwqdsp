@@ -38,3 +38,5 @@ add_executable(qwqdsp-rnnoise-lite
 target_link_libraries(qwqdsp-rnnoise-lite PUBLIC qwqdsp raylib)
 set_target_properties(qwqdsp-rnnoise-lite PROPERTIES CXX_STANDARD 20)
 set_target_properties(qwqdsp-rnnoise-lite PROPERTIES FOLDER qwqdsp-tests)
+
+add_qwqdsp_test(conv_feedback)
