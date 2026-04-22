@@ -20,7 +20,7 @@ struct RBJ {
     }
 
     /**
-     * 使用数字倍频程表示带宽具有一阶prewarp Q
+     * @note 使用数字倍频程表示带宽具有一阶prewarp Q
      */
     static float DigitalOctave2AnalogQ(float w, float octave) noexcept {
         auto a = std::numbers::ln2_v<float> * 0.5f * octave * w / std::sin(w);
