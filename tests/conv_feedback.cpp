@@ -1,7 +1,8 @@
 #include <qwqdsp/fx/uniform_convolution.hpp>
 #include <qwqdsp/oscillator/noise.hpp>
 #include <qwqdsp/spectral/real_fft.hpp>
-#include "AudioFile.h"
+#include <qwqdsp/filter/fir.hpp>
+#include "../../playing/AudioFile.h"
 
 static void ShouldBeDelay32() {
     qwqdsp_fx::UniformConvolution conv;
@@ -17,9 +18,9 @@ static void ShouldBeDelay32() {
     for (int i = 0; i < 2048; ++i) {
         float x = input[i];
 
-        float temp[1]{x + lag};
+        float temp[1]{x + lag * 0.99f};
         conv.Process(temp);
-        lag = temp[0] * 0.99f;
+        lag = temp[0];
 
         input[i] = temp[0];
     }
@@ -39,15 +40,14 @@ static void ShouldBeDelay33() {
     for (int i = 0; i < 2048; ++i) {
         float x = input[i];
 
-        float temp[1]{x + lag};
+        float temp[1]{x + lag * 0.99f};
         conv.Process(temp);
-        lag = temp[0] * 0.99f;
+        lag = temp[0];
 
         input[i] = temp[0];
     }
 }
 
-// 这看起来完全不像啊，可能是`lag`导致的
 static void ShouldBeDelay32Plus34() {
     qwqdsp_fx::UniformConvolution conv;
     conv.Init(32);
@@ -62,9 +62,9 @@ static void ShouldBeDelay32Plus34() {
     for (int i = 0; i < 2048; ++i) {
         float x = input[i];
 
-        float temp[1]{x + lag};
+        float temp[1]{x + lag * 0.99f};
         conv.Process(temp);
-        lag = temp[0] * 0.99f;
+        lag = temp[0];
 
         input[i] = temp[0];
     }
@@ -100,9 +100,9 @@ static void RandomFeedback() {
     for (int i = 0; i < std::size(input); ++i) {
         float x = input[i];
 
-        float temp[1]{x + lag};
+        float temp[1]{x + lag * 0.99f};
         conv.Process(temp);
-        lag = temp[0] * 0.99f;
+        lag = temp[0];
 
         input[i] = temp[0];
     }
@@ -117,9 +117,49 @@ static void RandomFeedback() {
     [[maybe_unused]] bool succ = file.save("random_fb.wav");
 }
 
+static void RandomPhase() {
+    qwqdsp_fx::UniformConvolution conv;
+    conv.Init(32);
+    conv.Reset();
+
+    constexpr int ir_size = 2048;
+    constexpr int bins = ir_size / 2 + 1;
+    float gains[bins];
+    float phases[bins];
+    float ir[ir_size];
+    std::fill(gains, gains + bins, 1.0f);
+    std::fill(phases, phases + bins, 0.0f);
+
+    qwqdsp_spectral::RealFFT fft;
+    fft.Init(ir_size);
+    fft.IFFTGainPhase(ir, gains, phases);
+    conv.SetIR(ir);
+
+    qwqdsp_filter::FIRTranspose fir;
+    fir.SetCoeff([&ir](std::vector<float>& coeff) {
+        coeff.resize(ir_size);
+        std::copy(ir, ir + ir_size, coeff.begin());
+    });
+
+    float input[2048]{1.0f};
+
+    float lag = 0.0f;
+    for (int i = 0; i < 2048; ++i) {
+        float x = input[i];
+
+        float temp[1]{x + lag * 0.9f};
+        conv.Process(temp);
+        // fir.Process(temp);
+        lag = temp[0];
+
+        input[i] = temp[0];
+    }
+}
+
 int main() {
-    ShouldBeDelay32();
-    ShouldBeDelay33();
-    ShouldBeDelay32Plus34();
-    RandomFeedback();
+    // ShouldBeDelay32();
+    // ShouldBeDelay33();
+    // ShouldBeDelay32Plus34();
+    // RandomFeedback();
+    RandomPhase();
 }
