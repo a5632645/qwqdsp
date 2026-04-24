@@ -5,6 +5,7 @@
 #include <complex>
 #include <cassert>
 #include <algorithm>
+#include <memory>
 
 namespace qwqdsp_spectral {
 #ifdef QWQDSP_HAVE_IPP
