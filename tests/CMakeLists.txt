@@ -40,3 +40,4 @@ set_target_properties(qwqdsp-rnnoise-lite PROPERTIES CXX_STANDARD 20)
 set_target_properties(qwqdsp-rnnoise-lite PROPERTIES FOLDER qwqdsp-tests)
 
 add_qwqdsp_test(conv_feedback)
+add_qwqdsp_test(reverse_iir)
