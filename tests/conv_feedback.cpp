@@ -117,6 +117,31 @@ static void RandomFeedback() {
     [[maybe_unused]] bool succ = file.save("random_fb.wav");
 }
 
+class Delay {
+public:
+    static constexpr int buffer_size = 16384;
+
+    void Push(float x) {
+        buffer_[wpos_] = x;
+        wpos_ = Wrap(wpos_ + 1);
+    }
+
+    float GetBeforePush(int delay) {
+        return buffer_[Wrap(wpos_ - delay)];
+    }
+private:
+    static int Wrap(int pos) {
+        pos %= buffer_size;
+        if (pos < 0) {
+            pos += buffer_size;
+        }
+        return pos;
+    }
+
+    float buffer_[buffer_size]{};
+    int wpos_{};
+};
+
 static void RandomPhase() {
     qwqdsp_fx::UniformConvolution conv;
     conv.Init(32);
@@ -128,12 +153,25 @@ static void RandomPhase() {
     float phases[bins];
     float ir[ir_size];
     std::fill(gains, gains + bins, 1.0f);
-    std::fill(phases, phases + bins, 0.0f);
+    std::fill(phases, phases + bins, 1.0f);
 
     qwqdsp_spectral::RealFFT fft;
     fft.Init(ir_size);
     fft.IFFTGainPhase(ir, gains, phases);
     conv.SetIR(ir);
+
+    constexpr int pad_mul = 2;
+    float pad_ir[ir_size * pad_mul]{};
+    std::copy(ir, ir + ir_size, pad_ir);
+    fft.Init(ir_size * pad_mul);
+    constexpr int pad_bins = ir_size * pad_mul / 2 + 1;
+    float gains2[pad_bins];
+    fft.FFTGainPhase(pad_ir, gains2);
+
+    float max_g = *std::max_element(gains2, gains2 + pad_bins);
+    for (int i = 0; i < ir_size; ++i) {
+        ir[i] /= max_g;
+    }
 
     qwqdsp_filter::FIRTranspose fir;
     fir.SetCoeff([&ir](std::vector<float>& coeff) {
@@ -144,13 +182,16 @@ static void RandomPhase() {
     float input[2048]{1.0f};
 
     float lag = 0.0f;
+    // Delay delay;
     for (int i = 0; i < 2048; ++i) {
         float x = input[i];
 
-        float temp[1]{x + lag * 0.9f};
+        float temp[1]{x + lag * 0.99f};
+        // float temp[1]{x + delay.GetBeforePush(110) * 0.99f};
         conv.Process(temp);
-        // fir.Process(temp);
+        fir.Process(temp);
         lag = temp[0];
+        // delay.Push(temp[0]);
 
         input[i] = temp[0];
     }
