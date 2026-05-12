@@ -29,6 +29,14 @@ public:
         }
         return y;
     }
+
+    std::complex<float> Tick(std::complex<float> x) noexcept {
+        auto y = x * direct_;
+        for (auto& f : filters_) {
+            y += f.Tick(x);
+        }
+        return y;
+    }
 private:
     // class Filter {
     // public:
@@ -79,6 +87,18 @@ private:
             float yim = sim1_;
             sre1_ = -c_ * yim + sre2_;
             sim1_ = -b_ * x + yre * c_ + sim2_;
+            sre2_ = d_ * yre;
+            sim2_ = d_ * yim;
+            return {yre, yim};
+        }
+
+        std::complex<float> Tick(std::complex<float> x) noexcept {
+            float xre = x.real();
+            float xim = x.imag();
+            float yre = xre * a_ + sre1_;
+            float yim = xim * a_ + sim1_;
+            sre1_ = b_ * xim - c_ * yim + sre2_;
+            sim1_ = -b_ * xre + yre * c_ + sim2_;
             sre2_ = d_ * yre;
             sim2_ = d_ * yim;
             return {yre, yim};
