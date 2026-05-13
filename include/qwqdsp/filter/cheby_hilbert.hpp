@@ -4,8 +4,6 @@
 namespace qwqdsp_filter {
 class ChebyHilbert {
 public:
-    static constexpr int kState = 8;
-
     ChebyHilbert() noexcept {
         for (int i = 0; i < kState; ++i) {
             auto& f = filters_[i];
@@ -38,41 +36,6 @@ public:
         return y;
     }
 private:
-    // class Filter {
-    // public:
-    //     void Reset() noexcept {
-    //         x1_ = 0;
-    //         yre1_ = 0;
-    //         yre2_ = 0;
-    //         yim1_ = 0;
-    //         yim2_ = 0;
-    //     }
-
-    //     std::complex<float> Tick(float x) noexcept {
-    //         float yre = a_ * x - c_ * yim1_ + d_ * yre2_;
-    //         float yim = -b_ * x1_ + c_ * yre1_ + d_ * yim2_;
-
-    //         x1_ = x;
-    //         yre2_ = yre1_;
-    //         yre1_ = yre;
-    //         yim2_ = yim1_;
-    //         yim1_ = yim;
-
-    //         return {yre, yim};
-    //     }
-
-    //     float a_{};
-    //     float b_{};
-    //     float c_{};
-    //     float d_{};
-    // private:
-    //     float x1_{};
-    //     float yre1_{};
-    //     float yre2_{};
-    //     float yim1_{};
-    //     float yim2_{};
-    // };
-
     class Filter {
     public:
         void Reset() noexcept {
@@ -115,26 +78,32 @@ private:
         float sim2_{};
     };
 
-    static constexpr float a[8]{-2.3907175666e+02f, -8.2565184991e+01f,
-                                4.2140279038e+01f,  4.8262957055e+01f,
-                                8.7986278635e+00f,  -5.2244294420e+00f,
-                                -1.6655014413e+00f, 5.8373371598e-02f};
+    static constexpr float a[10]{1.6574956863e-01f,  -4.4946462011e-01f,
+                                 5.1626530259e-01f,  -3.9732789152e-01f,
+                                 2.3194735135e-01f,  -1.0092960601e-01f,
+                                 2.3796249319e-02f,  8.1745353265e-03f,
+                                 -1.1271962217e-02f, 3.8697627207e-03f};
 
-    static constexpr float b[8]{5.6924986659e+01f,  4.8269780980e+01f,
-                                2.3090074198e+01f,  -5.8144834213e+00f,
-                                -1.2236600752e+01f, -3.4469509136e+00f,
-                                7.4799516590e-01f,  2.3831392174e-01f};
+    static constexpr float b[10]{-2.4695571071e-01f, 3.9926539486e-01f,
+                                 -2.3138154268e-01f, 4.3887683681e-02f,
+                                 5.8384540151e-02f,  -8.2074422876e-02f,
+                                 6.3154090954e-02f,  -3.2417582617e-02f,
+                                 8.6884116301e-03f,  -1.1365023712e-04f};
 
-    static constexpr float c[8]{-4.3091312308e-01f, -3.9923317942e-01f,
-                                -3.4107482346e-01f, -2.6546447571e-01f,
-                                -1.8325915687e-01f, -1.0549696976e-01f,
-                                -4.2721753637e-02f, -5.4974465931e-03f};
+    static constexpr float c[10]{1.1786887458e+00f, 9.4547600008e-01f,
+                                 6.4253963534e-01f, 3.9284635087e-01f,
+                                 2.2382264913e-01f, 1.1968608563e-01f,
+                                 5.8667826590e-02f, 2.4256723221e-02f,
+                                 6.0386857175e-03f, -1.8047429878e-03f};
 
-    static constexpr float d[8]{5.1700107953e-02f, 8.6329023551e-02f,
-                                1.5308354230e-01f, 2.4805334332e-01f,
-                                3.6764840562e-01f, 5.1042339746e-01f,
-                                6.7881544631e-01f, 8.8114801219e-01f};
-    static constexpr float direct_ = 229.2709967;
+    static constexpr float d[10]{3.8609229860e-01f, 5.0509252022e-01f,
+                                 6.5969622012e-01f, 7.8719096750e-01f,
+                                 8.7362328210e-01f, 9.2711452523e-01f,
+                                 9.5889624968e-01f, 9.7761400992e-01f,
+                                 9.8898685400e-01f, 9.9669232049e-01f};
+
+    static constexpr float direct_ = 0.00994509f;
+    static constexpr int kState = 10;
     Filter filters_[kState];
 };
 }
