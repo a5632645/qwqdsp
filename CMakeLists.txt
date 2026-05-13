@@ -1,25 +1,12 @@
 cmake_minimum_required(VERSION 3.11)
 project(qwqdsp)
 
-option(QWQDSP_DONT_BUILD_TESTS "Disable building tests" OFF)
-
-# check for raylib
-set(qwqdsp_have_raylib TRUE)
-if (NOT TARGET raylib)
-    find_package(raylib QUIET)
-    if(NOT raylib_FOUND)
-        message(STATUS "tests build are disabled")
-        set(qwqdsp_have_raylib FALSE)
-    endif()
-endif()
+option(QWQDSP_BUILD_TESTS "Disable building tests" ON)
 
 # check for intel ipp
 set(IPP_SHARED OFF)
 find_package(IPP)
 set(qwqdsp_have_ipp ${IPP_FOUND})
-
-# set warnings
-include(cmake/warnings.cmake)
 
 # main library
 add_library(qwqdsp
@@ -28,7 +15,6 @@ add_library(qwqdsp
         "source/real_fft.cpp"
         "source/complex_fft.cpp"
 )
-qwqdsp_set_warning(qwqdsp)
 target_include_directories(qwqdsp PUBLIC "./include")
 set_target_properties(qwqdsp PROPERTIES CXX_STANDARD 20)
 
@@ -47,8 +33,8 @@ if (TARGET simde)
 endif()
 
 # enable tests
-if (QWQDSP_DONT_BUILD_TESTS)
-    if (qwqdsp_have_raylib)
+if (QWQDSP_BUILD_TESTS)
+    if (QWQDSP_HAVE_RAYLIB)
         add_executable(playing
             "playing/playing.cpp"
             "playing/slider.cpp"
@@ -56,7 +42,6 @@ if (QWQDSP_DONT_BUILD_TESTS)
         )
         target_link_libraries(playing PUBLIC qwqdsp raylib)
         set_target_properties(playing PROPERTIES CXX_STANDARD 20)
-        qwqdsp_set_warning(playing)
 
         if (MSVC)
             target_compile_options(playing PUBLIC /arch:AVX2)
@@ -64,5 +49,6 @@ if (QWQDSP_DONT_BUILD_TESTS)
             target_compile_options(playing PUBLIC -mavx2)
         endif()
     endif()
+    
     add_subdirectory(tests)
 endif()
