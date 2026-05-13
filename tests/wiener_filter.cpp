@@ -3,7 +3,7 @@
 #include <qwqdsp/fx/uniform_convolution.hpp>
 #include "../playing/AudioFile.h"
 
-constexpr float noise_gain = 1e-3f;
+constexpr float noise_gain = 1e-1f;
 
 static std::vector<float> PowerSpectrum(const std::vector<float>& x) {
     const size_t n = x.size();
@@ -116,7 +116,8 @@ static std::vector<float> WienerFilter2(const std::vector<float>& r, const std::
     for (size_t i = 0; i < psd_r.size(); ++i) {
         float a = psd_r[i];
         float b = psd_noise[i];
-        float h = (std::sqrt(std::max(0.0f, a * a - b * b))) / a;
+        // float h = (std::sqrt(std::max(0.0f, a * a - b * b))) / a;
+        float h = (a - b) / (a + b);
         if (!std::isnormal(h)) {
             h = 0;
         }
