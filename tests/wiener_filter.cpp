@@ -1,6 +1,11 @@
 #include <qwqdsp/oscillator/noise.hpp>
 #include <qwqdsp/spectral/ipp_real_fft.hpp>
 #include <qwqdsp/fx/uniform_convolution.hpp>
+#include <qwqdsp/oscillator/blep_coeff.hpp>
+#include <qwqdsp/oscillator/polyblep.hpp>
+#include <qwqdsp/oscillator/noise.hpp>
+#include <qwqdsp/window/hann.hpp>
+#include <qwqdsp/window/blackman.hpp>
 #include "../playing/AudioFile.h"
 
 constexpr float noise_gain = 1e-1f;
@@ -41,6 +46,11 @@ static std::vector<float> PadTo2(const std::vector<float>& x) {
     std::copy(x.begin(), x.end(), r.begin());
     return r;
 }
+
+// ----------------------------------------
+// test1
+// standard wiener filter use Noise and Voice
+// ----------------------------------------
 
 static std::vector<float> WienerFilter(const std::vector<float>& x, const std::vector<float>& psd_x, const std::vector<float>& psd_noise) {
     std::vector<float> h_filter; h_filter.reserve(psd_x.size());
@@ -110,6 +120,11 @@ static void Test1() {
     file.samples.front() = mix;
     file.save("1/wiener_in.wav");
 }
+
+// ----------------------------------------
+// test2
+// Noise And Dirty signal
+// ----------------------------------------
 
 static std::vector<float> WienerFilter2(const std::vector<float>& r, const std::vector<float>& psd_r, const std::vector<float>& psd_noise) {
     std::vector<float> h_filter; h_filter.reserve(psd_r.size());
@@ -181,7 +196,144 @@ static void Test2() {
     file.save("2/wiener_in.wav");
 }
 
+// ----------------------------------------
+// test3
+// Wiener Filter For Vocoding
+// result: Strange high frequency carry and Chirps
+// ----------------------------------------
+
+static void Test3() {
+    AudioFile<float> file;
+    file.load(R"(C:\Users\Kawai\Music\wormhole.wav)");
+    auto& x = file.samples.front();
+
+    constexpr int block_size = 2048;
+    constexpr int hop_size = 1024;
+    qwqdsp_oscillator::PolyBlep<qwqdsp_oscillator::blep_coeff::Triangle> osc;
+    osc.SetFreq(88.0f, file.getSampleRate());
+
+    qwqdsp_oscillator::WhiteNoise noise;
+
+    int size = x.size();
+    
+    int wpos = 0;
+    std::vector<float> synthsis; synthsis.reserve(x.size());
+    std::vector<float> ola_buffer; ola_buffer.resize(block_size);
+    std::vector<float> modu_buffer; modu_buffer.resize(block_size);
+    std::vector<float> carr_buffer; carr_buffer.resize(block_size);
+    while (size != 0) {
+        for (int i = 0; i < (block_size - hop_size); ++i) {
+            modu_buffer[i] = modu_buffer[i + hop_size];
+        }
+        for (int i = 0; i < (block_size - hop_size); ++i) {
+            carr_buffer[i] = carr_buffer[i + hop_size];
+        }
+
+        std::fill_n(modu_buffer.begin() + (block_size - hop_size), hop_size, 0);
+        int can_read = std::min(hop_size, size);
+        std::copy_n(x.begin() + wpos, can_read, modu_buffer.begin() + (block_size - hop_size));
+        wpos += can_read;
+        size -= can_read;
+
+        for (int i = 0; i < hop_size; ++i) {
+            carr_buffer[i + (block_size - hop_size)] = osc.Sawtooth();
+            // carr_buffer[i + (block_size - hop_size)] = noise.Next();
+        }
+
+        auto modu_win = modu_buffer;
+        auto carr_win = carr_buffer;
+        qwqdsp_window::Hann::ApplyWindow(modu_win, true);
+        qwqdsp_window::Hann::ApplyWindow(carr_win, true);
+
+        auto psd_modu = PowerSpectrum(modu_win);
+        auto psd_carry = PowerSpectrum(carr_win);
+        auto out = WienerFilter(carr_buffer, psd_modu, psd_carry);
+        qwqdsp_window::Hann::ApplyWindow(out, true);
+        for (int i = 0; i < block_size; ++i) {
+            ola_buffer[i] += out[i];
+        }
+
+        std::copy_n(ola_buffer.begin(), hop_size, std::back_inserter(synthsis));
+        for (int i = 0; i < (block_size - hop_size); ++i) {
+            ola_buffer[i] = ola_buffer[i + hop_size];
+        }
+        for (int i = 0; i < hop_size; ++i) {
+            ola_buffer[i + (block_size - hop_size)] = 0;
+        }
+    }
+
+    file.setNumSamplesPerChannel(synthsis.size());
+    file.setNumChannels(1);
+    file.samples.front() = synthsis;
+    file.save("3/wiener_out.wav");
+}
+
+static void Test4() {
+    AudioFile<float> file;
+    file.load(R"(C:\Users\Kawai\Music\wormhole.wav)");
+    // file.load("modu.wav");
+    auto x = file.samples.front();
+
+    file.load("carry.wav");
+    auto n = file.samples.front();
+
+    constexpr int block_size = 512;
+    constexpr int hop_size = 128;
+    int size = std::min(x.size(), n.size());
+    int wpos = 0;
+    std::vector<float> synthsis; synthsis.reserve(size);
+    std::vector<float> ola_buffer; ola_buffer.resize(block_size);
+    std::vector<float> modu_buffer; modu_buffer.resize(block_size);
+    std::vector<float> carr_buffer; carr_buffer.resize(block_size);
+    while (size != 0) {
+        for (int i = 0; i < (block_size - hop_size); ++i) {
+            modu_buffer[i] = modu_buffer[i + hop_size];
+        }
+        for (int i = 0; i < (block_size - hop_size); ++i) {
+            carr_buffer[i] = carr_buffer[i + hop_size];
+        }
+
+        std::fill_n(modu_buffer.begin() + (block_size - hop_size), hop_size, 0);
+        int can_read = std::min(hop_size, size);
+        std::copy_n(x.begin() + wpos, can_read, modu_buffer.begin() + (block_size - hop_size));
+
+        std::fill_n(carr_buffer.begin() + (block_size - hop_size), hop_size, 0);
+        std::copy_n(n.begin() + wpos, can_read, carr_buffer.begin() + (block_size - hop_size));
+
+        wpos += can_read;
+        size -= can_read;
+
+        auto modu_win = modu_buffer;
+        auto carr_win = carr_buffer;
+        qwqdsp_window::Hann::ApplyWindow(modu_win, true);
+        qwqdsp_window::Hann::ApplyWindow(carr_win, true);
+
+        auto psd_modu = PowerSpectrum(modu_win);
+        auto psd_carry = PowerSpectrum(carr_win);
+        auto out = WienerFilter(carr_buffer, psd_modu, psd_carry);
+        qwqdsp_window::Hann::ApplyWindow(out, true);
+        for (int i = 0; i < block_size; ++i) {
+            ola_buffer[i] += out[i];
+        }
+
+        std::copy_n(ola_buffer.begin(), hop_size, std::back_inserter(synthsis));
+        for (int i = 0; i < (block_size - hop_size); ++i) {
+            ola_buffer[i] = ola_buffer[i + hop_size];
+        }
+        for (int i = 0; i < hop_size; ++i) {
+            ola_buffer[i + (block_size - hop_size)] = 0;
+        }
+    }
+
+    file.setNumSamplesPerChannel(synthsis.size());
+    file.setNumChannels(1);
+    file.samples.front() = synthsis;
+    file.save("3/wiener_out2.wav");
+}
+
 int main() {
-    Test1();
-    Test2();
+    // Test1();
+    // Test2();
+    Test3();
+    // Test4();
 }
