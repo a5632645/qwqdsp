@@ -10,6 +10,9 @@
 #include <cstring>
 #include <numbers>
 
+// @ref https://wjchen.net/post/cn/howling-suppression-cn.html#21-%E5%95%B8%E5%8F%AB%E6%A3%80%E6%B5%8B
+// @ref https://github.com/chenwj1989/python_howling_suppression/tree/master
+
 // === Howling Detection Helpers (ported from pyHowling) ===
 namespace {
 
@@ -405,13 +408,15 @@ int main() {
 
     std::vector<float> y;
     float speaker = 0.0f;
-    float decay = 0.3f;
+    float decay = 0.1f;
 
     constexpr int fft_size = 512;
     constexpr int slen = fft_size / 2;
     constexpr int hop_size = slen / 2;
     constexpr int ipmp_window = 3;
-    constexpr int max_notches = 8;
+    constexpr int max_notches = 16;
+    constexpr int release_time = 10000;
+    constexpr bool use_fix_release = false;
 
     uint32_t sample_rate = file.getSampleRate();
 
@@ -506,6 +511,9 @@ int main() {
                 float gain_db = -(20.0f + 40.0f * std::clamp((prominence_db - 5.0f) / 25.0f, 0.0f, 1.0f));
                 // Derive release time from prominence (stronger peak → longer fade)
                 float rel_ms = 1000.0f + 9000.0f * std::clamp((prominence_db - 5.0f) / 25.0f, 0.0f, 1.0f);
+                if constexpr (use_fix_release) {
+                    rel_ms = release_time;
+                }
                 int rel_frames = static_cast<int>(rel_ms * sample_rate / (hop_size * 1000));
                 if (rel_frames < 1) rel_frames = 1;
                 detected.push_back({w, fid, q, gain_db, rel_frames});
