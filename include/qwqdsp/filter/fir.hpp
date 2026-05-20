@@ -89,17 +89,17 @@ public:
         std::fill(latch_.begin(), latch_.end(), 0.0f);
     }
 
-    /**
-     * @brief 滤波器的参数是h(0)...h(n-1)排列，且coeff的大小需要手动分配
-     * @tparam Func void(std::vector<float>& coeff)
-     */
-    template <class Func>
+    template <class Func> requires std::invocable<Func, std::vector<float>&>
     void SetCoeff(Func&& func) {
         func(coeff_);
         if (latch_.size() < coeff_.size() - 1) {
             latch_.resize(coeff_.size() - 1);
         }
-        Reset();
+    }
+
+    void SetCoeff(std::span<const float> coeff) {
+        coeff_.assign(coeff.begin(), coeff.end());
+        latch_.resize(coeff.size() - 1);
     }
 
     float Tick(float x) noexcept {

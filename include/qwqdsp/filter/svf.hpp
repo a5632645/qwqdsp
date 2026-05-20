@@ -19,6 +19,15 @@ public:
         return out;
     }
 
+    void MakePass() noexcept {
+        a1 = 0;
+        a2 = 0;
+        a3 = 0;
+        m0 = 1;
+        m1 = 0;
+        m2 = 0;
+    }
+
     void MakeBell(float omega, float q, float gain) noexcept {
         float A = std::pow(10.0f, gain / 40.0f);
         float g = std::tan(omega / 2);
