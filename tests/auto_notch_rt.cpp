@@ -1,18 +1,40 @@
-#include "../playing/AudioFile.h"
-#include <qwqdsp/filter/fir.hpp>
+#include <algorithm>
+#include <array>
+#include <atomic>
+#include <cmath>
+#include <cstddef>
+#include <cstring>
+#include <functional>
+#include <iterator>
+#include <numbers>
+#include <vector>
+
+#include "raylib.h"
+#include "../playing/miniaudio.h"
+#include "../playing/slider.hpp"
+
 #include <qwqdsp/filter/svf.hpp>
+#include <qwqdsp/fx/uniform_convolution.hpp>
 #include <qwqdsp/spectral/ipp_real_fft.hpp>
 #include <qwqdsp/window/hann.hpp>
+#include <qwqdsp/window/blackman.hpp>
 #include <qwqdsp/window/helper.hpp>
 
-#include <vector>
-#include <algorithm>
-#include <cstring>
-#include <numbers>
+static constexpr float kSampleRate = 48000.0f;
 
-// @ref https://wjchen.net/post/cn/howling-suppression-cn.html#21-%E5%95%B8%E5%8F%AB%E6%A3%80%E6%B5%8B
-// @ref https://github.com/chenwj1989/python_howling_suppression/tree/master
+// Runtime parameters (main thread writes, audio thread reads)
+static std::atomic<float> s_min_howl_freq{200.0f};
+static std::atomic<float> s_ptpr_threshold{10.0f};
+static std::atomic<float> s_papr_threshold{10.0f};
+static std::atomic<float> s_q_max{10.0f};
+static std::atomic<float> s_gain_min_db{-60.0f};
+static std::atomic<float> s_rel_max_ms{20000.0f};
+static std::atomic<float> s_attack_ms{10.0f};
+static std::atomic<float> s_feedback_gain_db{-80.0f};
 
+// ============================================================
+//  模拟扬声器到麦克风的响应 (ported from auto_notch.cpp)
+// ============================================================
 static constexpr float rir[]{
     0.000266,  -0.002012, 0.000897,  -0.000504, 0.000234,  -0.000172, -0.000203,
     0.000293,  -0.001131, -0.006891, -0.135781, -0.654303, -1.332799, -1.412939,
@@ -302,23 +324,80 @@ static constexpr float rir[]{
     0.001037,  0.001158,  0.001139,  0.001003,  0.000757,
 };
 
+// ============================================================
+//  Howling suppression engine (ported from auto_notch.cpp)
+// ============================================================
 class AutoNotch {
 public:
-    static constexpr int fft_size = 512;
+    static constexpr int fft_size = 1024;
     static constexpr int slen = fft_size / 2;
     static constexpr int hop_size = slen / 2;
     static constexpr int ipmp_window = 3;
     static constexpr int max_notches = 16;
-    static constexpr int release_time = 10000;
     static constexpr bool use_fix_release = false;
 
+    int GetNumActive() const noexcept {
+        int n = 0;
+        for (auto& ns : notch_states)
+            if (ns.active) ++n;
+        return n;
+    }
+
+    float GetNotchFreq(int idx) const noexcept {
+        for (auto& ns : notch_states) {
+            if (!ns.active) continue;
+            if (idx == 0) return ns.w * sr_ / (2.0f * std::numbers::pi_v<float>);
+            --idx;
+        }
+        return 0;
+    }
+
+    float GetNotchGain(int idx) const noexcept {
+        for (auto& ns : notch_states) {
+            if (!ns.active) continue;
+            if (idx == 0) return ns.peak_gain_db;
+            --idx;
+        }
+        return 0;
+    }
+
+    int GetNotchRelease(int idx) const noexcept {
+        for (auto& ns : notch_states) {
+            if (!ns.active) continue;
+            if (idx == 0) return ns.release_counter;
+            --idx;
+        }
+        return 0;
+    }
+
+    float GetNotchQ(int idx) const noexcept {
+        for (auto& ns : notch_states) {
+            if (!ns.active) continue;
+            if (idx == 0) return ns.q;
+            --idx;
+        }
+        return 0;
+    }
+
+    int GetNotchTotalRelease(int idx) const noexcept {
+        for (auto& ns : notch_states) {
+            if (!ns.active) continue;
+            if (idx == 0) return ns.total_release_frames;
+            --idx;
+        }
+        return 0;
+    }
+
     AutoNotch() {
-        qwqdsp_window::Hann::Window({window, slen}, true);
+        qwqdsp_window::Blackman::Window({window, slen}, true);
+        norm_gain_ = qwqdsp_window::Helper::NormalizeGain({window, slen});
         fft.Init(fft_size);
     }
 
     void Init(float sr) noexcept {
         sr_ = sr;
+        // 100ms exponential smoothing for spectrum display
+        spec_smooth_alpha_ = 1.0f - std::exp(-hop_size / (sr * 0.1f));
     }
 
     void Reset() noexcept {
@@ -332,14 +411,22 @@ public:
         for (int i = 0; i < slen; ++i) {
             candidate_count[i] = 0;
         }
+        howl_bins_.clear();
+        out_frame_pos = 0;
+        std::fill_n(spec_smooth_before_, slen, -80.0f);
+        std::fill_n(spec_smooth_after_, slen, -80.0f);
         for (NotchState& n : notch_states) {
             n.filter.Reset();
+            n.bin = 0;
             n.w = 0;
             n.q = 0;
             n.peak_gain_db = 0;
+            n.original_prominence_db = 0;
             n.total_release_frames = 0;
             n.release_counter = 0;
+            n.attack_counter = 0;
             n.active = false;
+            n.matched_this_frame = false;
         }
     }
 
@@ -352,7 +439,8 @@ public:
             frames -= can_do;
 
             if (frame_pos == slen) {
-                DetectHowling();
+                FindHowling();
+                UpdateNotches();
             }
             
             // Apply cascaded notch filters with release time
@@ -364,10 +452,40 @@ public:
                 }
             }
 
+            // Collect output samples for spectrum display
+            std::copy_n(x, can_do, out_frame_buf + out_frame_pos);
+            out_frame_pos += can_do;
+            if (out_frame_pos >= slen) {
+                float fft_in[fft_size]{};
+                for (int i = 0; i < slen; ++i)
+                    fft_in[i] = out_frame_buf[i] * window[i];
+                fft.FFT(fft_in, out_fft_out_);
+                // Update smoothed after-spectrum (100ms EMA)
+                for (int i = 0; i < slen; ++i) {
+                    float g = (i == 0) ? norm_gain_ * 0.5f : norm_gain_;
+                    float raw = 20.0f * std::log10(get_magnitude(out_fft_out_, i) * g + 1e-30f);
+                    spec_smooth_after_[i] += spec_smooth_alpha_ * (raw - spec_smooth_after_[i]);
+                }
+                out_frame_pos = 0;
+            }
+
             x += can_do;
         }
     }
+
+    // Spectrum accessors for GUI (100ms EMA smoothed, normalized 0dBFS)
+    float GetSpectrumBefore(int bin) const noexcept {
+        return spec_smooth_before_[bin];
+    }
+    float GetSpectrumAfter(int bin) const noexcept {
+        return spec_smooth_after_[bin];
+    }
+    static constexpr int GetSlen() noexcept { return slen; }
 private:
+    float norm_gain_{};
+    float spec_smooth_alpha_{};
+    float spec_smooth_before_[slen]{};
+    float spec_smooth_after_[slen]{};
     float sr_{};
     float frame_buf[slen]{};
     int frame_pos = 0;
@@ -380,175 +498,47 @@ private:
 
     struct NotchState {
         qwqdsp_filter::SVF filter;
-        float w{};             // normalized angular frequency
-        float q{};             // quality factor
-        float peak_gain_db{};  // bell gain at time of detection (negative = cut)
+        int bin{};
+        float w{};
+        float q{};
+        float peak_gain_db{};
+        float original_prominence_db{};  // prominence when this notch was last assigned
         int total_release_frames{};
         int release_counter{};
-        bool active{};         // slot in use
+        int attack_counter{};
+        bool active{};
+        bool matched_this_frame{};
     };
+    std::vector<int> howl_bins_;
+    float fft_out_[fft_size + 2]{};
+    float out_frame_buf[slen]{};
+    int out_frame_pos = 0;
+    float out_fft_out_[fft_size + 2]{};
     std::array<NotchState, max_notches> notch_states;
 
-    void DetectHowling() {
-        float fft_in[fft_size]{};
-        float fft_out[fft_size + 2];
-        for (int i = 0; i < slen; ++i) {
-            fft_in[i] = frame_buf[i] * window[i];
-        }
-        fft.FFT(fft_in, fft_out);
-
-        // === Howling Detection ===
-        // PTPR: Peak-to-Threshold Power Ratio
-        auto ptpr_idx = ptpr(fft_out, slen, 10.0f);
-        // PAPR: Peak-to-Average Power Ratio
-        auto papr_idx = papr(fft_out, slen, 10.0f);
-        // PNPR: Peak-to-Neighboring Power Ratio
-        auto pnpr_idx = pnpr(fft_out, slen, 15.0f);
-
-        // Intersection of all three criteria
-        auto intersection = intersect_sorted(ptpr_idx, papr_idx);
-        intersection = intersect_sorted(intersection, pnpr_idx);
-
-        // Update IPMP rolling buffer (last 5 frames)
-        int col = frame_id % ipmp_window;
-        for (int i = 0; i < slen; ++i) {
-            if (candidates[i][col]) {
-                candidate_count[i]--;
-                candidates[i][col] = false;
-            }
-        }
-        for (int idx : intersection) {
-            candidates[idx][col] = true;
-            candidate_count[idx]++;
-        }
-
-        // IPMP: Interframe Peak Magnitude Persistence (>=3 of last 5 frames)
-        std::vector<int> ipmp_result;
-        for (int i = 0; i < slen; ++i)
-            if (candidate_count[i] >= 3)
-                ipmp_result.push_back(i);
-
-        // Screening: merge nearby candidates, keep the strongest
-        auto freq_ids = screening(fft_out, ipmp_result, slen);
-
-        // Average power for Q estimation
-        float avg_power = 0.0f;
-        for (int i = 0; i < slen; ++i)
-            avg_power += get_power(fft_out, i);
-        avg_power /= static_cast<float>(slen);
-
-        // Quadratic interpolation to refine frequency estimates
-        struct DetectedFreq { float w; int bin; float q; float gain_db; int release_frames; };
-        std::vector<DetectedFreq> detected;
-        for (int fid : freq_ids) {
-            float frac_bin = quadratic_interpolate_bin(fft_out, fid, slen);
-            float w = frac_bin * 2.0f * std::numbers::pi_v<float> / fft_size;
-            float peak_power = get_power(fft_out, fid);
-            float prominence_db = 10.0f * std::log10((peak_power + 1e-30f) / (avg_power + 1e-30f));
-            // Derive Q from peak prominence (stronger peak → higher Q)
-            float q = 1.0f + 9.0f * std::clamp((prominence_db - 5.0f) / 25.0f, 0.0f, 1.0f);
-            // Derive notch depth from prominence (stronger peak → deeper notch)
-            float gain_db = -(20.0f + 40.0f * std::clamp((prominence_db - 5.0f) / 25.0f, 0.0f, 1.0f));
-            // Derive release time from prominence (stronger peak → longer fade)
-            float rel_ms = 1000.0f + 9000.0f * std::clamp((prominence_db - 5.0f) / 25.0f, 0.0f, 1.0f);
-            if constexpr (use_fix_release) {
-                rel_ms = release_time;
-            }
-            int rel_frames = static_cast<int>(rel_ms * sr_ / (hop_size * 1000));
-            if (rel_frames < 1) rel_frames = 1;
-            detected.push_back({w, fid, q, gain_db, rel_frames});
-        }
-
-        // Update notch filter bank with release time
-        const float match_threshold = 1.5f * 2.0f * std::numbers::pi_v<float> / fft_size;
-
-        // Step 1: mark matched notches, age unmatched ones
-        for (auto& ns : notch_states) {
-            if (!ns.active) continue;
-            bool matched = false;
-            for (const auto& d : detected) {
-                if (std::abs(ns.w - d.w) < match_threshold) {
-                    matched = true;
-                    ns.w = d.w;
-                    ns.q = d.q;
-                    ns.peak_gain_db = d.gain_db;
-                    ns.total_release_frames = d.release_frames;
-                    ns.release_counter = d.release_frames;
-                    break;
-                }
-            }
-            if (!matched) {
-                ns.release_counter--;
-            }
-        }
-
-        // Step 2: activate a pre-allocated slot for each unmatched detection
-        for (const auto& d : detected) {
-            bool already_exists = false;
-            for (const auto& ns : notch_states) {
-                if (!ns.active) continue;
-                if (std::abs(ns.w - d.w) < match_threshold) {
-                    already_exists = true;
-                    break;
-                }
-            }
-            if (!already_exists) {
-                // Find first inactive slot and reuse it
-                auto it = std::find_if(notch_states.begin(), notch_states.end(),
-                    [](const NotchState& s) { return !s.active; });
-                if (it != notch_states.end()) {
-                    it->active = true;
-                    it->w = d.w;
-                    it->q = d.q;
-                    it->peak_gain_db = d.gain_db;
-                    it->total_release_frames = d.release_frames;
-                    it->release_counter = d.release_frames;
-                    it->filter.Reset();
-                }
-            }
-        }
-
-        // Step 3: deallocate fully released notches
-        for (auto& ns : notch_states)
-            if (ns.active && ns.release_counter <= 0)
-                ns.active = false;
-
-        // Step 4: update filter coefficients — gain follows release fade
-        for (auto& ns : notch_states) {
-            if (!ns.active) continue;
-            float t = static_cast<float>(ns.release_counter) / ns.total_release_frames;
-            float current_gain = ns.peak_gain_db * t;
-            ns.filter.MakeBell(ns.w, ns.q, current_gain);
-        }
-
-        // Shift frame buffer for next hop
-        std::memmove(frame_buf, frame_buf + hop_size, (slen - hop_size) * sizeof(float));
-        frame_pos = slen - hop_size;
-        frame_id++;
-    }
-
-    // === Howling Detection Helpers (ported from pyHowling) ===
-    float get_power(const float* fft_out, int bin) noexcept {
+    // ── helpers ──
+    float get_power(const float* fft_out, int bin) const noexcept {
         if (bin == 0) return fft_out[0] * fft_out[0];
         return fft_out[2 * bin] * fft_out[2 * bin] + fft_out[2 * bin + 1] * fft_out[2 * bin + 1];
     }
 
-    float get_magnitude(const float* fft_out, int bin) noexcept {
+    float get_magnitude(const float* fft_out, int bin) const noexcept {
         if (bin == 0) return std::abs(fft_out[0]);
         return std::sqrt(fft_out[2 * bin] * fft_out[2 * bin] + fft_out[2 * bin + 1] * fft_out[2 * bin + 1]);
     }
 
-    // PTPR: Peak-to-Threshold Power Ratio
     std::vector<int> ptpr(const float* fft_out, int slen, float threshold_db) noexcept {
         std::vector<int> result;
+        float ng_sq = norm_gain_ * norm_gain_;
         for (int i = 0; i < slen; ++i) {
-            if (10.0f * std::log10(get_power(fft_out, i) + 1e-30f) > threshold_db)
+            float power = get_power(fft_out, i);
+            float norm_power = (i == 0) ? power * ng_sq * 0.25f : power * ng_sq;
+            if (10.0f * std::log10(norm_power + 1e-30f) > threshold_db)
                 result.push_back(i);
         }
         return result;
     }
 
-    // PAPR: Peak-to-Average Power Ratio
     std::vector<int> papr(const float* fft_out, int slen, float threshold_db) noexcept {
         float avg_power = 0.0f;
         for (int i = 0; i < slen; ++i)
@@ -563,28 +553,25 @@ private:
         return result;
     }
 
-    // PNPR: Peak-to-Neighboring Power Ratio
     std::vector<int> pnpr(const float* fft_out, int slen, float threshold_db) noexcept {
         std::vector<int> result;
-        for (int i = 5; i < slen - 5; ++i) {
+        for (int i = 2; i < slen - 2; ++i) {
             float p = get_power(fft_out, i);
-            if (10.0f * std::log10(p / (get_power(fft_out, i - 4) + 1e-30f)) > threshold_db &&
-                10.0f * std::log10(p / (get_power(fft_out, i - 5) + 1e-30f)) > threshold_db &&
-                10.0f * std::log10(p / (get_power(fft_out, i + 4) + 1e-30f)) > threshold_db &&
-                10.0f * std::log10(p / (get_power(fft_out, i + 5) + 1e-30f)) > threshold_db)
+            if (10.0f * std::log10(p / (get_power(fft_out, i - 1) + 1e-30f)) > threshold_db &&
+                10.0f * std::log10(p / (get_power(fft_out, i - 2) + 1e-30f)) > threshold_db &&
+                10.0f * std::log10(p / (get_power(fft_out, i + 2) + 1e-30f)) > threshold_db &&
+                10.0f * std::log10(p / (get_power(fft_out, i + 1) + 1e-30f)) > threshold_db)
                 result.push_back(i);
         }
         return result;
     }
 
-    // Sorted set intersection
     std::vector<int> intersect_sorted(const std::vector<int>& a, const std::vector<int>& b) noexcept {
         std::vector<int> result;
         std::set_intersection(a.begin(), a.end(), b.begin(), b.end(), std::back_inserter(result));
         return result;
     }
 
-    // Screening: merge nearby candidates (within 3 bins), keep the strongest
     std::vector<int> screening(const float* fft_out, const std::vector<int>& ipmp_candidates, int) noexcept {
         std::vector<int> result;
         for (int c : ipmp_candidates) {
@@ -600,8 +587,6 @@ private:
         return result;
     }
 
-    // Quadratic interpolation of peak location using dB magnitude.
-    // Returns fractional bin index for improved frequency resolution.
     float quadratic_interpolate_bin(const float* fft_out, int peak_bin, int slen) noexcept {
         if (peak_bin <= 0 || peak_bin >= slen - 1)
             return static_cast<float>(peak_bin);
@@ -617,48 +602,493 @@ private:
         float delta = 0.5f * (ym1 - yp1) / denom;
         return static_cast<float>(peak_bin) + std::clamp(delta, -0.5f, 0.5f);
     }
-};
 
-int main() {
-    AudioFile<float> file;
-    file.load(R"(C:\Users\Kawai\Music\wormhole.wav)");
-    auto x = file.samples.front();
-
-    qwqdsp_filter::FIRTranspose fir;
-    fir.SetCoeff(rir);
-    fir.Reset();
-
-    std::vector<float> y;
-    float speaker = 0.0f;
-    float decay = 0.3f;
-
-    uint32_t sample_rate = file.getSampleRate();
-    AutoNotch notch;
-    notch.Init(sample_rate);
-    notch.Reset();
-
-    constexpr int block_size = 128;
-    float dsp_out[block_size]{};
-    float dsp_in[block_size]{};
-    int count_in = 0;
-    int count_out = 0;
-
-    for (float s : x) {
-        float mic = s + fir.Tick(speaker) * decay;
-        mic = std::clamp(mic, -1.0f, 1.0f);
-        dsp_in[count_in++] = mic;
-        if (count_in == block_size) {
-            count_in = 0;
-            count_out = 0;
-            notch.Process(dsp_in, block_size);
-            std::copy_n(dsp_in, block_size, dsp_out);
+    void FindHowling() {
+        float fft_in[fft_size]{};
+        float fft_out[fft_size + 2];
+        for (int i = 0; i < slen; ++i) {
+            fft_in[i] = frame_buf[i] * window[i];
         }
-        speaker = dsp_out[count_out++];
-        y.push_back(speaker);
+        fft.FFT(fft_in, fft_out);
+
+        // === Howling Detection ===
+        auto ptpr_idx = ptpr(fft_out, slen, s_ptpr_threshold.load(std::memory_order_relaxed));
+        auto papr_idx = papr(fft_out, slen, s_papr_threshold.load(std::memory_order_relaxed));
+        // auto pnpr_idx = pnpr(fft_out, slen, 15.0f);
+
+        auto intersection = intersect_sorted(ptpr_idx, papr_idx);
+        // intersection = intersect_sorted(intersection, pnpr_idx);
+
+        int col = frame_id % ipmp_window;
+        for (int i = 0; i < slen; ++i) {
+            if (candidates[i][col]) {
+                candidate_count[i]--;
+                candidates[i][col] = false;
+            }
+        }
+        for (int idx : intersection) {
+            candidates[idx][col] = true;
+            candidate_count[idx]++;
+        }
+
+        std::vector<int> ipmp_result;
+        for (int i = 0; i < slen; ++i)
+            if (candidate_count[i] >= 3)
+                ipmp_result.push_back(i);
+
+        auto freq_ids = screening(fft_out, ipmp_result, slen);
+        howl_bins_ = std::move(freq_ids);
+        std::copy_n(fft_out, fft_size + 2, fft_out_);
+        // Update smoothed before-spectrum (100ms EMA)
+        for (int i = 0; i < slen; ++i) {
+            float g = (i == 0) ? norm_gain_ * 0.5f : norm_gain_;
+            float raw = 20.0f * std::log10(get_magnitude(fft_out_, i) * g + 1e-30f);
+            spec_smooth_before_[i] += spec_smooth_alpha_ * (raw - spec_smooth_before_[i]);
+        }
     }
 
-    file.setNumSamplesPerChannel(y.size());
-    file.setNumChannels(1);
-    file.samples.front() = y;
-    file.save("auto_notch.wav");
+    void UpdateNotches() {
+        float avg_power = 0.0f;
+        for (int i = 0; i < slen; ++i)
+            avg_power += get_power(fft_out_, i);
+        avg_power /= static_cast<float>(slen);
+
+        // Mark all notches as unmatched at start of this frame
+        for (auto& ns : notch_states)
+            ns.matched_this_frame = false;
+
+        // Single loop over howl bins: assign each to a notch
+        for (int fid : howl_bins_) {
+            // Compute filter parameters for this bin
+            float frac_bin = quadratic_interpolate_bin(fft_out_, fid, slen);
+            float w = frac_bin * 2.0f * std::numbers::pi_v<float> / fft_size;
+            if (w * sr_ / (2.0f * std::numbers::pi_v<float>) < s_min_howl_freq.load(std::memory_order_relaxed))
+                continue;
+
+            float peak_power = get_power(fft_out_, fid);
+            float prominence_db = 10.0f * std::log10((peak_power + 1e-30f) / (avg_power + 1e-30f));
+            float t = std::clamp((prominence_db - 5.0f) / 25.0f, 0.0f, 1.0f);
+
+            float q_max = s_q_max.load(std::memory_order_relaxed);
+            float q = 1.0f + (q_max - 1.0f) * t;
+
+            float gain_min_db = s_gain_min_db.load(std::memory_order_relaxed);
+            float gain_db = -20.0f + (gain_min_db + 20.0f) * t;
+
+            float rel_max_ms = s_rel_max_ms.load(std::memory_order_relaxed);
+            float rel_ms = 100.0f + (rel_max_ms - 100.0f) * t;
+            if constexpr (use_fix_release) rel_ms = 20000.0f;
+            int rel_frames = static_cast<int>(rel_ms * sr_ / (hop_size * 1000));
+            if (rel_frames < 1) rel_frames = 1;
+
+            // ── Find a notch to assign this howl bin to ──
+            NotchState* target = nullptr;
+
+            // Case 1: match existing active notch by integer bin (-1 ~ +1)
+            for (auto& ns : notch_states) {
+                if (ns.active && !ns.matched_this_frame && std::abs(ns.bin - fid) <= 5) {
+                    target = &ns;
+                    break;
+                }
+            }
+
+            // Case 2: use an inactive slot
+            if (!target) {
+                for (auto& ns : notch_states) {
+                    if (!ns.active) {
+                        target = &ns;
+                        break;
+                    }
+                }
+            }
+
+            // Case 3: steal the active notch with smallest release_counter,
+            // but only if current prominence exceeds the notch's original prominence
+            if (!target) {
+                int min_rel = std::numeric_limits<int>::max();
+                NotchState* best_candidate = nullptr;
+                for (auto& ns : notch_states) {
+                    if (ns.active && ns.release_counter < min_rel) {
+                        min_rel = ns.release_counter;
+                        best_candidate = &ns;
+                    }
+                }
+                if (best_candidate && prominence_db > best_candidate->original_prominence_db)
+                    target = best_candidate;
+            }
+
+            // Assign computed parameters to target
+            if (target) {
+                target->active = true;
+                target->matched_this_frame = true;
+                target->bin = fid;
+                target->w = w;
+                target->q = q;
+                target->peak_gain_db = gain_db;
+                target->original_prominence_db = prominence_db;
+                target->total_release_frames = rel_frames;
+                target->release_counter = rel_frames;
+                target->attack_counter = 0;
+            }
+        }
+
+        // Attack + Release loop: update counters and gain every frame
+        int attack_frames = std::max(1, static_cast<int>(s_attack_ms.load(std::memory_order_relaxed) * sr_ / (hop_size * 1000)));
+        for (auto& ns : notch_states) {
+            if (!ns.active) continue;
+            if (!ns.matched_this_frame) {
+                ns.release_counter--;
+            }
+            ns.attack_counter++;
+            // Gain: attack ramps 0dB → peak, release fades peak → 0dB
+            float attack_t = std::min(1.0f, static_cast<float>(ns.attack_counter) / attack_frames);
+            float release_t = static_cast<float>(ns.release_counter) / ns.total_release_frames;
+            float current_gain = ns.peak_gain_db * attack_t * release_t;
+            ns.filter.MakeBell(ns.w, ns.q, current_gain);
+            // Remove if fully released
+            if (ns.release_counter <= 0)
+                ns.active = false;
+        }
+
+        // Shift frame buffer for next hop
+        std::memmove(frame_buf, frame_buf + hop_size, (slen - hop_size) * sizeof(float));
+        frame_pos = slen - hop_size;
+        frame_id++;
+    }
+};
+
+// ============================================================
+//  Constants
+// ============================================================
+static constexpr int kWindowWidth  = 800;
+static constexpr int kWindowHeight = 480;
+
+// ============================================================
+//  Global state (audio callback reads/writes)
+// ============================================================
+static AutoNotch g_notch;
+static std::atomic<bool> g_capturing{false};
+static qwqdsp_fx::UniformConvolution s_feedback_conv;
+static std::vector<float> s_feedback_buf;
+
+// ============================================================
+//  miniaudio callback
+// ============================================================
+extern "C" void MaCallback(ma_device* pDevice, void* pOutput,
+                           const void* pInput, ma_uint32 frameCount) {
+    (void)pDevice;
+
+    auto* input  = static_cast<const float*>(pInput);
+    auto* output = static_cast<float*>(pOutput);
+
+    if (input == nullptr || output == nullptr) return;
+
+    // Copy input to output, then add RIR-convolved feedback
+    std::copy_n(input, frameCount, output);
+    float fb_linear = std::pow(10.0f, s_feedback_gain_db.load(std::memory_order_relaxed) / 20.0f);
+    size_t min_fb = std::min<size_t>(frameCount, s_feedback_buf.size());
+    for (size_t i = 0; i < min_fb; ++i)
+        output[i] = std::clamp(output[i] + s_feedback_buf[i] * fb_linear, -1.0f, 1.0f);
+
+    // Apply howling suppression in-place
+    g_notch.Process(output, frameCount);
+
+    // Convolve output with room impulse response to generate feedback for next frame
+    s_feedback_buf.resize(frameCount);
+    std::copy_n(output, frameCount, s_feedback_buf.begin());
+    s_feedback_conv.Process(s_feedback_buf);
+}
+
+// ============================================================
+//  main
+// ============================================================
+int main(void) {
+    SetConfigFlags(FLAG_MSAA_4X_HINT);
+    InitWindow(kWindowWidth, kWindowHeight, "Auto Notch — Howling Suppression");
+    SetTargetFPS(60);
+
+    g_notch.Init(kSampleRate);
+    g_notch.Reset();
+
+    // ── init feedback convolution with room impulse response ──
+    s_feedback_conv.Init(512);
+    std::vector<float> rir_mut(std::begin(rir), std::end(rir));
+    s_feedback_conv.SetIR(rir_mut);
+
+    // ── miniaudio full-duplex ──
+    ma_device_config config = ma_device_config_init(ma_device_type_duplex);
+    config.capture.format    = ma_format_f32;
+    config.capture.channels  = 1;
+    config.playback.format   = ma_format_f32;
+    config.playback.channels = 1;
+    config.sampleRate        = (ma_uint32)kSampleRate;
+    config.dataCallback      = MaCallback;
+    config.pUserData         = nullptr;
+    config.periodSizeInMilliseconds = 10;
+
+    ma_device device;
+    ma_result result = ma_device_init(nullptr, &config, &device);
+    if (result == MA_SUCCESS) {
+        ma_device_start(&device);
+        g_capturing.store(true, std::memory_order_relaxed);
+    } else {
+        TraceLog(LOG_WARNING, "miniaudio init failed — running in silent mode");
+    }
+
+    // ── Knob setup (before loop) ──
+    constexpr int kKnobW = 55, kKnobH = 60, kKnobPad = 12;
+    int kx_start = (kWindowWidth - (8 * kKnobW + 7 * kKnobPad)) / 2;
+    int kx = kx_start, ky = kWindowHeight - 80;
+
+    auto setup_knob = [&](Knob& knob, const char* title,
+                           float vmin, float vmax, float vstep, float vdef) {
+        knob.set_bound(kx, ky, kKnobW, kKnobH)
+            .set_title(title)
+            .set_range(vmin, vmax, vstep, vdef)
+            .set_value(vdef)
+            .set_name_font_size(9)
+            .set_number_font_size(9)
+            .set_fore_color(Color{200, 200, 210, 255})
+            .set_bg_color(Color{30, 30, 35, 255});
+        kx += kKnobW + kKnobPad;
+    };
+
+    Knob knob_min_freq, knob_ptpr, knob_papr, knob_q_max, knob_gain_min, knob_rel_max, knob_attack, knob_fb_gain;
+
+    kx = kx_start;
+    setup_knob(knob_min_freq, "MinFreq", 50, 1000, 10, 200);
+    knob_min_freq.value_to_text_function = [](float v) { return TextFormat("%.0f Hz", v); };
+    knob_min_freq.on_value_change = [](float v) { s_min_howl_freq.store(v, std::memory_order_relaxed); };
+
+    setup_knob(knob_ptpr, "PTPR", -60, 0, 1, -20);
+    knob_ptpr.value_to_text_function = [](float v) { return TextFormat("%.0f dBFS", v); };
+    knob_ptpr.on_value_change = [](float v) { s_ptpr_threshold.store(v, std::memory_order_relaxed); };
+
+    setup_knob(knob_papr, "PAPR", 0, 40, 1, 10);
+    knob_papr.value_to_text_function = [](float v) { return TextFormat("%.0f dB", v); };
+    knob_papr.on_value_change = [](float v) { s_papr_threshold.store(v, std::memory_order_relaxed); };
+
+    setup_knob(knob_q_max, "Q max", 1, 50, 1, 10);
+    knob_q_max.value_to_text_function = [](float v) { return TextFormat("%.0f", v); };
+    knob_q_max.on_value_change = [](float v) { s_q_max.store(v, std::memory_order_relaxed); };
+
+    setup_knob(knob_gain_min, "Gain min", -80, -20, 5, -60);
+    knob_gain_min.value_to_text_function = [](float v) { return TextFormat("%.0f dB", v); };
+    knob_gain_min.on_value_change = [](float v) { s_gain_min_db.store(v, std::memory_order_relaxed); };
+
+    setup_knob(knob_rel_max, "Rel max", 100, 20000, 100, 5000);
+    knob_rel_max.value_to_text_function = [](float v) { return v >= 1000 ? TextFormat("%.1fs", v/1000) : TextFormat("%.0f ms", v); };
+    knob_rel_max.on_value_change = [](float v) { s_rel_max_ms.store(v, std::memory_order_relaxed); };
+
+    setup_knob(knob_attack, "Attack", 0, 200, 5, 10);
+    knob_attack.value_to_text_function = [](float v) { return TextFormat("%.0f ms", v); };
+    knob_attack.on_value_change = [](float v) { s_attack_ms.store(v, std::memory_order_relaxed); };
+
+    setup_knob(knob_fb_gain, "FB gain", -80, 20, 1, -80);
+    knob_fb_gain.value_to_text_function = [](float v) { return TextFormat("%.0f dB", v); };
+    knob_fb_gain.on_value_change = [](float v) { s_feedback_gain_db.store(v, std::memory_order_relaxed); };
+
+    // Force knob values to atomics
+    s_min_howl_freq.store(knob_min_freq.get_value(), std::memory_order_relaxed);
+    s_ptpr_threshold.store(knob_ptpr.get_value(), std::memory_order_relaxed);
+    s_papr_threshold.store(knob_papr.get_value(), std::memory_order_relaxed);
+    s_q_max.store(knob_q_max.get_value(), std::memory_order_relaxed);
+    s_gain_min_db.store(knob_gain_min.get_value(), std::memory_order_relaxed);
+    s_rel_max_ms.store(knob_rel_max.get_value(), std::memory_order_relaxed);
+    s_attack_ms.store(knob_attack.get_value(), std::memory_order_relaxed);
+    s_feedback_gain_db.store(knob_fb_gain.get_value(), std::memory_order_relaxed);
+
+    // ── main loop ──
+    while (!WindowShouldClose()) {
+        BeginDrawing();
+        ClearBackground(Color{10, 10, 12, 255});
+
+        // ── title ──
+        DrawText("Auto Notch: Real-Time Howling Suppression", 20, 10, 16, LIGHTGRAY);
+
+        // ── status ──
+        {
+            int active = g_notch.GetNumActive();
+            const char* status = g_capturing.load(std::memory_order_relaxed) ? "● REC" : "■ STOP";
+            Color stCol = g_capturing.load(std::memory_order_relaxed) ? GREEN : RED;
+
+            DrawText(TextFormat("Notches: %d / %d", active, AutoNotch::max_notches), 20, 40, 14, WHITE);
+            DrawText(status, kWindowWidth - 80, 10, 16, stCol);
+        }
+
+        // ── notch frequency display ──
+        {
+            int active = g_notch.GetNumActive();
+            int y_base = 70;
+            DrawText("Active Notch Filters:", 20, y_base, 12, GRAY);
+            y_base += 20;
+
+            if (active == 0) {
+                DrawText("  (none)", 20, y_base, 12, DARKGRAY);
+            } else {
+                // Horizontal frequency axis
+                int ax_x = 40;
+                int ax_y = y_base + 30;
+                int ax_w = kWindowWidth - 80;
+
+                DrawLine(ax_x, ax_y, ax_x + ax_w, ax_y, Color{60, 60, 70, 255});
+                DrawText("20 Hz", ax_x, ax_y + 6, 10, DARKGRAY);
+                DrawText("20 kHz", ax_x + ax_w - 30, ax_y + 6, 10, DARKGRAY);
+
+                for (int i = 0; i < active; ++i) {
+                    float freq_hz = g_notch.GetNotchFreq(i);
+                    float gain_db = g_notch.GetNotchGain(i);
+
+                    // Map frequency to x-axis (log scale)
+                    float norm = (std::log10(std::max(freq_hz, 20.0f)) - std::log10(20.0f))
+                               / (std::log10(20000.0f) - std::log10(20.0f));
+                    int x = ax_x + static_cast<int>(norm * ax_w);
+                    int y = ax_y;
+
+                    // Depth indicator: deeper notch = taller line
+                    float depth = std::clamp(-gain_db / 60.0f, 0.2f, 1.0f);
+                    int bar_h = static_cast<int>(20 + depth * 30);
+
+                    // Color: strong = red, weak = yellow
+                    Color c = Color{
+                        (unsigned char)(255),
+                        (unsigned char)(255 - depth * 200),
+                        (unsigned char)(50),
+                        255
+                    };
+
+                    DrawLine(x, y - bar_h, x, y, c);
+                    DrawCircle(x, y - bar_h, 4, c);
+
+                    // Label
+                    const char* label = freq_hz >= 1000
+                        ? TextFormat("%.1fk", freq_hz / 1000.0f)
+                        : TextFormat("%.0f", freq_hz);
+                    DrawText(label, x - 16, y - bar_h - 18, 10, c);
+                }
+
+            }
+        }
+
+        // ── spectrum plots (before / after) ──
+        int sp_x = 40;
+        int sp_y = 190;
+        int sp_w = kWindowWidth - 80;
+        int sp_h = 48;
+        int sp_gap = 4;
+        {
+            int _sp_y = sp_y;
+            auto draw_spectrum = [&](const char* label, std::function<float(int)> getter, Color col) {
+                int cy = _sp_y;
+                // Background
+                DrawRectangle(sp_x, cy, sp_w, sp_h, Color{15, 15, 18, 255});
+                DrawRectangleLines(sp_x, cy, sp_w, sp_h, Color{50, 50, 55, 255});
+
+                // dB reference lines
+                for (int db = -80; db <= 0; db += 20) {
+                    float t = 1.0f - (db + 80) / 80.0f;
+                    int ly = cy + static_cast<int>(t * sp_h);
+                    DrawLine(sp_x, ly, sp_x + sp_w, ly, Color{25, 25, 30, 255});
+                }
+
+                // Magnitude line
+                int prev_x = sp_x, prev_y = cy + sp_h;
+                for (int i = 0; i < AutoNotch::GetSlen(); ++i) {
+                    float freq_hz = i * kSampleRate / AutoNotch::fft_size;
+                    float norm = (std::log10(std::max(freq_hz, 20.0f)) - std::log10(20.0f))
+                               / (std::log10(kSampleRate / 2) - std::log10(20.0f));
+                    int cx = sp_x + static_cast<int>(norm * sp_w);
+                    float db = getter(i);
+                    float db_clamped = std::clamp(db, -80.0f, 0.0f);
+                    int cy2 = cy + static_cast<int>((1.0f - (db_clamped + 80) / 80.0f) * sp_h);
+                    DrawLine(prev_x, prev_y, cx, cy2, col);
+                    prev_x = cx;
+                    prev_y = cy2;
+                }
+
+                DrawText(label, sp_x + 3, cy + 2, 9, col);
+
+                // Notch markers on spectrum
+                for (int i = 0; i < g_notch.GetNumActive(); ++i) {
+                    float freq_hz = g_notch.GetNotchFreq(i);
+                    float norm = (std::log10(std::max(freq_hz, 20.0f)) - std::log10(20.0f))
+                               / (std::log10(kSampleRate / 2) - std::log10(20.0f));
+                    int mx = sp_x + static_cast<int>(norm * sp_w);
+                    DrawLine(mx, cy, mx, cy + sp_h, Color{255, 100, 100, 60});
+                }
+
+                _sp_y += sp_h + sp_gap;
+            };
+
+            draw_spectrum("Before", [](int i) { return g_notch.GetSpectrumBefore(i); }, Color{80, 180, 255, 200});
+            draw_spectrum("After",  [](int i) { return g_notch.GetSpectrumAfter(i); },  Color{80, 255, 120, 200});
+        }
+
+        // ── notch details table ──
+        {
+            int tbl_y = sp_y + 2 * (sp_h + sp_gap) + 8;
+            int active = g_notch.GetNumActive();
+            if (active > 0) {
+                DrawText(" #   Freq(Hz)   Gain(dB)    Q    Release", 20, tbl_y, 9, GRAY);
+                tbl_y += 12;
+                for (int i = 0; i < active && i < AutoNotch::max_notches; ++i) {
+                    float f = g_notch.GetNotchFreq(i);
+                    float g = g_notch.GetNotchGain(i);
+                    float q = g_notch.GetNotchQ(i);
+                    int r = g_notch.GetNotchRelease(i);
+                    int tr = g_notch.GetNotchTotalRelease(i);
+                    Color rowCol = (i % 2 == 0) ? Color{200, 200, 200, 255} : Color{140, 140, 140, 255};
+                    DrawText(TextFormat(" %2d  %7.1f  %7.1f  %5.1f  %3d/%-3d",
+                             i + 1, f, g, q, r, tr),
+                             20, tbl_y, 9, rowCol);
+                    tbl_y += 12;
+                }
+            }
+        }
+
+        // ── knobs row ──
+        knob_min_freq.display();
+        knob_ptpr.display();
+        knob_papr.display();
+        knob_q_max.display();
+        knob_gain_min.display();
+        knob_rel_max.display();
+        knob_attack.display();
+        knob_fb_gain.display();
+
+        // ── controls help ──
+        {
+            int y = kWindowHeight - 18;
+            DrawText("Controls: [SPACE] Toggle capture  [R] Reset  [ESC] Quit", 20, y, 10, DARKGRAY);
+            if (result != MA_SUCCESS) {
+                DrawText("WARNING: miniaudio init failed — no audio device", 20, y + 14, 10, RED);
+            }
+        }
+
+        EndDrawing();
+
+        // ── keyboard ──
+        if (IsKeyPressed(KEY_SPACE)) {
+            if (g_capturing.load(std::memory_order_relaxed)) {
+                if (result == MA_SUCCESS) ma_device_stop(&device);
+                g_capturing.store(false, std::memory_order_relaxed);
+            } else {
+                if (result == MA_SUCCESS) ma_device_start(&device);
+                g_capturing.store(true, std::memory_order_relaxed);
+            }
+        }
+        if (IsKeyPressed(KEY_R)) {
+            g_notch.Reset();
+            s_feedback_conv.Reset();
+            s_feedback_buf.clear();
+        }
+    }
+
+    // ── cleanup ──
+    if (result == MA_SUCCESS) {
+        ma_device_stop(&device);
+        ma_device_uninit(&device);
+    }
+    CloseWindow();
+    return 0;
 }

@@ -46,13 +46,24 @@ set_target_properties(qwqdsp-rnnoise-lite PROPERTIES FOLDER qwqdsp-dsp-tests)
 
 if (QWQDSP_HAVE_RAYLIB)
     add_qwqdsp_gui_test(interpolations)
+
     add_qwqdsp_gui_test(formant_filter)
     target_sources(qwqdsp-formant_filter PUBLIC "../playing/slider.cpp")
+
+    add_qwqdsp_gui_test(auto_notch_rt)
+    target_sources(qwqdsp-auto_notch_rt PUBLIC "../playing/slider.cpp")
+    target_sources(qwqdsp-auto_notch_rt PUBLIC "../playing/miniaudio.c")
+
     add_qwqdsp_gui_test(blit)
     target_sources(qwqdsp-blit PUBLIC "../playing/slider.cpp")
+
     add_qwqdsp_gui_test(polyblep)
     target_sources(qwqdsp-polyblep PUBLIC "../playing/slider.cpp")
+
     add_qwqdsp_gui_test(resonate_bank)
     target_sources(qwqdsp-resonate_bank PUBLIC "../playing/miniaudio.c")
     target_compile_options(qwqdsp-resonate_bank PUBLIC -mavx2 -mfma)
+
+    add_qwqdsp_gui_test(spectrum)
+    target_sources(qwqdsp-spectrum PUBLIC s/spectrum_driver.cpp ../playing/miniaudio.c)
 endif()
