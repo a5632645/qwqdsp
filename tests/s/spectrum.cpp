@@ -20,7 +20,7 @@
 #include <immintrin.h>
 
 // 频谱驱动 (25 bin)
-#include "s/spectrum_driver.h"
+#include "spectrum_driver.h"
 
 static constexpr int kWindowWidth = 1100;
 static constexpr int kWindowHeight = 640;
