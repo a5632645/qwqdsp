@@ -1,7 +1,7 @@
 #include "qwqdsp/filter/iir_hilbert.hpp"
 #include "qwqdsp/filter/iir_cpx_hilbert.hpp"
 #include "qwqdsp/oscillator/vic_sine_osc.hpp"
-#include "../playing/AudioFile.h"
+#include "../../playing/AudioFile.h"
 
 static constexpr auto kInputFile 
 = R"(C:\Users\Kawai\Music\gunge_slice.wav)";

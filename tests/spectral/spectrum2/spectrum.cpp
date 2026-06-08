@@ -5,7 +5,7 @@
 #include <vector>
 
 #include "raylib.h"
-#include "../playing/miniaudio.h"
+#include "../../../playing/miniaudio.h"
 
 #include "qwqdsp/spectral/ipp_real_fft.hpp"
 

@@ -10,8 +10,8 @@
 #include <vector>
 
 #include "raylib.h"
-#include "../playing/miniaudio.h"
-#include "../playing/slider.hpp"
+#include "../../playing/miniaudio.h"
+#include "../../playing/slider.hpp"
 
 #include <qwqdsp/filter/svf.hpp>
 #include <qwqdsp/fx/uniform_convolution.hpp>

@@ -5,7 +5,7 @@
 #include <span>
 
 #include "raylib.h"
-#include "../playing/slider.hpp"
+#include "../../playing/slider.hpp"
 
 #include "qwqdsp/oscillator/blit.hpp"
 #include "qwqdsp/oscillator/blit_pwm.hpp"

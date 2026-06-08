@@ -4,7 +4,7 @@
 #include <span>
 
 #include "raylib.h"
-#include "../playing/slider.hpp"
+#include "../../playing/slider.hpp"
 
 #include "qwqdsp/convert.hpp"
 #include "qwqdsp/filter/formant.hpp"

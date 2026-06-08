@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "raylib.h"
-#include "../playing/miniaudio.h"
+#include "../../../playing/miniaudio.h"
 
 #include "qwqdsp/convert.hpp"
 #include "qwqdsp/filter/rbj.hpp"
@@ -16,7 +16,7 @@
 #include "qwqdsp/spectral/ipp_real_fft.hpp"
 #include "qwqdsp/window/blackman.hpp"
 #include "qwqdsp/window/helper.hpp"
-#include "../playing/simd.hpp"
+#include "../../../playing/simd.hpp"
 #include <immintrin.h>
 
 // 频谱驱动 (25 bin)

@@ -1,4 +1,4 @@
-#include "../playing/AudioFile.h"
+#include "../../playing/AudioFile.h"
 #include "qwqdsp/fx/resample_iir.hpp"
 #include "qwqdsp/fx/resample_coeffs.h"
 
