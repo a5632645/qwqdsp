@@ -80,4 +80,7 @@ if (QWQDSP_HAVE_RAYLIB)
 
     add_qwqdsp_gui_test(spectrum2 spectral/spectrum2/spectrum.cpp)
     target_sources(qwqdsp-spectrum2 PUBLIC spectral/spectrum2/spectrum_driver.cpp ../playing/miniaudio.c)
+
+    add_qwqdsp_gui_test(spectrum3 spectral/spectrum3.cpp)
+    target_sources(qwqdsp-spectrum3 PUBLIC ../playing/miniaudio.c)
 endif()
