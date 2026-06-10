@@ -8,8 +8,8 @@
 #include "raylib.h"
 
 // ── 窗口与 UI 常量 ──
-static constexpr int kWindowWidth  = 1280;
-static constexpr int kWindowHeight = 720;
+static constexpr int kWindowWidth  = 640;
+static constexpr int kWindowHeight = 320;
 
 // ── 画布布局 ──
 static constexpr int kCanvasX = 50;
@@ -54,7 +54,7 @@ static int in_count_{};
 
 constexpr float kRefFreq = 1000;
 constexpr float kCenterFreqFloor = kRefFreq / 64;
-constexpr int   kOctave     = 8;
+constexpr int   kOctave     = 12;
 constexpr float kAttackMs   = 1.0f;
 constexpr float kReleaseMs  = 150.0f;
 
@@ -134,20 +134,24 @@ static void Dsp_Process() {
   std::array<float, kBinSize> gain_buffer{};
   fft_.FFTGainPhase(fft_in_buffer_, gain_buffer);
 
-  std::array<float, kBinSize + 1> cum_sum{};
+  // 功率前缀和 (平方)
+  std::array<float, kBinSize + 1> power_cum{};
   for (size_t j = 0; j < kBinSize; ++j) {
-      cum_sum[j + 1] = cum_sum[j] + gain_buffer[j];
+    float m = gain_buffer[j];
+    power_cum[j + 1] = power_cum[j] + m * m;
   }
 
   int octave_count = octave_idx_.size();
   for (int i = 0; i < octave_count; ++i) {
     auto &d = octave_idx_[i];
-    float sum = cum_sum[d.end_idx + 1] - cum_sum[d.begin_idx];
-    float raw = sum * octave_avg_mul_[i] * octave_tilt_mul_[i];
-    float prev = octave_gain_[i];
-    float alpha = (raw > prev) ? kAttackAlpha : kReleaseAlpha;
-    octave_gain_[i] = prev + alpha * (raw - prev);
-    octave_gain_dB_[i] = 20.0f * log10f(octave_gain_[i] + 1e-12f);
+    float sum_power = power_cum[d.end_idx + 1] - power_cum[d.begin_idx];
+    float n = static_cast<float>(d.end_idx + 1 - d.begin_idx);
+    float raw    = std::sqrt(sum_power / n) * octave_tilt_mul_[i];
+    float raw_dB = 20.0f * log10f(raw + 1e-12f);
+    float prev   = octave_gain_[i];  // dB
+    float alpha  = (raw_dB > prev) ? kAttackAlpha : kReleaseAlpha;
+    octave_gain_[i]    = prev + alpha * (raw_dB - prev);
+    octave_gain_dB_[i] = octave_gain_[i];
   }
 
   // ── FFT bin 包络 (一阶平滑) ──
@@ -246,7 +250,7 @@ static void InitParaTable() {
     float normPx = static_cast<float>(px) / static_cast<float>(kCanvasW - 1);
     float logF  = logMin + normPx * (logMax - logMin);
 
-    // 找到区间 [seg, seg+1] 使得 octave_log_freq_[seg] ≤ logF < octave_log_freq_[seg+1]
+    // 找到区间 [seg, seg+1]
     int seg = 0;
     if (logF >= octave_log_freq_[octaveCnt - 1]) {
       seg = octaveCnt - 2;
@@ -258,11 +262,10 @@ static void InitParaTable() {
       }
     }
 
-    // 对区间 [seg, seg+1] 使用 band (seg-1, seg, seg+1)
+    // 对区间 [seg, seg+1] 使用 3 个 band (seg-1, seg, seg+1)
     int left  = std::max(0, seg - 1);
     int mid   = seg;
     int right = std::min(octaveCnt - 1, seg + 1);
-    // 确保三点连续且不重复
     if (left == mid) right = std::min(octaveCnt - 1, mid + 2);
     if (right == mid) left  = std::max(0, mid - 2);
     mid = left + 1;
@@ -271,7 +274,7 @@ static void InitParaTable() {
     float x1 = octave_log_freq_[mid];
     float x2 = octave_log_freq_[right];
 
-    // Lagrange 基函数
+    // 二次 Lagrange 基函数
     float w0 = (logF - x1) * (logF - x2) / ((x0 - x1) * (x0 - x2));
     float w1 = (logF - x0) * (logF - x2) / ((x1 - x0) * (x1 - x2));
     float w2 = (logF - x0) * (logF - x1) / ((x2 - x0) * (x2 - x1));
