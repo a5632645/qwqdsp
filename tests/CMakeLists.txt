@@ -64,6 +64,10 @@ if (QWQDSP_HAVE_RAYLIB)
     target_sources(qwqdsp-pfb_view PUBLIC "../playing/miniaudio.c")
     target_compile_options(qwqdsp-pfb_view PUBLIC -mavx2 -mfma)
 
+    add_qwqdsp_gui_test(pfb2_view realtime/polyphase_filter_bank_view2.cpp)
+    target_sources(qwqdsp-pfb2_view PUBLIC "../playing/miniaudio.c")
+    target_compile_options(qwqdsp-pfb2_view PUBLIC -mavx2 -mfma)
+
     # ── Audio FX (GUI) ──
     add_qwqdsp_gui_test(formant_filter audiofx/formant_filter.cpp)
     target_sources(qwqdsp-formant_filter PUBLIC "../playing/slider.cpp")
