@@ -1,9 +1,9 @@
 #include "AudioFile.h"
-#include <span>
 #include <cassert>
-#include <vector>
 #include <iostream>
+#include <span>
 #include <string>
+#include <vector>
 
 #if 0
 
@@ -202,9 +202,10 @@ private:
 };
 
 #include <qwqdsp/filter/window_fir.hpp>
-#include <qwqdsp/window/hann.hpp>
 #include <qwqdsp/oscillator/vic_sine_osc.hpp>
 #include <qwqdsp/spectral/real_fft.hpp>
+#include <qwqdsp/window/hann.hpp>
+
 
 // int main() {
 //     float x[1024]{};
@@ -290,11 +291,11 @@ int main() {
 #else
 
 #include "AudioFile.h"
-#include <span>
 #include <cassert>
-#include <vector>
 #include <iostream>
+#include <span>
 #include <string>
+#include <vector>
 
 /**
  * @brief 多相插值器 / Polyphase upsampler (interpolator)
@@ -334,7 +335,7 @@ public:
         if (len_coeff % upsample != 0) {
             ++each_phase_len_;
         }
-        
+
         phase_coeffs_.resize(upsample * each_phase_len_);
         for (int i = 0; i < upsample; ++i) {
             auto dst_it = phase_coeffs_.begin() + i * each_phase_len_;
@@ -474,9 +475,9 @@ private:
 };
 
 #include <qwqdsp/filter/window_fir.hpp>
-#include <qwqdsp/window/hann.hpp>
 #include <qwqdsp/oscillator/vic_sine_osc.hpp>
 #include <qwqdsp/spectral/real_fft.hpp>
+#include <qwqdsp/window/hann.hpp>
 
 // int main() {
 //     float x[1024 / 8]{};
@@ -544,16 +545,14 @@ int main() {
     size_t dot_pos = out_path.rfind('.');
     if (dot_pos != std::string::npos) {
         out_path.insert(dot_pos, "_upsampled");
-    } else {
+    }
+    else {
         out_path += "_upsampled";
     }
     out_file.save(out_path);
 
-    std::cout << "Saved " << out_path << " ("
-              << original_sample_rate << " Hz -> "
-              << out_file.getSampleRate() << " Hz, "
-              << out_file.getNumSamplesPerChannel() << " samples)"
-              << std::endl;
+    std::cout << "Saved " << out_path << " (" << original_sample_rate << " Hz -> " << out_file.getSampleRate()
+              << " Hz, " << out_file.getNumSamplesPerChannel() << " samples)" << std::endl;
 
     return 0;
 }

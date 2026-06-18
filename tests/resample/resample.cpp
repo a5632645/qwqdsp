@@ -1,6 +1,6 @@
 #include "../../playing/AudioFile.h"
-#include "qwqdsp/fx/resample_iir.hpp"
 #include "qwqdsp/fx/resample_coeffs.h"
+#include "qwqdsp/fx/resample_iir.hpp"
 
 int main() {
     AudioFile<float> infile;
@@ -11,7 +11,7 @@ int main() {
     constexpr float kTargetFs = 96000.0f;
     resample.Init(infile.getSampleRate(), kTargetFs);
     auto sweep_resample = resample.Process<float>(sweep);
-    
+
     AudioFile<float> outfile;
     outfile.setNumChannels(1);
     outfile.setBitDepth(32);
