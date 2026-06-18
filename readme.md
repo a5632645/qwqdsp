@@ -298,3 +298,4 @@
 - `fastset_iir.ipynb`: Fast Set IIR 滤波器系数设计 — 通过极点配置优化不同建立时间常数（1e2~1e7 采样）的 2/4/6/8 阶 IIR 滤波器，导出并联形式的 C++ 结构体代码。
 - `holters_parker_coeff.ipynb`: Holters-Parker 滤波器系数设计 — 设计椭圆 / 切比雪夫 I 型模拟原型，通过部分分式展开为并联 IIR，生成 C++ 系数代码。
 - `tpt_filter.ipynb`: TPT（梯形）滤波器拓扑符号推导 — 使用 SymPy 推导 SVF、转置 Sallen-Key 2 极点、4 极梯形低通 / 高通滤波器的差分方程。
+- `ola.ipynb`: 时变 FFT 卷积与 OLA/WOLA 重建实验 — ① 三种步长（R=M, R=M/2, R=M/4）下时变核（FIR 低通→高通突变）的 FFT 卷积重建质量对比；② WOLA 中 sqrt-Hann 窗在 50% 重叠下的完美重建演示；③ Hann 与 sqrt-Hann 窗的频谱对比；④ 75% 重叠下 OLA（Hann）与 WOLA（Hann²）的重建增益常数分析；⑤ 多种窗函数（Rect / Hann / Hamming / Blackman / Blackman-Harris）在其最小完美重建步长下的 OLA 稳态纹波精度验证。
