@@ -4,6 +4,7 @@
 #include <cmath>
 
 namespace qwqdsp_window {
+/// @ref https://www.recordingblogs.com/wiki/hann-window
 struct Hann {
     // 和分析有关的
     // f = width / N

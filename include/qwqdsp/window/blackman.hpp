@@ -4,6 +4,7 @@
 #include <cmath>
 
 namespace qwqdsp_window {
+/// @ref https://www.recordingblogs.com/wiki/blackman-window
 struct Blackman {
     // 和分析有关的
     // f = width / N

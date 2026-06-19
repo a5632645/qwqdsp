@@ -153,13 +153,18 @@
 
 `window`
 
-- `blackman.hpp`: Blackman 窗 — `Blackman::Window`, `ApplyWindow`, `DWindow`
-- `hamming.hpp`: Hamming 窗 — `Hamming::Window`, `ApplyWindow`, `DWindow`
-- `hann.hpp`: Hann 窗 — `Hann::Window`, `ApplyWindow`, `DWindow`
-- `kaiser.hpp`: Kaiser 窗 — `Kaiser::Window`（beta 参数）, `ApplyWindow`, `DWindow`；内置 `cephes::i0`, `cephes::i1` 函数。
-- `lanczos.hpp`: Lanczos 窗 — `Lanczos::Window`, `ApplyWindow`, `DWindow`
-- `taylor.hpp`: Taylor 窗 — `Taylor::Window`（旁瓣电平 + nbars 参数），含导数窗口版本。
-- `helper.hpp`: 窗工具函数 — `Helper::Normalize`, `NormalizeGain`, `TWindow`（时间加权）, `ZeroPhasePad`, `ZeroPad`。
+- `window.hpp`: 聚合头。
+- `blackman.hpp`: Blackman 窗。
+- `blackman_harris.hpp`: 4 项 Blackman-Harris 窗（`kSidelobe=-92dB`）。
+- `blackman_harris_3term.hpp`: 3 项 Blackman-Harris 窗（`kSidelobe=-71.48dB`，主瓣宽 3）。
+- `blackman_nuttall.hpp`: Blackman-Nuttall 窗（`kSidelobe=-98.3dB`）。
+- `hamming.hpp`: Hamming 窗（`kSidelobe=-43.8dB`）。
+- `hann.hpp`: Hann 窗（`kSidelobe=-31.6dB`）。
+- `kaiser.hpp`: Kaiser 窗（beta 参数可调），内置 `cephes::i0/i1`。
+- `lanczos.hpp`: Lanczos 窗（`kSidelobe=-26.6dB`）。
+- `nuttall.hpp`: Nuttall 窗（`kSidelobe=-93.3dB`）。
+- `taylor.hpp`: Taylor 窗（旁瓣电平 + nbars 参数）。
+- `helper.hpp`: 窗工具函数（归一化、时间加权、零填充等）。
 
 ### 插值模块 (Interpolation Modules)
 

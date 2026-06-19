@@ -5,6 +5,7 @@
 #include <cmath>
 
 namespace qwqdsp_window {
+/// @ref https://www.recordingblogs.com/wiki/lanczos-window
 struct Lanczos {
     // 和分析有关的
     // f = width / N
