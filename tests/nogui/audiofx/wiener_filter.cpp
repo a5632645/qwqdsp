@@ -1,12 +1,12 @@
-#include <qwqdsp/oscillator/noise.hpp>
-#include <qwqdsp/spectral/ipp_real_fft.hpp>
+#include "AudioFile.h"
+#include "work_dir.hpp"
 #include <qwqdsp/fx/uniform_convolution.hpp>
 #include <qwqdsp/oscillator/blep_coeff.hpp>
-#include <qwqdsp/oscillator/polyblep.hpp>
 #include <qwqdsp/oscillator/noise.hpp>
-#include <qwqdsp/window/hann.hpp>
+#include <qwqdsp/oscillator/polyblep.hpp>
+#include <qwqdsp/spectral/ipp_real_fft.hpp>
 #include <qwqdsp/window/blackman.hpp>
-#include "AudioFile.h"
+#include <qwqdsp/window/hann.hpp>
 
 constexpr float noise_gain = 1e-1f;
 
@@ -52,8 +52,10 @@ static std::vector<float> PadTo2(const std::vector<float>& x) {
 // standard wiener filter use Noise and Voice
 // ----------------------------------------
 
-static std::vector<float> WienerFilter(const std::vector<float>& x, const std::vector<float>& psd_x, const std::vector<float>& psd_noise) {
-    std::vector<float> h_filter; h_filter.reserve(psd_x.size());
+static std::vector<float> WienerFilter(const std::vector<float>& x, const std::vector<float>& psd_x,
+                                       const std::vector<float>& psd_noise) {
+    std::vector<float> h_filter;
+    h_filter.reserve(psd_x.size());
     for (size_t i = 0; i < psd_x.size(); ++i) {
         float a = psd_x[i];
         float b = psd_noise[i];
@@ -67,7 +69,8 @@ static std::vector<float> WienerFilter(const std::vector<float>& x, const std::v
     auto pad_x = PadTo2(x);
     qwqdsp_spectral::IppRealFFT fft;
     fft.Init(pad_x.size());
-    std::vector<float> pad_x_fft; pad_x_fft.resize(pad_x.size() + 2);
+    std::vector<float> pad_x_fft;
+    pad_x_fft.resize(pad_x.size() + 2);
     fft.FFT(pad_x.data(), pad_x_fft.data());
 
     for (int i = 0; i < pad_x_fft.size(); i += 2) {
@@ -82,11 +85,13 @@ static std::vector<float> WienerFilter(const std::vector<float>& x, const std::v
 
 static void Test1() {
     AudioFile<float> file;
-    file.load(R"(C:\Users\Kawai\Music\wormhole.wav)");
+    file.load(qwqdsp_support::WormholeWav());
     auto& x = file.samples.front();
 
-    std::vector<float> noise; noise.reserve(x.size());
-    std::vector<float> mix; mix.reserve(x.size());
+    std::vector<float> noise;
+    noise.reserve(x.size());
+    std::vector<float> mix;
+    mix.reserve(x.size());
     qwqdsp_oscillator::WhiteNoise noise_gen;
     for (size_t i = 0; i < x.size(); ++i) {
         float n = noise_gen.Next() * noise_gain;
@@ -99,26 +104,21 @@ static void Test1() {
     auto psd_x = PowerSpectrum(pad_x);
     auto psd_noise = PowerSpectrum(pad_noise);
     auto out = WienerFilter(mix, psd_x, psd_noise);
-    
-    file.setNumSamplesPerChannel(x.size());
-    file.setNumChannels(1);
-    file.samples.front() = x;
-    file.save("1/x.wav");
 
     file.setNumSamplesPerChannel(noise.size());
     file.setNumChannels(1);
     file.samples.front() = noise;
-    file.save("1/noise.wav");
+    file.save(qwqdsp_support::OutputFile("wiener_1_noise.wav"));
 
     file.setNumSamplesPerChannel(out.size());
     file.setNumChannels(1);
     file.samples.front() = out;
-    file.save("1/wiener_out.wav");
+    file.save(qwqdsp_support::OutputFile("wiener_1_out.wav"));
 
     file.setNumSamplesPerChannel(mix.size());
     file.setNumChannels(1);
     file.samples.front() = mix;
-    file.save("1/wiener_in.wav");
+    file.save(qwqdsp_support::OutputFile("wiener_1_in.wav"));
 }
 
 // ----------------------------------------
@@ -126,8 +126,10 @@ static void Test1() {
 // Noise And Dirty signal
 // ----------------------------------------
 
-static std::vector<float> WienerFilter2(const std::vector<float>& r, const std::vector<float>& psd_r, const std::vector<float>& psd_noise) {
-    std::vector<float> h_filter; h_filter.reserve(psd_r.size());
+static std::vector<float> WienerFilter2(const std::vector<float>& r, const std::vector<float>& psd_r,
+                                        const std::vector<float>& psd_noise) {
+    std::vector<float> h_filter;
+    h_filter.reserve(psd_r.size());
     for (size_t i = 0; i < psd_r.size(); ++i) {
         float a = psd_r[i];
         float b = psd_noise[i];
@@ -142,7 +144,8 @@ static std::vector<float> WienerFilter2(const std::vector<float>& r, const std::
     auto pad_x = PadTo2(r);
     qwqdsp_spectral::IppRealFFT fft;
     fft.Init(pad_x.size());
-    std::vector<float> pad_x_fft; pad_x_fft.resize(pad_x.size() + 2);
+    std::vector<float> pad_x_fft;
+    pad_x_fft.resize(pad_x.size() + 2);
     fft.FFT(pad_x.data(), pad_x_fft.data());
 
     for (int i = 0; i < pad_x_fft.size(); i += 2) {
@@ -157,11 +160,13 @@ static std::vector<float> WienerFilter2(const std::vector<float>& r, const std::
 
 static void Test2() {
     AudioFile<float> file;
-    file.load(R"(C:\Users\Kawai\Music\wormhole.wav)");
+    file.load(qwqdsp_support::WormholeWav());
     auto& x = file.samples.front();
 
-    std::vector<float> noise; noise.reserve(x.size());
-    std::vector<float> r; r.reserve(x.size());
+    std::vector<float> noise;
+    noise.reserve(x.size());
+    std::vector<float> r;
+    r.reserve(x.size());
     qwqdsp_oscillator::WhiteNoise noise_gen;
     for (size_t i = 0; i < x.size(); ++i) {
         float n = noise_gen.Next() * noise_gain;
@@ -174,26 +179,21 @@ static void Test2() {
     auto psd_r = PowerSpectrum(pad_r);
     auto psd_noise = PowerSpectrum(pad_noise);
     auto out = WienerFilter2(r, psd_r, psd_noise);
-    
-    file.setNumSamplesPerChannel(x.size());
-    file.setNumChannels(1);
-    file.samples.front() = x;
-    file.save("2/x.wav");
 
     file.setNumSamplesPerChannel(noise.size());
     file.setNumChannels(1);
     file.samples.front() = noise;
-    file.save("2/noise.wav");
+    file.save(qwqdsp_support::OutputFile("wiener_2_noise.wav"));
 
     file.setNumSamplesPerChannel(out.size());
     file.setNumChannels(1);
     file.samples.front() = out;
-    file.save("2/wiener_out.wav");
+    file.save(qwqdsp_support::OutputFile("wiener_2_out.wav"));
 
     file.setNumSamplesPerChannel(r.size());
     file.setNumChannels(1);
     file.samples.front() = r;
-    file.save("2/wiener_in.wav");
+    file.save(qwqdsp_support::OutputFile("wiener_2_in.wav"));
 }
 
 // ----------------------------------------
@@ -204,7 +204,7 @@ static void Test2() {
 
 static void Test3() {
     AudioFile<float> file;
-    file.load(R"(C:\Users\Kawai\Music\wormhole.wav)");
+    file.load(qwqdsp_support::WormholeWav());
     auto& x = file.samples.front();
 
     constexpr int block_size = 2048;
@@ -215,12 +215,16 @@ static void Test3() {
     qwqdsp_oscillator::WhiteNoise noise;
 
     int size = x.size();
-    
+
     int wpos = 0;
-    std::vector<float> synthsis; synthsis.reserve(x.size());
-    std::vector<float> ola_buffer; ola_buffer.resize(block_size);
-    std::vector<float> modu_buffer; modu_buffer.resize(block_size);
-    std::vector<float> carr_buffer; carr_buffer.resize(block_size);
+    std::vector<float> synthsis;
+    synthsis.reserve(x.size());
+    std::vector<float> ola_buffer;
+    ola_buffer.resize(block_size);
+    std::vector<float> modu_buffer;
+    modu_buffer.resize(block_size);
+    std::vector<float> carr_buffer;
+    carr_buffer.resize(block_size);
     while (size != 0) {
         for (int i = 0; i < (block_size - hop_size); ++i) {
             modu_buffer[i] = modu_buffer[i + hop_size];
@@ -265,26 +269,29 @@ static void Test3() {
     file.setNumSamplesPerChannel(synthsis.size());
     file.setNumChannels(1);
     file.samples.front() = synthsis;
-    file.save("3/wiener_out.wav");
+    file.save(qwqdsp_support::OutputFile("wiener_3_out.wav"));
 }
 
 static void Test4() {
     AudioFile<float> file;
-    file.load(R"(C:\Users\Kawai\Music\wormhole.wav)");
-    // file.load("modu.wav");
+    file.load(qwqdsp_support::WormholeWav());
     auto x = file.samples.front();
 
-    file.load("carry.wav");
+    file.load(qwqdsp_support::InputFile("carry.wav"));
     auto n = file.samples.front();
 
     constexpr int block_size = 512;
     constexpr int hop_size = 128;
     int size = std::min(x.size(), n.size());
     int wpos = 0;
-    std::vector<float> synthsis; synthsis.reserve(size);
-    std::vector<float> ola_buffer; ola_buffer.resize(block_size);
-    std::vector<float> modu_buffer; modu_buffer.resize(block_size);
-    std::vector<float> carr_buffer; carr_buffer.resize(block_size);
+    std::vector<float> synthsis;
+    synthsis.reserve(size);
+    std::vector<float> ola_buffer;
+    ola_buffer.resize(block_size);
+    std::vector<float> modu_buffer;
+    modu_buffer.resize(block_size);
+    std::vector<float> carr_buffer;
+    carr_buffer.resize(block_size);
     while (size != 0) {
         for (int i = 0; i < (block_size - hop_size); ++i) {
             modu_buffer[i] = modu_buffer[i + hop_size];
@@ -328,12 +335,12 @@ static void Test4() {
     file.setNumSamplesPerChannel(synthsis.size());
     file.setNumChannels(1);
     file.samples.front() = synthsis;
-    file.save("3/wiener_out2.wav");
+    file.save(qwqdsp_support::OutputFile("wiener_3_out2.wav"));
 }
 
 int main() {
-    // Test1();
-    // Test2();
+    Test1();
+    Test2();
     Test3();
-    // Test4();
+    Test4();
 }

@@ -5,6 +5,7 @@
 // #endif
 
 #include "AudioFile.h"
+#include "work_dir.hpp"
 
 #include <math.h>
 #include <stdbool.h>
@@ -13,8 +14,8 @@
 
 #define M_PI 3.14159265358979323846f
 
-#define REVERB_MIN(a, b) ((a) > (b) ? (b) : (a))
-#define REVERB_MAX(a, b) ((a) < (b) ? (b) : (a))
+#define REVERB_MIN(a, b)     ((a) > (b) ? (b) : (a))
+#define REVERB_MAX(a, b)     ((a) < (b) ? (b) : (a))
 #define REVERB_LERP(a, b, t) ((a) + ((b) - (a)) * (t))
 
 // ----------------------------------------
@@ -22,7 +23,7 @@
 // ----------------------------------------
 
 struct DelayLine {
-	float* buffer;
+    float* buffer;
 };
 
 // ----------------------------------------
@@ -30,10 +31,10 @@ struct DelayLine {
 // ----------------------------------------
 
 struct OnePoleFilter {
-	float lag_;
+    float lag_;
 };
 
-static void OnePoleFilter_Reset(struct OnePoleFilter* f){
+static void OnePoleFilter_Reset(struct OnePoleFilter* f) {
     f->lag_ = 0;
 }
 
@@ -70,15 +71,15 @@ struct ReverbParam {
     float chorus_amount;   // [0, 1]
     float chorus_freq;     // [0.003, 8.0]
     float wet;             // [0, 1]
-    float pre_lowpass;      // [0, 130]
-    float pre_highpass;   // [0, 130]
-    float low_damp_pitch;   // [0, 130]
+    float pre_lowpass;     // [0, 130]
+    float pre_highpass;    // [0, 130]
+    float low_damp_pitch;  // [0, 130]
     float high_damp_pitch; // [0, 130]
-    float low_damp_db;      // [-6, 0]
+    float low_damp_db;     // [-6, 0]
     float high_damp_db;    // [-6, 0]
-    float size;             // [0, 1]
-    float decay_ms;      // [15ms, 64s]
-    float pre_delay;        // [0, 300ms]
+    float size;            // [0, 1]
+    float decay_ms;        // [15ms, 64s]
+    float pre_delay;       // [0, 300ms]
 };
 
 static void ReverbParam_SetDefault(struct ReverbParam* self) {
@@ -97,63 +98,60 @@ static void ReverbParam_SetDefault(struct ReverbParam* self) {
 }
 
 struct Reverb {
-	struct ReverbParam param;
+    struct ReverbParam param;
 
-	// allpass network
-	float* allpass_lookups_;
-	int poly_allpass_mask_;
-	int allpass_write_pos_;
-	int max_allpass_size_;
+    // allpass network
+    float* allpass_lookups_;
+    int poly_allpass_mask_;
+    int allpass_write_pos_;
+    int max_allpass_size_;
 
-	// delay network
-	float* feedback_memorie_;
+    // delay network
+    float* feedback_memorie_;
     float* feedback_lookup_[16];
-	int write_index_;
-	int feedback_mask_;
-	int max_feedback_size_;
-	float decays_[16];
-	float feedback_offsets_[16];
+    int write_index_;
+    int feedback_mask_;
+    int max_feedback_size_;
+    float decays_[16];
+    float feedback_offsets_[16];
 
-	struct OnePoleFilter low_shelf_filters_[16];
-	struct OnePoleFilter high_shelf_filters_[16];
+    struct OnePoleFilter low_shelf_filters_[16];
+    struct OnePoleFilter high_shelf_filters_[16];
 
-	float low_coefficient_;
-	float low_amplitude_;
-	float high_coefficient_;
-	float high_amplitude_;
+    float low_coefficient_;
+    float low_amplitude_;
+    float high_coefficient_;
+    float high_amplitude_;
 
-	// pre filter
-	struct OnePoleFilter low_pre_filter_[2];
-	struct OnePoleFilter high_pre_filter_[2];
+    // pre filter
+    struct OnePoleFilter low_pre_filter_[2];
+    struct OnePoleFilter high_pre_filter_[2];
 
-	float low_pre_coefficient_;
-	float high_pre_coefficient_;
+    float low_pre_coefficient_;
+    float high_pre_coefficient_;
 
-	// chorus
-	float chorus_phase_;
-	float chorus_amount_[4];
+    // chorus
+    float chorus_phase_;
+    float chorus_amount_[4];
 
-	// predelay
-	float sample_delay_;
-	float sample_delay_increment_;
+    // predelay
+    float sample_delay_;
+    float sample_delay_increment_;
 
-	// mix
-	float dry_;
-	float wet_;
+    // mix
+    float dry_;
+    float wet_;
 
-	// other
-	float fs_;
-	float fs_ratio_;
-	float buffer_scale_ratio_;
+    // other
+    float fs_;
+    float fs_ratio_;
+    float buffer_scale_ratio_;
 };
 
-static const float kAllpassDelays[] = {
-    1001, 799, 933, 876, 895, 807, 907, 853, 957, 1019, 711, 567, 833, 779, 663, 997
-};
-static const float kFeedbackDelays[] = {
-    6753.2f, 9278.4f, 7704.5f, 11328.5f, 9701.12f, 5512.5f, 8480.45f, 5638.65f,
-                                    3120.73f, 3429.5f, 3626.37f, 7713.52f, 4521.54f, 6518.97f, 5265.56f, 5630.25
-};
+static const float kAllpassDelays[] = {1001, 799,  933, 876, 895, 807, 907, 853,
+                                       957,  1019, 711, 567, 833, 779, 663, 997};
+static const float kFeedbackDelays[] = {6753.2f,  9278.4f, 7704.5f,  11328.5f, 9701.12f, 5512.5f,  8480.45f, 5638.65f,
+                                        3120.73f, 3429.5f, 3626.37f, 7713.52f, 4521.54f, 6518.97f, 5265.56f, 5630.25};
 
 static const float kT60Amplitude = 0.001f;
 static const float kAllpassFeedback = 0.6f;
@@ -203,7 +201,7 @@ static void Reverb_ReadFeedback(struct Reverb* self, float dst[16], float offset
     float const warp_add = (float)(self->write_index_ + self->feedback_mask_);
     for (int i = 0; i < 16; ++i) {
         float rpos = warp_add - offset[i];
-        int idx = ((int)(rpos) - 1) & self->feedback_mask_;
+        int idx = ((int)(rpos)-1) & self->feedback_mask_;
         float t = rpos - (float)(int)rpos;
 
         float const* ptr = self->feedback_lookup_[i];
@@ -342,42 +340,40 @@ static void Reverb_FreeMeme(struct Reverb* self) {
 }
 
 static void Reverb_Reset(struct Reverb* self) {
-	self->wet_ = 0;
-	self->dry_ = 0;
+    self->wet_ = 0;
+    self->dry_ = 0;
 
     for (int i = 0; i < 4; ++i) {
         self->chorus_amount_[i] = self->param.chorus_amount * kMaxChorusDrift;
     }
 
-	for (int i = 0; i < 16; ++i) {
+    for (int i = 0; i < 16; ++i) {
         OnePoleFilter_Reset(&self->low_shelf_filters_[i]);
-	}
-	for (int i = 0; i < 16; ++i) {
+    }
+    for (int i = 0; i < 16; ++i) {
         OnePoleFilter_Reset(&self->high_shelf_filters_[i]);
-	}
+    }
 
-	for (int i = 0; i < 2; ++i) {
+    for (int i = 0; i < 2; ++i) {
         OnePoleFilter_Reset(&self->low_pre_filter_[i]);
-	}
-	for (int i = 0; i < 2; ++i) {
+    }
+    for (int i = 0; i < 2; ++i) {
         OnePoleFilter_Reset(&self->high_pre_filter_[i]);
-	}
+    }
 
-	for (int i = 0; i < 16; ++i) {
+    for (int i = 0; i < 16; ++i) {
         self->decays_[i] = 0;
-	}
+    }
 
-	for (size_t i = 0; i < 16; ++i) {
-		self->feedback_offsets_[i] = kFeedbackDelays[i];
-	}
+    for (size_t i = 0; i < 16; ++i) {
+        self->feedback_offsets_[i] = kFeedbackDelays[i];
+    }
 
-	memset(self->allpass_lookups_, 0, sizeof(float) * 16 * self->max_allpass_size_);
-	memset(self->feedback_memorie_, 0, sizeof(float) * 16 * (self->max_feedback_size_ + kExtraLookupSample));
+    memset(self->allpass_lookups_, 0, sizeof(float) * 16 * self->max_allpass_size_);
+    memset(self->feedback_memorie_, 0, sizeof(float) * 16 * (self->max_feedback_size_ + kExtraLookupSample));
 }
 
-static void Reverb_Update(struct Reverb* self) {
-
-}
+static void Reverb_Update(struct Reverb* self) {}
 
 static void Reverb_ProcessStereo(struct Reverb* self, float* left, float* right, int num_samples) {
     Reverb_WarpBuffer(self);
@@ -443,18 +439,13 @@ static void Reverb_ProcessStereo(struct Reverb* self, float* left, float* right,
     float const chorus_phase_increment = param->chorus_freq / self->fs_;
 
     float const network_offset = 2.0f * M_PI / kNetworkSize;
-    float phase_offset[4] = {
-        network_offset * 0,
-        network_offset * 1,
-        network_offset * 2,
-        network_offset * 3
-    };
+    float phase_offset[4] = {network_offset * 0, network_offset * 1, network_offset * 2, network_offset * 3};
 
     float container_phase[4];
     for (int i = 0; i < 4; ++i) {
         container_phase[i] = phase_offset[i] + self->chorus_phase_ * 2.0f * M_PI;
     }
-    self->chorus_phase_ += (float)(num_samples) * chorus_phase_increment;
+    self->chorus_phase_ += (float)(num_samples)*chorus_phase_increment;
     self->chorus_phase_ -= floorf(self->chorus_phase_);
 
     float chorus_increment_real = cosf(chorus_phase_increment * (2.0f * M_PI));
@@ -509,7 +500,8 @@ static void Reverb_ProcessStereo(struct Reverb* self, float* left, float* right,
     float target_delay = REVERB_MAX(kMinDelay, param->pre_delay * self->fs_ / 1000.0f);
     target_delay = REVERB_LERP(self->sample_delay_, target_delay, kSampleDelayMultiplier);
     float makeup_delay = target_delay - end_target;
-    float delta_delay_increment = makeup_delay / (0.5f * (float)(num_samples * num_samples)) * kSampleIncrementMultiplier;
+    float delta_delay_increment =
+        makeup_delay / (0.5f * (float)(num_samples * num_samples)) * kSampleIncrementMultiplier;
 
     float feedback_offset[16];
     for (int i = 0; i < 16; ++i) {
@@ -522,10 +514,12 @@ static void Reverb_ProcessStereo(struct Reverb* self, float* left, float* right,
             current_chorus_amount[j] += delta_chorus_amount[j];
         }
         for (int j = 0; j < 4; ++j) {
-            current_chorus_real[j] = current_chorus_real[j] * chorus_increment_real - current_chorus_imaginary[j] * chorus_increment_imaginary;
+            current_chorus_real[j] = current_chorus_real[j] * chorus_increment_real
+                                   - current_chorus_imaginary[j] * chorus_increment_imaginary;
         }
         for (int j = 0; j < 4; ++j) {
-            current_chorus_imaginary[j] = current_chorus_imaginary[j] * chorus_increment_real + current_chorus_real[j] * chorus_increment_imaginary;
+            current_chorus_imaginary[j] = current_chorus_imaginary[j] * chorus_increment_real
+                                        + current_chorus_real[j] * chorus_increment_imaginary;
         }
 
         for (int j = 0; j < 4; ++j) {
@@ -596,7 +590,8 @@ static void Reverb_ProcessStereo(struct Reverb* self, float* left, float* right,
         // damp filter
         float high_filter[16];
         for (int j = 0; j < 16; ++j) {
-            high_filter[j] = OnePoleFilter_TickLowpass(&self->high_shelf_filters_[j], write[j], current_high_coefficient);
+            high_filter[j] =
+                OnePoleFilter_TickLowpass(&self->high_shelf_filters_[j], write[j], current_high_coefficient);
         }
         for (int j = 0; j < 16; ++j) {
             write[j] = high_filter[j] + (current_high_amplitude) * (write[j] - high_filter[j]);
@@ -642,7 +637,7 @@ static void Reverb_ProcessStereo(struct Reverb* self, float* left, float* right,
         // auto audio_out = current_wet * self.predelay_.GetAfterPush(current_sample_delay) + current_dry * input;
         // left[i] = audio_out[0];
         // if constexpr (!kMono) {
-            // right[i] = audio_out[1];
+        // right[i] = audio_out[1];
         // }
 
         left[i] = current_wet * lefty + current_dry * leftx;
@@ -745,7 +740,7 @@ static void Reverb_ProcessStereo(struct Reverb* self, float* left, float* right,
 
 int main() {
     AudioFile<float> file;
-    file.load(R"(C:\Users\Kawai\Music\wormhole.wav)");
+    file.load(qwqdsp_support::WormholeWav());
     auto leftx = file.samples.front();
     auto rightx = leftx;
 
@@ -773,5 +768,5 @@ int main() {
     file.samples.emplace_back(std::move(leftx));
     file.samples.emplace_back(std::move(rightx));
 
-    file.save("reverb.wav");
+    file.save(qwqdsp_support::OutputFile("reverb.wav"));
 }

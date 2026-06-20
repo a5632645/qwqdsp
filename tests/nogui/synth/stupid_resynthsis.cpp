@@ -6,6 +6,7 @@
 #include <numbers>
 #include <numeric>
 #include "AudioFile.h"
+#include "work_dir.hpp"
 #include "qwqdsp/convert.hpp"
 #include "qwqdsp/interpolation/linear.hpp"
 #include "qwqdsp/interpolation/sppchip.hpp"
@@ -15,9 +16,9 @@
 #include "qwqdsp/segement/analyze_auto.hpp"
 #include "qwqdsp/window/blackman.hpp"
 #include "qwqdsp/interpolation/makima.hpp"
-#include "qwqdsp/oscillator/elliptic_sine_osc.hpp"
+#include "qwqdsp/oscillator/vic_sine_osc.hpp"
 
-static constexpr size_t kFFTSize = 512;
+static constexpr size_t kFFTSize = 2048;
 static constexpr size_t kNumData = qwqdsp_spectral::RealFFT::NumBins(kFFTSize);
 struct Frame {
     std::array<float, kNumData> gains;
@@ -105,16 +106,18 @@ static std::vector<Frame> AnalyzeAudio(std::span<const float> x) {
 }
 
 int main() {
-    constexpr auto kPath = R"(C:\Users\Kawai\Music\gunge_slice.wav)";
     AudioFile<float> infile;
-    infile.load(kPath);
+    infile.load(qwqdsp_support::WormholeWav());
     auto frames = AnalyzeAudio(infile.samples.front());
 
     AudioFile<float>::AudioBuffer output;
     output.resize(1);
     auto& channel = output.front();
     size_t const num_samples_per_frame = kFFTSize / 4;
-    qwqdsp_oscillator::EllipticSineOsc oscs[kNumData];
+    qwqdsp_oscillator::VicSineOsc oscs[kNumData];
+    for (auto& o : oscs) {
+        o.Reset();
+    }
     for (size_t i = 0; i < frames.size(); ++i) {
         auto& fr = frames[i];
         for (size_t j = 0; j < kNumData; ++j) {
@@ -136,5 +139,5 @@ int main() {
     outfile.setAudioBuffer(output);
     outfile.setSampleRate(infile.getSampleRate());
     outfile.setBitDepth(32);
-    outfile.save(R"(C:\Users\Kawai\Music\gunge_slice-synth.wav)");
+    outfile.save(qwqdsp_support::OutputFile("wormhole_resynthsis.wav"));
 }

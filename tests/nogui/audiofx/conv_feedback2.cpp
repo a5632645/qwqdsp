@@ -1,13 +1,14 @@
+#include "AudioFile.h"
+#include "work_dir.hpp"
+#include <iostream>
+#include <qwqdsp/filter/fir.hpp>
 #include <qwqdsp/fx/uniform_convolution.hpp>
 #include <qwqdsp/oscillator/noise.hpp>
+#include <qwqdsp/spectral/complex_fft.hpp>
 #include <qwqdsp/spectral/real_fft.hpp>
-#include <qwqdsp/filter/fir.hpp>
-#include "AudioFile.h"
+#include <qwqdsp/window/hann.hpp>
 #include <random>
 #include <vector>
-#include <qwqdsp/window/hann.hpp>
-#include <qwqdsp/spectral/complex_fft.hpp>
-#include <iostream>
 
 constexpr int NextPow2(int n) {
     int v = n - 1;
@@ -99,9 +100,12 @@ void RandomPhaseIr(std::span<float, ir_size> x, float ripple_db = 0.1f) {
 
 template <int ir_size>
 void RandomPhaseIr2(std::span<float, ir_size> x, float ripple_db = 0.1f) {
-    std::vector<float> ir; ir.resize(ir_size);
-    std::vector<float> gains; gains.resize(ir_size);
-    std::vector<float> phases; phases.resize(ir_size);
+    std::vector<float> ir;
+    ir.resize(ir_size);
+    std::vector<float> gains;
+    gains.resize(ir_size);
+    std::vector<float> phases;
+    phases.resize(ir_size);
 
     float max_phase_change = std::acos(2 * std::pow(10.0f, -ripple_db / 20.0f) - 1.0f);
 
@@ -124,7 +128,8 @@ void RandomPhaseIr2(std::span<float, ir_size> x, float ripple_db = 0.1f) {
         ir[i] /= ir_size;
     }
     {
-        std::vector<float> tmp; tmp.resize(ir_size);
+        std::vector<float> tmp;
+        tmp.resize(ir_size);
         std::copy_n(ir.begin(), ir_size / 2, tmp.begin());
         for (size_t i = 0; i < ir_size / 2; ++i) {
             ir[i] = ir[i + ir_size / 2];
@@ -194,7 +199,7 @@ static void RandomFeedback() {
     file.samples.resize(1);
     file.samples.front().resize(std::size(input));
     std::copy_n(input, std::size(input), file.samples.front().begin());
-    file.save("random_fb8.wav");
+    file.save(qwqdsp_support::OutputFile("random_feedback.wav"));
 }
 
 static void RandomFeedback2() {
@@ -238,7 +243,7 @@ static void RandomFeedback2() {
     file.samples.resize(1);
     file.samples.front().resize(std::size(input));
     std::copy_n(input, std::size(input), file.samples.front().begin());
-    file.save("random_fb8.wav");
+    file.save(qwqdsp_support::OutputFile("random_feedback2.wav"));
 }
 
 // -------------------- conv net test --------------------
@@ -372,7 +377,7 @@ void RandomFDN() {
     file.samples.resize(1);
     file.samples.front().resize(std::size(input));
     std::copy_n(input, std::size(input), file.samples.front().begin());
-    if (file.save("random_fb.wav")) {
+    if (file.save(qwqdsp_support::OutputFile("random_FDN.wav"))) {
         std::cout << "save file" << std::endl;
     }
     else {
@@ -381,7 +386,7 @@ void RandomFDN() {
 }
 
 int main() {
-    // RandomFeedback();
+    RandomFeedback();
     RandomFDN();
-    // RandomFeedback2();
+    RandomFeedback2();
 }

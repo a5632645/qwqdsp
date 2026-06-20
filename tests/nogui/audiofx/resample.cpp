@@ -1,10 +1,11 @@
 #include "AudioFile.h"
 #include "qwqdsp/fx/resample_coeffs.h"
 #include "qwqdsp/fx/resample_iir.hpp"
+#include "work_dir.hpp"
 
 int main() {
     AudioFile<float> infile;
-    infile.load(R"(C:\Users\Kawai\Music\sweep.wav)");
+    infile.load(qwqdsp_support::InputFile("sweep.wav"));
     auto& sweep = infile.samples.front();
 
     qwqdsp_fx::ResampleIIR<qwqdsp_fx::coeff::BestCoeffs<float>, 128> resample;
@@ -17,6 +18,6 @@ int main() {
     outfile.setBitDepth(32);
     outfile.setSampleRate(kTargetFs);
     outfile.setNumSamplesPerChannel(sweep_resample.size());
-    outfile.samples.push_back(std::move(sweep_resample));
-    outfile.save(R"(C:\Users\Kawai\Music\sweep-test.wav)");
+    outfile.samples.front() = std::move(sweep_resample);
+    outfile.save(qwqdsp_support::OutputFile("sweep_resample.wav"));
 }

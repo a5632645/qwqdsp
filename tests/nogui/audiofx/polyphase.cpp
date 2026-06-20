@@ -1,4 +1,5 @@
 #include "AudioFile.h"
+#include "work_dir.hpp"
 #include <cassert>
 #include <iostream>
 #include <span>
@@ -238,7 +239,7 @@ private:
 
 int main() {
     AudioFile<float> file;
-    file.load(R"(C:\Users\Kawai\Music\wormhole.wav)");
+    file.load(qwqdsp_support::WormholeWav());
 
     int const downsample_factor = 8;
     int const filter_len = 63;
@@ -269,14 +270,7 @@ int main() {
     out_file.samples[0] = std::move(downsampled);
 
     // 保存
-    std::string in_path = R"(C:\Users\Kawai\Music\wormhole.wav)";
-    std::string out_path = in_path;
-    size_t dot_pos = out_path.rfind('.');
-    if (dot_pos != std::string::npos) {
-        out_path.insert(dot_pos, "_downsampled");
-    } else {
-        out_path += "_downsampled";
-    }
+    std::string out_path = qwqdsp_support::OutputFile("wormhole_downsampled.wav");
     out_file.save(out_path);
 
     std::cout << "Saved " << out_path << " ("
@@ -509,7 +503,7 @@ private:
 
 int main() {
     AudioFile<float> file;
-    file.load(R"(C:\Users\Kawai\Music\wormhole_downsampled.wav)");
+    file.load(qwqdsp_support::InputFile("wormhole_downsampled.wav"));
 
     int const upsample_factor = 8;
     int const filter_len = 63;
@@ -540,15 +534,7 @@ int main() {
     out_file.samples[0] = std::move(upsampled);
 
     // 保存
-    std::string in_path = R"(C:\Users\Kawai\Music\wormhole.wav)";
-    std::string out_path = in_path;
-    size_t dot_pos = out_path.rfind('.');
-    if (dot_pos != std::string::npos) {
-        out_path.insert(dot_pos, "_upsampled");
-    }
-    else {
-        out_path += "_upsampled";
-    }
+    std::string out_path = qwqdsp_support::OutputFile("wormhole_upsampled.wav");
     out_file.save(out_path);
 
     std::cout << "Saved " << out_path << " (" << original_sample_rate << " Hz -> " << out_file.getSampleRate()

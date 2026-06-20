@@ -1,9 +1,10 @@
 #include "AudioFile.h"
 #include "rnnoise.h"
+#include "work_dir.hpp"
 
 int main() {
     AudioFile<float> file;
-    if (file.load(R"(C:\Users\Kawai\Desktop\noise.wav)")) {
+    if (file.load(qwqdsp_support::InputFile("noise.wav"))) {
         auto& io = file.samples.front();
 
         std::vector<int16_t> int16;
@@ -24,6 +25,6 @@ int main() {
         }
 
         file.setNumChannels(1);
-        file.save(R"(C:\Users\Kawai\Desktop\noise_test.wav)");
+        file.save(qwqdsp_support::OutputFile("rnnoise.wav"));
     }
 }

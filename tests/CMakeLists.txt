@@ -5,6 +5,9 @@ function(add_qwqdsp_dsp_test name code_file)
         ${code_file}
     )
     target_link_libraries(qwqdsp-${name} PUBLIC qwqdsp qwqdsp_support)
+    target_compile_definitions(qwqdsp-${name} PRIVATE
+        QWQDSP_WORK_DIR="${CMAKE_CURRENT_SOURCE_DIR}/work_dir"
+    )
     set_target_properties(qwqdsp-${name} PROPERTIES CXX_STANDARD 20)
     set_target_properties(qwqdsp-${name} PROPERTIES FOLDER qwqdsp-dsp-tests)
 endfunction()
@@ -17,6 +20,9 @@ function(add_qwqdsp_gui_test name code_file)
     if (TARGET qwqdsp_support_slider)
         target_link_libraries(qwqdsp-${name} PUBLIC qwqdsp_support_slider)
     endif()
+    target_compile_definitions(qwqdsp-${name} PRIVATE
+        QWQDSP_WORK_DIR="${CMAKE_CURRENT_SOURCE_DIR}/work_dir"
+    )
     set_target_properties(qwqdsp-${name} PROPERTIES CXX_STANDARD 20)
     set_target_properties(qwqdsp-${name} PROPERTIES FOLDER qwqdsp-gui-tests)
 endfunction()
@@ -61,6 +67,9 @@ add_executable(qwqdsp-rnnoise-lite
     rnnoise_lite/rnnoise.c
 )
 target_link_libraries(qwqdsp-rnnoise-lite PUBLIC qwqdsp raylib qwqdsp_support)
+target_compile_definitions(qwqdsp-rnnoise-lite PRIVATE
+    QWQDSP_WORK_DIR="${CMAKE_CURRENT_SOURCE_DIR}/work_dir"
+)
 set_target_properties(qwqdsp-rnnoise-lite PROPERTIES CXX_STANDARD 20)
 set_target_properties(qwqdsp-rnnoise-lite PROPERTIES FOLDER qwqdsp-dsp-tests)
 

@@ -1,8 +1,9 @@
+#include "AudioFile.h"
+#include "work_dir.hpp"
+#include <qwqdsp/filter/fir.hpp>
 #include <qwqdsp/fx/uniform_convolution.hpp>
 #include <qwqdsp/oscillator/noise.hpp>
 #include <qwqdsp/spectral/real_fft.hpp>
-#include <qwqdsp/filter/fir.hpp>
-#include "AudioFile.h"
 
 static void ShouldBeDelay32() {
     qwqdsp_fx::UniformConvolution conv;
@@ -78,13 +79,14 @@ static void RandomFeedback() {
     float ir[4096];
     qwqdsp_oscillator::WhiteNoise noise;
     for (int i = 0; i < std::size(ir); ++i) {
-        float x = noise.Next();;
+        float x = noise.Next();
+        ;
         ir[i] = x;
     }
 
     qwqdsp_spectral::RealFFT fft;
     fft.Init(std::size(ir));
-    float gains[std::size(ir)/2 + 1];
+    float gains[std::size(ir) / 2 + 1];
     fft.FFTGainPhase(ir, gains);
 
     float max_g = *std::max_element(gains, gains + std::size(gains));
@@ -94,7 +96,7 @@ static void RandomFeedback() {
 
     conv.SetIR(ir);
 
-    float input[8000*10]{1.0f};
+    float input[8000 * 10]{1.0f};
 
     float lag = 0.0f;
     for (int i = 0; i < std::size(input); ++i) {
@@ -114,7 +116,7 @@ static void RandomFeedback() {
     file.samples.resize(1);
     file.samples.front().resize(std::size(input));
     std::copy_n(input, std::size(input), file.samples.front().begin());
-    [[maybe_unused]] bool succ = file.save("random_fb.wav");
+    [[maybe_unused]] bool succ = file.save(qwqdsp_support::OutputFile("random_fb.wav"));
 }
 
 class Delay {
@@ -198,9 +200,9 @@ static void RandomPhase() {
 }
 
 int main() {
-    // ShouldBeDelay32();
-    // ShouldBeDelay33();
-    // ShouldBeDelay32Plus34();
-    // RandomFeedback();
+    ShouldBeDelay32();
+    ShouldBeDelay33();
+    ShouldBeDelay32Plus34();
+    RandomFeedback();
     RandomPhase();
 }

@@ -1,22 +1,17 @@
-#include "qwqdsp/filter/iir_hilbert.hpp"
-#include "qwqdsp/filter/iir_cpx_hilbert.hpp"
-#include "qwqdsp/oscillator/vic_sine_osc.hpp"
 #include "AudioFile.h"
+#include "qwqdsp/filter/iir_cpx_hilbert.hpp"
+#include "qwqdsp/filter/iir_hilbert.hpp"
+#include "qwqdsp/oscillator/vic_sine_osc.hpp"
+#include <work_dir.hpp>
 
-static constexpr auto kInputFile 
-= R"(C:\Users\Kawai\Music\gunge_slice.wav)";
-static constexpr auto kOutputFile 
-= R"(C:\Users\Kawai\Music\gunge_slice-shift.wav)";
-static constexpr auto kOutputFile2 
-= R"(C:\Users\Kawai\Music\gunge_slice-shift2.wav)";
-static constexpr auto kShift = -150; //hz
+static constexpr auto kShift = -150; // hz
 
 static void FreqShifter() {
     qwqdsp_filter::IIRHilbertDeeper<> hilbert;
     qwqdsp_oscillator::VicSineOsc osc_;
-    
+
     AudioFile<float> file;
-    if (file.load(kInputFile)) {
+    if (file.load(qwqdsp_support::WormholeWav())) {
         osc_.Reset(0);
         osc_.SetFreq(kShift, file.getSampleRate());
 
@@ -30,7 +25,7 @@ static void FreqShifter() {
         }
 
         file.setNumChannels(1);
-        file.save(kOutputFile);
+        file.save(qwqdsp_support::OutputFile("freq_shift.wav"));
     }
 }
 
@@ -38,9 +33,9 @@ static void FreqShifterAntialaising() {
     qwqdsp_filter::IIRHilbertDeeper<> hilbert;
     qwqdsp_filter::IIRHilbertDeeperCpx<> antialaising_filter;
     qwqdsp_oscillator::VicSineOsc osc_;
-    
+
     AudioFile<float> file;
-    if (file.load(kInputFile)) {    
+    if (file.load(qwqdsp_support::WormholeWav())) {
         osc_.Reset(0);
         osc_.SetFreq(kShift, file.getSampleRate());
 
@@ -56,7 +51,7 @@ static void FreqShifterAntialaising() {
         }
 
         file.setNumChannels(1);
-        file.save(kOutputFile2);
+        file.save(qwqdsp_support::OutputFile("freq_shift2.wav"));
     }
 }
 

@@ -1,9 +1,10 @@
-#include <complex>
 #include "AudioFile.h"
+#include "work_dir.hpp"
+#include <complex>
 #include <qwqdsp/segement/mono_reader.hpp>
+#include <qwqdsp/spectral/ipp_real_fft.hpp>
 #include <qwqdsp/window/hann.hpp>
 #include <qwqdsp/window/helper.hpp>
-#include <qwqdsp/spectral/ipp_real_fft.hpp>
 
 class OlaBuffer {
 public:
@@ -56,8 +57,7 @@ private:
 
 int main() {
     AudioFile<float> infile;
-    infile.load("../../o.wav");
-    // infile.load(R"(C:\Users\Kawai\AppData\Local\Packages\36699Atelier39.3338947B849CD_rsj1xbqhgdnb8\LocalCache\BilibiliDownload\1250357\1\o.wav)");
+    infile.load(qwqdsp_support::WormholeWav());
 
     auto& data = infile.samples.front();
     constexpr size_t synthsis_block = 1024;
@@ -95,11 +95,12 @@ int main() {
         constexpr size_t search_block_size = search_range + overlap_length;
         std::array<float, search_block_size> search_block;
         int search_begin = this_rpos - search_range / 2;
-        if (search_begin < 0) search_begin = 0;
+        if (search_begin < 0)
+            search_begin = 0;
         slice.ReadAbsolute(search_begin, search_block_size, search_block.data());
         std::array<float, overlap_length> match_block;
         std::copy_n(fill_block.data() + (synthsis_block - overlap_length), overlap_length, match_block.data());
-        
+
         // correlation
         float max_corr = 99999999999.0f;
         int best_offset = 0;
@@ -120,7 +121,7 @@ int main() {
         // int search_begin = this_rpos - search_range / 2;
         // if (search_begin < 0) search_begin = 0;
         // slice.ReadAbsolute(search_begin, search_block_size, search_block.data());
-        
+
         // // correlation
         // float max_corr = 99999999999.0f;
         // int best_offset = 0;
@@ -148,5 +149,5 @@ int main() {
     AudioFile<float>::AudioBuffer buf;
     buf.push_back(std::move(output));
     infile.setAudioBuffer(buf);
-    infile.save("../../test.wav");
+    infile.save(qwqdsp_support::OutputFile("wsola.wav"));
 }
