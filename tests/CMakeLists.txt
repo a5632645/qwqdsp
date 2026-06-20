@@ -22,6 +22,7 @@ function(add_qwqdsp_gui_test name code_file)
 endfunction()
 
 # ── DSP Tests (no GUI) ──
+add_qwqdsp_dsp_test(cephes nogui/cephes/cephes.cpp)
 
 # ── Filter ──
 add_qwqdsp_dsp_test(biquad nogui/filter/biquad.cpp)
@@ -68,7 +69,6 @@ if (QWQDSP_HAVE_RAYLIB)
 
     # ── General ──
     add_qwqdsp_gui_test(interpolations gui/interpolations.cpp)
-
     add_qwqdsp_gui_test(auto_notch_rt gui/auto_notch_rt.cpp)
 
     # ── Spectral (GUI) ──

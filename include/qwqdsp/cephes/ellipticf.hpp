@@ -209,7 +209,7 @@ struct Ellipticf {
      * @param [out] ph  幅角 φ
      * @return true 成功, false 域错误
      */
-    static bool ellpjf(float u, float m, float* sn, float* cn, float* dn, float* ph) noexcept {
+    static bool ellpj(float u, float m, float* sn, float* cn, float* dn, float* ph) noexcept {
         static constexpr float kPIO2F = 1.5707963267948966192f;
         static constexpr float kMACHEPF = 5.9604644775390625E-8f;
 
