@@ -71,6 +71,7 @@
 - `iir_design.hpp`: IIR 滤波器设计工具。
 - `iir_design_extra.hpp`: 额外 IIR 设计工具。
 - `fast_set_iir_paralle.hpp`: Fast Set IIR 并联实现。
+- `cheby_hilbert.hpp`: 切比雪夫 IIR Hilbert 变换器 — `ChebyHilbert`（基于切比雪夫滤波器设计的并联复数全通结构）。
 - `fixed/`: 定点数（fixed-point）滤波器实现子模块：
   - `fixed.hpp`: 聚合头。
   - `acc_traits.hpp`: 累加器类型特性。
@@ -205,6 +206,15 @@
 - `mpm.hpp`: McLeod Pitch Method（MPM）基音检测。
 - `helmholtz.hpp`: Helmholtz 基音检测。
 
+### Cephes 数学函数模块 (Cephes Math Functions)
+
+`cephes`
+
+- `bessel.hpp`: 修正 Bessel 函数 I₀(x)、I₁(x)（双精度），切比雪夫级数逼近。
+- `besself.hpp`: 修正 Bessel 函数 I₀(x)、I₁(x)（单精度）。
+- `elliptic.hpp`: 完全 / 不完全椭圆积分（`ellpk`, `ellik`, `ellpj`）。
+- `ellipticf.hpp`: 单精度椭圆积分（`ellpkf`, `ellikf`, `ellpjf`）。
+
 ### 杂项工具模块 (Miscellaneous Modules)
 
 `misc`
@@ -218,78 +228,88 @@
 
 ## Tests
 
-### 信号处理测试 (Signal Processing Tests)
+### 滤波器测试 (Filter Tests)
 
-`tests/signal/`
+`tests/nogui/filter/`
 
-- `biquad.cpp`: 使用 RBJ 设计的低通滤波器系数，比较直接型 `Biquad` 与 `LatticeBiquad` 的脉冲响应差异。
-- `fir_design.cpp`: 使用 `WindowFIR::Bandstop` 设计带阻 FIR 滤波器，加 Hamming 窗、补零后通过 FFT 计算幅度谱验证频率响应。
-- `wiener_filter.cpp`: 在 4 个场景中测试维纳滤波去噪：①标准语音+噪声抑制 ②带噪信号+噪声抑制 ③以 PolyBlep 锯齿波为载波的声码器 ④分块 overlap-add 维纳声码器。
-- `auto_notch.cpp`: 通过 FIR 房间脉冲响应模拟扬声器→麦克风声学路径，使用 FFT 频谱检测啸叫频率并生成陷波滤波器抑制。
-- `minimum_phase_fir.cpp`: 使用离散希尔伯特变换（倒谱法）将线性相位 WindowFIR 低通滤波器转换为最小相位 FIR，并比较两者的幅度响应。
-- `paralle_allpass.cpp`: 原型/设计文档 — 包含被注释掉的 SIMD 并行全通滤波器实现，`main()` 为空，用于探索性原型设计。
-- `reverse_iir.cpp`: 实现 Vicanek 论文中的反向时间 IIR 线性相位补偿滤波器，通过多层延迟级联逆转 IIR 非线性相位。
-- `convolution.cpp`: 使用 `UniformConvolution`（均匀分块卷积）将 513 点正弦脉冲与 256 长的 IR 进行卷积，验证分块卷积的正确性。
-- `fft_interpolation.cpp`: 通过 FFT 域频谱缩放实现插值（频谱上采样）：对 512 点正弦做 FFT，频谱乘以缩放因子后用 1024 点 IFFT 恢复时域插值信号。
-- `ifft_random_phase.cpp`: 使用频域随机相位生成全通 FIR 逼近：生成受 ripple 约束的随机相位谱，IFFT 加 Hann 窗后分析幅度响应平坦度。
+- `biquad.cpp`: 比较 `Biquad` 与 `LatticeBiquad` 的脉冲响应（RBJ 低通系数）。
+- `fir_design.cpp`: `WindowFIR::Bandstop` 带阻 FIR 设计 + Hamming 窗 + FFT 频响验证。
+- `minimum_phase_fir.cpp`: 离散 Hilbert 变换（倒谱法）将线性相位 FIR 转为最小相位。
+- `paralle_allpass.cpp`: 原型/设计文档 — 被注释掉的 SIMD 并行全通，`main()` 为空。
+- `reverse_iir.cpp`: Vicanek 反向时间 IIR 线性相位补偿。
+- `residual_chebyshev.cpp`: Chebyshev Type II 设计（s 域极点 → 双线性变换 → 部分分式 → 双二阶）。
 
 ### 音频效果测试 (Audio FX Tests)
 
-`tests/audiofx/`
+`tests/nogui/audiofx/`
 
-- `freq_shifter.cpp`: 使用 IIR Hilbert 变换实现复单边带（SSB）调制，将音频文件偏移 -150 Hz，包含有/无抗混叠后置滤波两个版本。
-- `conv_feedback.cpp`: 使用 `UniformConvolution` 加反馈环路测试多种梳状/延迟效果：纯延迟、延迟脉冲、双脉冲混响，以及随机噪声 IR 的反馈卷积。
-- `dsf.cpp`: 测试 `DSFCorrect` 振荡器复现 BLIT 论文中的波形图（Figure 15-17），包括不同幅度因子、相位模式、PWM 变体的配置组合。
-- `formant_filter.cpp`: GUI 实时 (raylib) — 使用 5 个级联格型双二阶滤波器与 2D 共振峰参数表实现实时共振峰合成器，以 DSF 振荡器为激励源。
-- `blit.cpp`: GUI 实时 (raylib) — 实时演示 BLIT 振荡器的 8 种波形：脉冲、奇脉冲、锯齿波、方波、三角波、正弦波、PWM 脉冲、PWM。
-- `polyblep.cpp`: GUI 实时 (raylib) — 实时演示 PolyBLEP 振荡器的 9 种波形：锯齿波、方波、经典 PWM、无直流 PWM、三角波、同步锯齿波、同步 PWM、正弦波、同步三角波。
-- `resonate_bank.cpp`: GUI 实时 (raylib + SIMD) — 大规模 SIMD（AVX Float256）加速的谐振滤波器组（最多 1024 个谐振器），每个谐振器由 VicSineOsc + 级联双二阶组成。
-- `reverb.cpp`: 纯 C 风格实现的完整混响算法：全通网络 + 16 路反馈延迟网络（FDN）+ 一阶低架/高架滤波器 + 合唱调制 + 前后置滤波。
+- `auto_notch.cpp`: FIR 房间脉冲响应 + FFT 啸叫检测 + 自适应陷波。
+- `wiener_filter.cpp`: 4 场景维纳滤波去噪（噪声抑制、声码器等）。
+- `convolution.cpp`: `UniformConvolution` 分块卷积正确性。
+- `conv_feedback.cpp`: 均匀卷积 + 反馈环路的梳状/延迟/混响效果。
+- `conv_feedback2.cpp`: 反馈卷积变体。
+- `reverb.cpp`: C 风格 FDN 混响（全通 + 16 路 FDN + 架桥滤波 + 合唱）。
+- `freq_shifter.cpp`: IIR Hilbert 复单边带调制，偏移 -150 Hz。
+- `resample.cpp`: `ResampleIIR` 扫频重采样至 96 kHz。
+- `polyphase.cpp`: 原型/设计文档 — `#if 0` 注释掉的多相抽取器。
 
-### 重采样测试 (Resample Tests)
+### 频谱处理测试 (Spectral Tests)
 
-`tests/resample/`
+`tests/nogui/spectral/`
 
-- `resample.cpp`: 使用 IIR 重采样器将扫频 WAV 从原始采样率重采样至 96 kHz，验证 `ResampleIIR` 的采样率转换效果。
-- `polyphase.cpp`: 原型/设计文档 — 包含被 `#if 0` 注释掉的多相抽取器（`PolyphaseDownsampler`）类，用于原型设计多相降采样的 FIR 滤波器结构。
+- `fft_interpolation.cpp`: FFT 域频谱缩放实现时域插值（上采样）。
+- `ifft_random_phase.cpp`: 随机相位谱 + IFFT 生成全通 FIR。
 
-### 实时 GUI 测试 (Realtime GUI Tests)
+### 合成测试 (Synth Tests)
 
-`tests/realtime/`
+`tests/nogui/synth/`
 
-- `interpolations.cpp`: GUI 实时 (raylib) — 交互式样条插值对比工具：可拖拽 11 个控制点，实时渲染 SPPCHIP、MAKIMA、Catmull-Rom 和线性插值曲线。
-- `auto_notch_rt.cpp`: GUI 实时 (raylib + miniaudio) — 实时啸叫检测与自适应陷波抑制系统，可调参数包括最小啸叫频率、峰值阈值、Q 值、增益、起音/释放时间等。
-- `polyphase_filter_bank_view.cpp`: GUI 实时 (raylib + miniaudio) — 实时多相分析滤波器组（DFT 调制，M=512，L=16384 原型滤波器，Blackman 窗），含起音/释放平滑和对数频率插值可视化。
-- `polyphase_filter_bank_view2.cpp`: GUI 实时 (raylib + miniaudio) — 实时余弦调制分析滤波器组（CMFB/Pseudo-QMF，M=256，2M 多相 + DCT-IV），含起音/释放平滑和对数插值可视化。
+- `dsf.cpp`: `DSFCorrect` 复现 BLIT 论文波形。
+- `stupid_resynthsis.cpp`: 频谱重分配 + 峰值检测 + 查表正弦波重合成。
+- `wsola.cpp`: WSOLA 时间伸缩（Hann 窗 + 相似性搜索，2.0 倍拉伸）。
 
-### 频谱分析测试 (Spectral Tests)
+### Cephes 数学验证 (Cephes Math Verification)
 
-`tests/spectral/`
+`tests/nogui/cephes/`
 
-- `spectrum3.cpp`: GUI 实时 (raylib + miniaudio) — 1/12 倍频程平滑频谱分析仪：4096 点 FFT + Lanczos 插值 + 起音/释放平滑，显示平滑 dB 频谱曲线。
-- `spectrum/`: GUI 实时 (raylib + miniaudio) — 25 非均匀 bin 实时频谱分析仪（从嵌入式 C 移植），IPP FFT + Hamming 窗，频谱驱动量化 126 级，LED 条形图可视化。
-- `spectrum2/`: GUI 实时 (raylib + miniaudio) — 81 bin 均匀频谱分析仪 + 32 频带 Mel 滤波器组，支持原生/Mel 视图切换。
+- `cephes.cpp`: Bessel 函数、椭圆积分正确性验证。
+- `cephes_ref.inc`: 参考值数据。
+- `check_cephes.py`: Python 精度对比。
 
-### 实验性测试 (Labs)
+### GUI 实时测试 (Realtime GUI Tests)
 
-`tests/labs/`
+`tests/gui/`
 
-- `wsola.cpp`: 实现 WSOLA（波形相似叠加）时间伸缩算法：Hann 窗重叠区 + 相似性搜索窗口，以 2.0 倍拉伸比处理 WAV 音频文件。
-- `stupid_resynthsis.cpp`: 「愚蠢重合成」实验：Blackman 窗 FFT 分析 + 频谱重分配获取精确频率/增益 → 峰值检测 → 查表正弦振荡器加 Makima 插值进行正弦波重合成。
-- `residual_chebyshev.cpp`: Chebyshev Type II（逆切比雪夫）IIR 滤波器设计：s 域极点计算 → 双线性变换 → 部分分式分解 → 级联双二阶滤波。
+- `interpolations.cpp`: GUI 实时 (raylib) — 拖拽控制点对比 SPPCHIP / MAKIMA / Catmull-Rom / Linear 插值曲线。
+- `auto_notch_rt.cpp`: GUI 实时 (raylib + miniaudio) — 实时啸叫检测与自适应陷波。
+
+`tests/gui/spectral/`
+
+- `polyphase_filter_bank_view.cpp`: GUI 实时 (raylib + miniaudio) — 多相分析滤波器组（DFT 调制，M=512）。
+- `polyphase_filter_bank_view2.cpp`: GUI 实时 (raylib + miniaudio) — 余弦调制分析滤波器组（CMFB，M=256，DCT-IV）。
+- `resonate_bank.cpp`: GUI 实时 (raylib + SIMD) — AVX Float256 加速谐振器组（最多 1024）。
+- `spectrum3.cpp`: GUI 实时 (raylib + miniaudio) — 1/12 倍频程平滑频谱分析仪（4096 点 FFT）。
+- `spectrum/`: GUI 实时 (raylib + miniaudio) — 25 bin 频谱分析仪（LED 条形图，嵌入式 C 移植）。
+- `spectrum2/`: GUI 实时 (raylib + miniaudio) — 81 bin + 32 频带 Mel 滤波器组。
+
+`tests/gui/synth/`
+
+- `formant_filter.cpp`: GUI 实时 (raylib) — 5 级联格型双二阶 + DSF 共振峰合成器。
+- `blit.cpp`: GUI 实时 (raylib) — BLIT 振荡器 8 波形实时演示。
+- `polyblep.cpp`: GUI 实时 (raylib) — PolyBLEP 振荡器 9 波形（含硬同步）演示。
 
 ### 轻量级 RNNoise 噪声抑制 (RNNoise Lite)
 
 `tests/rnnoise_lite/`
 
-- `main.cpp`: 加载噪声 WAV 文件，通过 RNNoise lite 神经网络降噪模型处理，保存降噪后输出。
-- `rnnoise.c` / `rnnoise.h`: RNNoise lite C 推理引擎 — 20 频带双二阶滤波器组子带分解 → MFCC 特征提取 → 3 层 GRU 神经网络（nnom int8 量化）→ 逐频带增益估计 → EQ 滤波合成。
-- `rnn.hpp`: RNNoise C++ 推理封装 — 使用 nnom 模型 + MFCC，含 50% 重叠的帧处理（kFrameSize=512），带输入/输出环形缓冲区。
-- `mfcc.c` / `mfcc.h`: MFCC 特征提取前端 — 包含内部 FFT、三角梅尔滤波器组（20 频带）、DCT 矩阵计算和预加重。
-- `weights.h`: 3 层 GRU 的 int8 量化核/循环核/偏置张量，用于 nnom 推理引擎的实时降噪。
-- `denoise_weights.h`: 与 `weights.h` 对应的浮点 GRU 权重（用于训练/验证）。
-- `equalizer_coeff.h`: 20 频带带通双二阶滤波器的 `[b0,b1,b2, a0,a1,a2]` 系数，用于 RNNoise 子带分解与合成。
-- `nnom/`: NNoM 轻量级神经网络运行时 — 面向微控制器的 int8 量化神经网络推理库，为 RNNoise 提供 GRU 层、全连接层和张量运算支持。
+- `main.cpp`: WAV 加载 → RNNoise 降噪 → 保存输出。
+- `rnnoise.c` / `rnnoise.h`: C 推理引擎（20 频带双二阶 + MFCC + 3 层 GRU + nnom int8）。
+- `rnn.hpp`: C++ 推理封装（nnom + MFCC，50% 重叠帧）。
+- `mfcc.c` / `mfcc.h`: MFCC 特征提取（FFT + 三角梅尔滤波器组 + DCT）。
+- `weights.h`: 3 层 GRU int8 量化权重。
+- `denoise_weights.h`: 对应浮点 GRU 权重。
+- `equalizer_coeff.h`: 20 频带带通双二阶系数。
+- `nnom/`: NNoM 轻量级神经网络运行时（int8 量化，GRU / 全连接 / 张量运算）。
 
 ## Notebooks
 
