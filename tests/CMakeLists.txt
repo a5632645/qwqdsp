@@ -15,6 +15,7 @@ endfunction()
 function(add_qwqdsp_gui_test name code_file)
     add_executable(qwqdsp-${name}
         ${code_file}
+        ../support/miniaudio.c
     )
     target_link_libraries(qwqdsp-${name} PUBLIC qwqdsp raylib qwqdsp_support)
     if (TARGET qwqdsp_support_slider)
@@ -97,6 +98,8 @@ if (QWQDSP_HAVE_RAYLIB)
     target_sources(qwqdsp-spectrum2 PUBLIC gui/spectral/spectrum2/spectrum_driver.cpp)
 
     add_qwqdsp_gui_test(spectrum3 gui/spectral/spectrum3.cpp)
+
+    add_qwqdsp_gui_test(spectrum4 gui/spectral/spectrum4.cpp)
 
     # ── Synth (GUI) ──
     add_qwqdsp_gui_test(formant_filter gui/synth/formant_filter.cpp)
