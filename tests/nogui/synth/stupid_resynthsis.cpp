@@ -5,7 +5,7 @@
 #include <format>
 #include <numbers>
 #include <numeric>
-#include "../../playing/AudioFile.h"
+#include "AudioFile.h"
 #include "qwqdsp/convert.hpp"
 #include "qwqdsp/interpolation/linear.hpp"
 #include "qwqdsp/interpolation/sppchip.hpp"
@@ -15,7 +15,7 @@
 #include "qwqdsp/segement/analyze_auto.hpp"
 #include "qwqdsp/window/blackman.hpp"
 #include "qwqdsp/interpolation/makima.hpp"
-#include "qwqdsp/oscillator/table_sine_osc.hpp"
+#include "qwqdsp/oscillator/elliptic_sine_osc.hpp"
 
 static constexpr size_t kFFTSize = 512;
 static constexpr size_t kNumData = qwqdsp_spectral::RealFFT::NumBins(kFFTSize);
@@ -49,7 +49,7 @@ static std::vector<Frame> AnalyzeAudio(std::span<const float> x) {
 
         std::array<float, kNumData> logs;
         for (size_t i = 0; i < kNumData; ++i) {
-            logs[i] = qwqdsp::convert::Gain2Db(frames[frame_idx].gains[i]);
+            logs[i] = qwqdsp::convert::Gain2Db<-120.0f>(frames[frame_idx].gains[i]);
             frames[frame_idx].gain_dbs[i] = logs[i];
         }
         float const max_db = *std::max_element(logs.begin(), logs.end());
@@ -114,7 +114,7 @@ int main() {
     output.resize(1);
     auto& channel = output.front();
     size_t const num_samples_per_frame = kFFTSize / 4;
-    qwqdsp_oscillator::TableSineOsc<> oscs[kNumData];
+    qwqdsp_oscillator::EllipticSineOsc oscs[kNumData];
     for (size_t i = 0; i < frames.size(); ++i) {
         auto& fr = frames[i];
         for (size_t j = 0; j < kNumData; ++j) {

@@ -1,7 +1,7 @@
 #include <span>
 
 #include "raylib.h"
-#include "../../playing/slider.hpp"
+#include "slider.hpp"
 
 #include "qwqdsp/oscillator/polyblep.hpp"
 #include "qwqdsp/oscillator/polyblep_sync.hpp"

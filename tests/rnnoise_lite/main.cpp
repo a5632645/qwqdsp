@@ -1,4 +1,4 @@
-#include "../../playing/AudioFile.h"
+#include "AudioFile.h"
 #include "rnnoise.h"
 
 int main() {

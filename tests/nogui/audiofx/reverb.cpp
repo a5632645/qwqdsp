@@ -4,7 +4,7 @@
 // #include "hal_base.h"
 // #endif
 
-#include "../../playing/AudioFile.h"
+#include "AudioFile.h"
 
 #include <math.h>
 #include <stdbool.h>

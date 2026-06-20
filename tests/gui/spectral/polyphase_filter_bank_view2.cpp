@@ -1,13 +1,15 @@
 // ────────────────────────────────────────────────────────────
-//  polyphase_filter_bank_view.cpp
-//  实时多相分析滤波器组 (DFT 调制) + 对数频率插值曲线可视化
+//  polyphase_filter_bank_view2.cpp
+//  实时余弦调制 (CMFB / Pseudo-QMF) 分析滤波器组 + 对数插值曲线
 //
 //  信号链:
-//    miniaudio 双工 (loopback) → 帧累加器
-//    → 多相分析滤波器组 (M=512, L=16384, Blackman 窗) ← 音频线程
-//    → 子带幅度 (dB) → attack/release 平滑 → s_db_latest[257]
-//                                                      ↓
-//                        主线程读取 → 对数频率插值 → 曲线渲染
+//    miniaudio → 帧累加器
+//    → CMFB (M=512, 2M 多相 + DCT-IV) ← 音频线程
+//    → |Xₖ| → dB → 平滑 → s_db_latest[512]
+//                                      ↓
+//                    主线程 → 对数插值 → 曲线渲染
+//
+//  参考实现: CosineModulatedFilterBank (AI gen, 已整合至此)
 // ────────────────────────────────────────────────────────────
 
 #include <algorithm>
@@ -19,8 +21,9 @@
 #include <cstring>
 #include <numbers>
 #include <span>
+#include <vector>
 
-#include "../../playing/miniaudio.h"
+#include "miniaudio.h"
 #include "raylib.h"
 
 #include <qwqdsp/filter/window_fir.hpp>
@@ -34,9 +37,11 @@
 
 // ── DSP ──
 static constexpr float kSampleRate = 48000.0f;
-static constexpr int kNumSubbands = 512;                           // M
-static constexpr int kPolyphaseLen = 32;                           // P — 每相位抽头数
-static constexpr int kPrototypeLen = kNumSubbands * kPolyphaseLen; // L = M × P
+static constexpr int kNumSubbands = 256;                             // M
+static constexpr int kPolyphaseLen = 32;                             // P₁ — 原每相位抽头数
+static constexpr int kPrototypeLen = kNumSubbands * kPolyphaseLen;   // L = M × P₁ = 16384
+static constexpr int kPolyphase2M = 2 * kNumSubbands;                // 2M = 1024
+static constexpr int kPolyphase2MLen = kPrototypeLen / kPolyphase2M; // P₂ = L / 2M = 16
 
 // ── 平滑 (一阶 IIR, attack/release) ──
 static constexpr float kAttackMs = 1.0f;
@@ -65,7 +70,7 @@ static const Color kCurveColor = {120, 200, 255, 255};
 // ════════════════════════════════════════════════════════════
 //  音频线程 → 主线程 共享 dB 缓冲区
 // ════════════════════════════════════════════════════════════
-static constexpr int kDisplayBands = kNumSubbands / 2 + 1;
+static constexpr int kDisplayBands = kNumSubbands; // M 个实数子带
 static std::array<float, kDisplayBands> s_db_latest;
 
 // ── 回调耗时统计 (音频线程写入, 主线程读取) ──
@@ -74,147 +79,136 @@ static float s_cb_us_avg = 0.0f;  // 指数平滑平均
 static float s_cb_us_max = 0.0f;  // 观测峰值 (主线程每秒重置)
 
 // ════════════════════════════════════════════════════════════
-//  多相分析滤波器组
+//  CMFB 分析滤波器组 (余弦调制 / Pseudo-QMF)
+//  2M 路多相 + (-1)ᵐ 符号交替 + 余弦对称合并 + DCT-IV
 // ════════════════════════════════════════════════════════════
-class PolyphaseAnalysisFB {
-    // 多相系数 & 延迟线: [phase * kPolyphaseLen + tap]
-    alignas(32) std::array<float, kNumSubbands * kPolyphaseLen> coeffs_;
-    alignas(32) std::array<float, kNumSubbands * kPolyphaseLen> delay_;
-    // FFT 工作缓冲区
-    std::array<float, kNumSubbands> fft_real_;
-    std::array<float, kNumSubbands> fft_imag_;
-    // 平滑后的子带 dB 值 (bin 0 ~ M/2)
-    std::array<float, kNumSubbands / 2 + 1> smoothed_db_;
-    // 一阶平滑系数
+class CosineModulatedFB {
+    // 2M 多相系数: [phase × kPolyphase2MLen + tap]
+    alignas(32) std::array<float, kPolyphase2M * kPolyphase2MLen> coeffs_;
+    // 共享环形缓冲区 (原型滤波器全长)
+    alignas(32) std::array<float, kPrototypeLen> ring_buf_{};
+    int wp_ = 0; // 环形缓冲区写指针
+    // 多相滤波输出 [2M]
+    std::array<float, kPolyphase2M> out_;
+    // 余弦调制矩阵 (堆分配, M × 2M)
+    std::vector<float> dct_mat_;
+    // 平滑后的 dB 值 (M 个实数子带)
+    std::array<float, kNumSubbands> smoothed_db_;
     float attack_alpha_;
     float release_alpha_;
 public:
-    // ── 初始化: 设计原型滤波器 → 多相分解 → 计算平滑系数 ──
+    // ── 初始化 ──
     void Init() {
-        // 1. 原型低通 FIR (截止 π/M)
+        // 1. 原型低通 FIR (截止 π/(2M), 子带带宽减半)
         std::array<float, kPrototypeLen> ir;
-        qwqdsp_filter::WindowFIR::Lowpass(ir, std::numbers::pi_v<float> / static_cast<float>(kNumSubbands));
-        qwqdsp_window::Blackman::ApplyWindow(ir, false); // 对称窗 → FIR 设计
-        qwqdsp_filter::WindowFIR::Normalize(ir);         // DC 增益 = 1
+        qwqdsp_filter::WindowFIR::Lowpass(ir, std::numbers::pi_v<float> / static_cast<float>(2 * kNumSubbands));
+        qwqdsp_window::Hann::ApplyWindow(ir, false);
+        qwqdsp_filter::WindowFIR::Normalize(ir);
 
-        // 2. 多相分解: coeffs_[k][j] = ir[k + j*M]
-        //    k = 相位索引 (0..M-1), j = 子滤波器抽头 (0..P-1)
-        for (int k = 0; k < kNumSubbands; ++k) {
-            for (int j = 0; j < kPolyphaseLen; ++j) {
-                int src = k + j * kNumSubbands;
-                coeffs_[k * kPolyphaseLen + j] = (src < kPrototypeLen) ? ir[src] : 0.0f;
+        // 2. 2M 多相分解: coeffs[l·P + m] = ir[2M·m + l] × (-1)^m
+        //    l = 0..2M-1 (相位), m = 0..P₂-1 (子滤波器抽头)
+        for (int l = 0; l < kPolyphase2M; ++l) {
+            for (int m = 0; m < kPolyphase2MLen; ++m) {
+                int src = kPolyphase2M * m + l;
+                float sign = (m % 2 == 0) ? 1.0f : -1.0f; // (-1)^m
+                coeffs_[l * kPolyphase2MLen + m] = (src < kPrototypeLen) ? ir[src] * sign : 0.0f;
             }
         }
 
-        // 3. 重置状态
+        // 3. 预计算余弦调制矩阵 [M × 2M]
+        //    C[k][i] = cos(π/M·(k+½)·(i − (L-1)/2))
+        constexpr float kCenter = static_cast<float>(kPrototypeLen - 1) * 0.5f;
+        dct_mat_.resize(static_cast<size_t>(kNumSubbands) * kPolyphase2M);
+        for (int k = 0; k < kNumSubbands; ++k) {
+            float phase_k =
+                (static_cast<float>(k) + 0.5f) * std::numbers::pi_v<float> / static_cast<float>(kNumSubbands);
+            for (int i = 0; i < kPolyphase2M; ++i) {
+                float angle = phase_k * (static_cast<float>(i) - kCenter);
+                dct_mat_[k * kPolyphase2M + i] = 2 * std::cos(angle);
+            }
+        }
+
         Reset();
 
-        // 4. 平滑时间常数 → α
-        float T = static_cast<float>(kNumSubbands) / kSampleRate; // 帧周期
+        // 4. 平滑系数
+        float T = static_cast<float>(kNumSubbands) / kSampleRate;
         attack_alpha_ = 1.0f - std::exp(-T / (kAttackMs * 0.001f));
         release_alpha_ = 1.0f - std::exp(-T / (kReleaseMs * 0.001f));
     }
 
     void Reset() {
-        std::fill(delay_.begin(), delay_.end(), 0.0f);
+        std::fill(ring_buf_.begin(), ring_buf_.end(), 0.0f);
         std::fill(smoothed_db_.begin(), smoothed_db_.end(), kDbFloor);
+        wp_ = 0;
     }
 
     // ── 处理一帧 (M 个输入样本) ──
     void Process(const float* input) {
-        // Step 1 — 多相滤波 (转置 FIR)
-        for (int k = 0; k < kNumSubbands; ++k) {
-            float* d = &delay_[k * kPolyphaseLen];
-            const float* c = &coeffs_[k * kPolyphaseLen];
+        // Step 1 — 写入 M 个新采样到环形缓冲区
+        for (int i = 0; i < kNumSubbands; ++i)
+            ring_buf_[(wp_ + i) % kPrototypeLen] = input[i];
 
-            // 反向分配: branch k 接收 input[M-1-k]
-            // (commutator 模型 — 最新样本进 branch 0)
-            float x = input[kNumSubbands - 1 - k];
-
-            // 转置直接 II 型 FIR
-            float u = c[0] * x + d[0];
-            for (int j = 0; j < kPolyphaseLen - 1; ++j) {
-                d[j] = d[j + 1] + c[j + 1] * x;
+        // Step 2 — M 对直接型 FIR, 从共享环形缓冲区读取
+        //   分支 l:   最新采样在 (wp+M-1-l)     (当前帧)
+        //   分支 l+M: 最新采样在 (wp+M-1-l-M)   (上一帧同位置)
+        //   后续抽头: 步进 -2M
+        for (int l = 0; l < kNumSubbands; ++l) {
+            // ── 分支 l (当前帧) ──
+            {
+                const float* c = &coeffs_[l * kPolyphase2MLen];
+                float sum = 0.0f;
+                int idx = (wp_ + kNumSubbands - 1 - l + kPrototypeLen) % kPrototypeLen;
+                for (int m = 0; m < kPolyphase2MLen; ++m) {
+                    sum += c[m] * ring_buf_[idx];
+                    idx = (idx - kPolyphase2M + kPrototypeLen) % kPrototypeLen;
+                }
+                out_[l] = sum;
             }
-            d[kPolyphaseLen - 1] = c[kPolyphaseLen - 1] * x;
 
-            fft_real_[k] = u;
-            fft_imag_[k] = 0.0f;
+            // ── 分支 l+M (上一帧同位置) ──
+            {
+                int l2 = l + kNumSubbands;
+                const float* c = &coeffs_[l2 * kPolyphase2MLen];
+                float sum = 0.0f;
+                int idx = (wp_ + kNumSubbands - 1 - l - kNumSubbands + kPrototypeLen) % kPrototypeLen;
+                for (int m = 0; m < kPolyphase2MLen; ++m) {
+                    sum += c[m] * ring_buf_[idx];
+                    idx = (idx - kPolyphase2M + kPrototypeLen) % kPrototypeLen;
+                }
+                out_[l2] = sum;
+            }
         }
 
-        // Step 2 — M 点复数 FFT (基 2 DIT)
-        FFT();
+        // ── 推进写指针 ──
+        wp_ = (wp_ + kNumSubbands) % kPrototypeLen;
 
-        // Step 3 — 子带幅度 → dB → 一阶平滑
-        constexpr int kDisplayBands = kNumSubbands / 2 + 1; // = 9
-        for (int k = 0; k < kDisplayBands; ++k) {
-            float mag_sq = fft_real_[k] * fft_real_[k] + fft_imag_[k] * fft_imag_[k];
-            float dB = 10.0f * std::log10(mag_sq + 1e-12f);
+        // Step 2 — 直接余弦调制: X[k] = Σ out[i] · cos(π/M·(k+½)·(i−(L-1)/2))
+        for (int k = 0; k < kNumSubbands; ++k) {
+            const float* row = &dct_mat_[k * kPolyphase2M];
+            float sum = 0.0f;
+            for (int i = 0; i < kPolyphase2M; ++i) {
+                sum += row[i] * out_[i];
+            }
 
+            // Step 4 — 幅度 → dB → 一阶平滑
+            // 修正：幅度转 dB 需要乘 20，或者 log10(sum * sum)
+            float dB = 20.0f * std::log10(std::abs(sum) + 1e-12f);
             float prev = smoothed_db_[k];
             float alpha = (dB > prev) ? attack_alpha_ : release_alpha_;
             smoothed_db_[k] = prev + alpha * (dB - prev);
         }
     }
 
-    // ── 存取器 ──
     std::span<const float> GetDB() const noexcept {
         return smoothed_db_;
     }
     int NumBands() const noexcept {
-        return smoothed_db_.size();
-    }
-private:
-    // ── 基 2 按时间抽取 (DIT) FFT, 原地计算 ──
-    //    要求 kNumSubbands 为 2 的幂
-    void FFT() noexcept {
-        constexpr int n = kNumSubbands;
-
-        // 位反转重排
-        for (int i = 1, j = 0; i < n; ++i) {
-            int bit = n >> 1;
-            for (; j & bit; bit >>= 1)
-                j ^= bit;
-            j ^= bit;
-            if (i < j) {
-                std::swap(fft_real_[i], fft_real_[j]);
-                std::swap(fft_imag_[i], fft_imag_[j]);
-            }
-        }
-
-        // 蝶形运算
-        for (int len = 2; len <= n; len <<= 1) {
-            float ang = 2.0f * std::numbers::pi_v<float> / static_cast<float>(len);
-            float w_real = std::cos(ang);
-            float w_imag = -std::sin(ang); // exp(-j·ang)
-
-            for (int i = 0; i < n; i += len) {
-                float wr = 1.0f, wi = 0.0f;
-                int half = len >> 1;
-                for (int j = 0; j < half; ++j) {
-                    int even = i + j;
-                    int odd = i + j + half;
-
-                    float tr = wr * fft_real_[odd] - wi * fft_imag_[odd];
-                    float ti = wr * fft_imag_[odd] + wi * fft_real_[odd];
-
-                    fft_real_[odd] = fft_real_[even] - tr;
-                    fft_imag_[odd] = fft_imag_[even] - ti;
-                    fft_real_[even] = fft_real_[even] + tr;
-                    fft_imag_[even] = fft_imag_[even] + ti;
-
-                    float nwr = wr * w_real - wi * w_imag;
-                    float nwi = wr * w_imag + wi * w_real;
-                    wr = nwr;
-                    wi = nwi;
-                }
-            }
-        }
+        return kNumSubbands;
     }
 };
 
 // ── 全局实例 ──
-static PolyphaseAnalysisFB s_pfb;
+static CosineModulatedFB s_pfb;
 
 // ── 帧累加器 (音频线程局部变量) ──
 static std::array<float, kNumSubbands> s_frame_acc{};
@@ -299,7 +293,8 @@ static void DrawAxes() {
 }
 
 static void DrawSubbandCurve(std::span<const float> dB) {
-    constexpr float kBinFreq = kSampleRate / kNumSubbands;
+    // CMFB: 子带间距 = fs / (2M), 中心频率 = (k+0.5) × fs/(2M)
+    constexpr float kCMFMBinSpacing = kSampleRate / (2.0f * kNumSubbands);
     float logFMin = std::log10(kDisplayFreqMin);
     float logFRange = std::log10(kDisplayFreqMax) - logFMin;
 
@@ -309,7 +304,7 @@ static void DrawSubbandCurve(std::span<const float> dB) {
     for (int px = 0; px < kCanvasWidth; ++px) {
         float normX = static_cast<float>(px) / (kCanvasWidth - 1.0f);
         float freq = std::pow(10.0f, logFMin + normX * logFRange);
-        float binF = freq / kBinFreq;
+        float binF = freq / kCMFMBinSpacing - 0.5f;
 
         int seg = static_cast<int>(binF); // floor
         seg = std::clamp(seg, 0, static_cast<int>(dB.size()) - 2);
@@ -336,7 +331,7 @@ static void DrawSubbandCurve(std::span<const float> dB) {
 // ════════════════════════════════════════════════════════════
 int main(void) {
     SetConfigFlags(FLAG_MSAA_4X_HINT);
-    InitWindow(kWindowWidth, kWindowHeight, "Polyphase Analysis Filter Bank — qwqdsp + raylib");
+    InitWindow(kWindowWidth, kWindowHeight, "CMFB (Cosine Modulated) Filter Bank — qwqdsp + raylib");
     SetTargetFPS(60);
 
     // ── 初始化滤波器组 & 共享缓冲区 ──

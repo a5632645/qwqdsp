@@ -6,7 +6,7 @@
 #include <qwqdsp/oscillator/noise.hpp>
 #include <qwqdsp/window/hann.hpp>
 #include <qwqdsp/window/blackman.hpp>
-#include "../../playing/AudioFile.h"
+#include "AudioFile.h"
 
 constexpr float noise_gain = 1e-1f;
 

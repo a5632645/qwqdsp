@@ -4,7 +4,7 @@
 #include <qwqdsp/window/hann.hpp>
 #include <qwqdsp/window/helper.hpp>
 
-#include "../../playing/miniaudio.h"
+#include "miniaudio.h"
 #include "raylib.h"
 
 // ── 窗口与 UI 常量 ──

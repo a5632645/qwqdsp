@@ -2,7 +2,7 @@
 #include <qwqdsp/oscillator/noise.hpp>
 #include <qwqdsp/spectral/real_fft.hpp>
 #include <qwqdsp/filter/fir.hpp>
-#include "../../playing/AudioFile.h"
+#include "AudioFile.h"
 
 static void ShouldBeDelay32() {
     qwqdsp_fx::UniformConvolution conv;

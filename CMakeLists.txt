@@ -32,15 +32,16 @@ if (TARGET simde)
     target_compile_definitions(qwqdsp PUBLIC QWQDSP_HAVE_SIMDE)
 endif()
 
+add_subdirectory(support)
+
 # enable tests
 if (QWQDSP_BUILD_TESTS)
     if (QWQDSP_HAVE_RAYLIB)
         add_executable(playing
             "playing/playing.cpp"
-            "playing/slider.cpp"
-            # "playing/miniaudio.c"
         )
-        target_link_libraries(playing PUBLIC qwqdsp raylib)
+        target_link_libraries(playing PUBLIC qwqdsp raylib qwqdsp_support)
+        target_link_libraries(playing PRIVATE qwqdsp_support_slider qwqdsp_support)
         set_target_properties(playing PROPERTIES CXX_STANDARD 20)
 
         if (MSVC)

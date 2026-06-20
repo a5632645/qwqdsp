@@ -4,8 +4,7 @@ function(add_qwqdsp_dsp_test name code_file)
     add_executable(qwqdsp-${name}
         ${code_file}
     )
-    target_link_libraries(qwqdsp-${name} PUBLIC qwqdsp)
-    target_include_directories(qwqdsp-${name} PUBLIC .)
+    target_link_libraries(qwqdsp-${name} PUBLIC qwqdsp qwqdsp_support)
     set_target_properties(qwqdsp-${name} PROPERTIES CXX_STANDARD 20)
     set_target_properties(qwqdsp-${name} PROPERTIES FOLDER qwqdsp-dsp-tests)
 endfunction()
@@ -14,33 +13,45 @@ function(add_qwqdsp_gui_test name code_file)
     add_executable(qwqdsp-${name}
         ${code_file}
     )
-    target_link_libraries(qwqdsp-${name} PUBLIC qwqdsp raylib)
-    target_include_directories(qwqdsp-${name} PUBLIC .)
+    target_link_libraries(qwqdsp-${name} PUBLIC qwqdsp raylib qwqdsp_support)
+    if (TARGET qwqdsp_support_slider)
+        target_link_libraries(qwqdsp-${name} PUBLIC qwqdsp_support_slider)
+    endif()
     set_target_properties(qwqdsp-${name} PROPERTIES CXX_STANDARD 20)
     set_target_properties(qwqdsp-${name} PROPERTIES FOLDER qwqdsp-gui-tests)
 endfunction()
 
-# ── Signal Processing ──
-add_qwqdsp_dsp_test(biquad signal/biquad.cpp)
-add_qwqdsp_dsp_test(fir_design signal/fir_design.cpp)
-add_qwqdsp_dsp_test(wiener_filter signal/wiener_filter.cpp)
-add_qwqdsp_dsp_test(auto_notch signal/auto_notch.cpp)
-add_qwqdsp_dsp_test(minimum_phase_fir signal/minimum_phase_fir.cpp)
-add_qwqdsp_dsp_test(paralle_allpass signal/paralle_allpass.cpp)
-add_qwqdsp_dsp_test(reverse_iir signal/reverse_iir.cpp)
-add_qwqdsp_dsp_test(convolution signal/convolution.cpp)
-add_qwqdsp_dsp_test(fft_interpolation signal/fft_interpolation.cpp)
-add_qwqdsp_dsp_test(ifft_random_phase signal/ifft_random_phase.cpp)
+# ── DSP Tests (no GUI) ──
+
+# ── Filter ──
+add_qwqdsp_dsp_test(biquad nogui/filter/biquad.cpp)
+add_qwqdsp_dsp_test(fir_design nogui/filter/fir_design.cpp)
+add_qwqdsp_dsp_test(minimum_phase_fir nogui/filter/minimum_phase_fir.cpp)
+add_qwqdsp_dsp_test(paralle_allpass nogui/filter/paralle_allpass.cpp)
+add_qwqdsp_dsp_test(reverse_iir nogui/filter/reverse_iir.cpp)
+add_qwqdsp_dsp_test(residual_chebyshev nogui/filter/residual_chebyshev.cpp)
 
 # ── Audio FX ──
-add_qwqdsp_dsp_test(freq_shifter audiofx/freq_shifter.cpp)
-add_qwqdsp_dsp_test(conv_feedback audiofx/conv_feedback.cpp)
-add_qwqdsp_dsp_test(dsf audiofx/dsf.cpp)
+add_qwqdsp_dsp_test(auto_notch nogui/audiofx/auto_notch.cpp)
+add_qwqdsp_dsp_test(wiener_filter nogui/audiofx/wiener_filter.cpp)
+add_qwqdsp_dsp_test(convolution nogui/audiofx/convolution.cpp)
+add_qwqdsp_dsp_test(conv_feedback nogui/audiofx/conv_feedback.cpp)
+add_qwqdsp_dsp_test(conv_feedback2 nogui/audiofx/conv_feedback2.cpp)
+add_qwqdsp_dsp_test(reverb nogui/audiofx/reverb.cpp)
+add_qwqdsp_dsp_test(freq_shifter nogui/audiofx/freq_shifter.cpp)
+add_qwqdsp_dsp_test(resample nogui/audiofx/resample.cpp)
+add_qwqdsp_dsp_test(polyphase nogui/audiofx/polyphase.cpp)
 
-# ── Resample ──
-add_qwqdsp_dsp_test(resample resample/resample.cpp)
-add_qwqdsp_dsp_test(polyphase resample/polyphase.cpp)
+# ── Spectral ──
+add_qwqdsp_dsp_test(fft_interpolation nogui/spectral/fft_interpolation.cpp)
+add_qwqdsp_dsp_test(ifft_random_phase nogui/spectral/ifft_random_phase.cpp)
 
+# ── Synth ──
+add_qwqdsp_dsp_test(dsf nogui/synth/dsf.cpp)
+add_qwqdsp_dsp_test(stupid_resynthsis nogui/synth/stupid_resynthsis.cpp)
+add_qwqdsp_dsp_test(wsola nogui/synth/wsola.cpp)
+
+# ── RNNoise Lite ──
 file(GLOB_RECURSE qwqdsp-rnnoise-lite-src "rnnoise_lite/nnom/*.c")
 add_executable(qwqdsp-rnnoise-lite
     ${qwqdsp-rnnoise-lite-src}
@@ -48,47 +59,40 @@ add_executable(qwqdsp-rnnoise-lite
     rnnoise_lite/mfcc.c
     rnnoise_lite/rnnoise.c
 )
-target_link_libraries(qwqdsp-rnnoise-lite PUBLIC qwqdsp raylib)
+target_link_libraries(qwqdsp-rnnoise-lite PUBLIC qwqdsp raylib qwqdsp_support)
 set_target_properties(qwqdsp-rnnoise-lite PROPERTIES CXX_STANDARD 20)
 set_target_properties(qwqdsp-rnnoise-lite PROPERTIES FOLDER qwqdsp-dsp-tests)
 
 if (QWQDSP_HAVE_RAYLIB)
-    # ── Realtime GUI ──
-    add_qwqdsp_gui_test(interpolations realtime/interpolations.cpp)
+    # ── GUI Tests ──
 
-    add_qwqdsp_gui_test(auto_notch_rt realtime/auto_notch_rt.cpp)
-    target_sources(qwqdsp-auto_notch_rt PUBLIC "../playing/slider.cpp")
-    target_sources(qwqdsp-auto_notch_rt PUBLIC "../playing/miniaudio.c")
+    # ── General ──
+    add_qwqdsp_gui_test(interpolations gui/interpolations.cpp)
 
-    add_qwqdsp_gui_test(pfb_view realtime/polyphase_filter_bank_view.cpp)
-    target_sources(qwqdsp-pfb_view PUBLIC "../playing/miniaudio.c")
+    add_qwqdsp_gui_test(auto_notch_rt gui/auto_notch_rt.cpp)
+
+    # ── Spectral (GUI) ──
+    add_qwqdsp_gui_test(pfb_view gui/spectral/polyphase_filter_bank_view.cpp)
     target_compile_options(qwqdsp-pfb_view PUBLIC -mavx2 -mfma)
 
-    add_qwqdsp_gui_test(pfb2_view realtime/polyphase_filter_bank_view2.cpp)
-    target_sources(qwqdsp-pfb2_view PUBLIC "../playing/miniaudio.c")
+    add_qwqdsp_gui_test(pfb2_view gui/spectral/polyphase_filter_bank_view2.cpp)
     target_compile_options(qwqdsp-pfb2_view PUBLIC -mavx2 -mfma)
 
-    # ── Audio FX (GUI) ──
-    add_qwqdsp_gui_test(formant_filter audiofx/formant_filter.cpp)
-    target_sources(qwqdsp-formant_filter PUBLIC "../playing/slider.cpp")
-
-    add_qwqdsp_gui_test(blit audiofx/blit.cpp)
-    target_sources(qwqdsp-blit PUBLIC "../playing/slider.cpp")
-
-    add_qwqdsp_gui_test(polyblep audiofx/polyblep.cpp)
-    target_sources(qwqdsp-polyblep PUBLIC "../playing/slider.cpp")
-
-    add_qwqdsp_gui_test(resonate_bank audiofx/resonate_bank.cpp)
-    target_sources(qwqdsp-resonate_bank PUBLIC "../playing/miniaudio.c")
+    add_qwqdsp_gui_test(resonate_bank gui/spectral/resonate_bank.cpp)
     target_compile_options(qwqdsp-resonate_bank PUBLIC -mavx2 -mfma)
 
-    # ── Spectral ──
-    add_qwqdsp_gui_test(spectrum spectral/spectrum/spectrum.cpp)
-    target_sources(qwqdsp-spectrum PUBLIC spectral/spectrum/spectrum_driver.cpp ../playing/miniaudio.c)
+    add_qwqdsp_gui_test(spectrum gui/spectral/spectrum/spectrum.cpp)
+    target_sources(qwqdsp-spectrum PUBLIC gui/spectral/spectrum/spectrum_driver.cpp)
 
-    add_qwqdsp_gui_test(spectrum2 spectral/spectrum2/spectrum.cpp)
-    target_sources(qwqdsp-spectrum2 PUBLIC spectral/spectrum2/spectrum_driver.cpp ../playing/miniaudio.c)
+    add_qwqdsp_gui_test(spectrum2 gui/spectral/spectrum2/spectrum.cpp)
+    target_sources(qwqdsp-spectrum2 PUBLIC gui/spectral/spectrum2/spectrum_driver.cpp)
 
-    add_qwqdsp_gui_test(spectrum3 spectral/spectrum3.cpp)
-    target_sources(qwqdsp-spectrum3 PUBLIC ../playing/miniaudio.c)
+    add_qwqdsp_gui_test(spectrum3 gui/spectral/spectrum3.cpp)
+
+    # ── Synth (GUI) ──
+    add_qwqdsp_gui_test(formant_filter gui/synth/formant_filter.cpp)
+
+    add_qwqdsp_gui_test(blit gui/synth/blit.cpp)
+
+    add_qwqdsp_gui_test(polyblep gui/synth/polyblep.cpp)
 endif()

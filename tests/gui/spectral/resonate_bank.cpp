@@ -7,13 +7,13 @@
 #include <vector>
 
 #include "raylib.h"
-#include "../../playing/miniaudio.h"
+#include "miniaudio.h"
 
 #include "qwqdsp/convert.hpp"
 #include "qwqdsp/filter/rbj.hpp"
 #include "qwqdsp/filter/biquad.hpp"
 #include "qwqdsp/oscillator/vic_sine_osc.hpp"
-#include "../../playing/simd.hpp"
+#include "simd.hpp"
 #include <immintrin.h>
 
 // ============================================================
