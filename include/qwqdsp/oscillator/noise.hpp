@@ -1,13 +1,18 @@
 #pragma once
+#include <bit>
+#include <cmath>
 #include <cstdint>
 #include <limits>
-#include <bit>
 
 namespace qwqdsp_oscillator {
 class WhiteNoise {
 public:
     using SeedType = uint32_t;
     static constexpr float kScale = 1.0f / static_cast<float>(std::numeric_limits<uint32_t>::max());
+
+    void Reset() noexcept {
+        reg_ = 0;
+    }
 
     /**
      * @param seed 设置种子,直接改变寄存器的值
@@ -77,6 +82,7 @@ public:
         b4_ = 0;
         b5_ = 0;
         b6_ = 0;
+        white_.Reset();
     }
 
     /**
@@ -124,6 +130,7 @@ public:
         for (auto& s : captrue_noise_) {
             s = 0;
         }
+        white_.Reset();
     }
 
     float Next() noexcept {
@@ -160,6 +167,7 @@ public:
 
     void Reset() noexcept {
         latch_ = 0;
+        white_.Reset();
     }
 
     float Next() noexcept {
@@ -171,4 +179,91 @@ private:
     WhiteNoise white_;
     float latch_{};
 };
-} // namespace qwqdsp
+
+class Clicks {
+public:
+    void Reset() noexcept {
+        noise_.Reset();
+    }
+
+    float Next() noexcept {
+        float f = noise_.Next();
+        float abs = std::abs(f);
+        float abs_val = abs > gate_ ? 1.0f : 0.0f;
+        return std::copysign(abs_val, f);
+    }
+
+    /**
+     * @brief Set the Probability
+     * 
+     * @param v [0,1]
+     */
+    void SetProbability(float v) noexcept {
+        gate_ = 1 - v;
+    }
+private:
+    WhiteNoise noise_;
+    float gate_{};
+};
+
+class Clicks2 {
+public:
+    void Reset() noexcept {
+        noise_.Reset();
+        prob_.Reset();
+    }
+
+    float Next() noexcept {
+        float f = prob_.Next01();
+        float y = noise_.Next();
+        y = noise_.Next();
+        return f > gate_ ? y : 0.0f;
+    }
+
+    /**
+     * @brief Set the Probability
+     * 
+     * @param v [0,1]
+     */
+    void SetProbability(float v) noexcept {
+        gate_ = 1 - v;
+    }
+private:
+    WhiteNoise noise_;
+    WhiteNoise prob_;
+    float gate_{};
+};
+
+class Stair {
+public:
+    void Reset() noexcept {
+        noise_.Reset();
+        prob_.Reset();
+        hold_ = noise_.Next();
+    }
+
+    float Next() noexcept {
+        float f = prob_.Next01();
+        float y = noise_.Next();
+        y = noise_.Next();
+        if (f > gate_) {
+            hold_ = y;
+        }
+        return hold_;
+    }
+
+    /**
+     * @brief Set the Probability
+     * 
+     * @param v [0,1]
+     */
+    void SetProbability(float v) noexcept {
+        gate_ = 1 - v;
+    }
+private:
+    WhiteNoise noise_;
+    WhiteNoise prob_;
+    float gate_{};
+    float hold_{};
+};
+} // namespace qwqdsp_oscillator
