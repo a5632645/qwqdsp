@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cmath>
+#include <limits>
 
 namespace qwqdsp_cephes {
 
@@ -65,7 +66,7 @@ struct Ellipticf {
         if (m1 > 5.9604644775390625E-8f) // MACHEPF
             return detail::polevlf(m1, kP, 10) - std::log(m1) * detail::polevlf(m1, kQ, 10);
         if (m1 == 0.0f)
-            return 3.4028234663852885981e38f; // MAXNUMF
+            return std::numeric_limits<float>::infinity(); // MAXNUMF
         return kC1 - 0.5f * std::log(m1);
     }
 
