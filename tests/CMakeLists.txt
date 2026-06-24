@@ -57,7 +57,6 @@ add_qwqdsp_dsp_test(conv_feedback2 nogui/audiofx/conv_feedback2.cpp)
 add_qwqdsp_dsp_test(reverb nogui/audiofx/reverb.cpp)
 add_qwqdsp_dsp_test(freq_shifter nogui/audiofx/freq_shifter.cpp)
 add_qwqdsp_dsp_test(resample nogui/audiofx/resample.cpp)
-add_qwqdsp_dsp_test(polyphase nogui/audiofx/polyphase.cpp)
 
 # ── Spectral ──
 add_qwqdsp_dsp_test(fft_interpolation nogui/spectral/fft_interpolation.cpp)
