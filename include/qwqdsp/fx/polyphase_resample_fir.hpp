@@ -9,7 +9,7 @@ namespace qwqdsp_fx {
 // ------------------------------------------------------------
 class PolyphaseDownsamplerFir {
 public:
-    void Init(std::span<float> coeff, int downsample) {
+    void Init(std::span<const float> coeff, int downsample) {
         downsample_ = downsample;
 
         int len_coeff = static_cast<int>(coeff.size());
@@ -110,7 +110,7 @@ private:
 // ------------------------------------------------------------
 class PolyphaseUpsamplerFir {
 public:
-    void Init(std::span<float> coeff, int upsample) {
+    void Init(std::span<const float> coeff, int upsample) {
         upsample_ = upsample;
 
         int len_coeff = static_cast<int>(coeff.size());

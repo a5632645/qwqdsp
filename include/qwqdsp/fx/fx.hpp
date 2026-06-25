@@ -1,6 +1,7 @@
 #pragma once
 #include "delay_line.hpp"
 #include "limiter.hpp"
+#include "oversample.hpp"
 #include "plat_reverb.hpp"
 #include "resample_coeffs.h"
 #include "resample_iir_dynamic.hpp"
