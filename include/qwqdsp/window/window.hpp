@@ -1,11 +1,14 @@
 #pragma once
 #include "blackman.hpp"
-#include "hann.hpp"
+#include "blackman_harris.hpp"
+#include "blackman_harris_3term.hpp"
+#include "blackman_nuttall.hpp"
 #include "hamming.hpp"
-#include "kaiser.hpp"
-#include "taylor.hpp"
+#include "hann.hpp"
 #include "helper.hpp"
+#include "kaiser.hpp"
 #include "lanczos.hpp"
+#include "taylor.hpp"
 
 /**
  * more info

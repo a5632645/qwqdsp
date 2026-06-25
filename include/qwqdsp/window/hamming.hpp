@@ -1,7 +1,7 @@
 #pragma once
-#include <span>
 #include <cmath>
 #include <numbers>
+#include <span>
 
 namespace qwqdsp_window {
 /// @ref https://www.recordingblogs.com/wiki/hamming-window
@@ -11,10 +11,6 @@ struct Hamming {
     static constexpr float kMainlobeWidth = 2.0f;
     static constexpr float kSidelobe = -43.7547f;
     static constexpr float kSidelobeRolloff = -6.0f;
-    // 和滤波器设计有关的
-    // 卷积之后第一个旁瓣的大小
-    static constexpr float kStopband = -53.0f;
-    static constexpr float kTransmit = 3.3f;
 
     static void Window(std::span<float> x, bool for_analyze_not_fir) noexcept {
         const size_t N = x.size();
@@ -56,4 +52,4 @@ struct Hamming {
         }
     }
 };
-}
+} // namespace qwqdsp_window

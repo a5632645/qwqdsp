@@ -15,11 +15,6 @@ struct Kaiser {
         return std::sqrt(1.0f + a * a);
     }
     static constexpr float kSidelobeRolloff = -6.0f;
-    // 和滤波器设计有关的
-    // 卷积之后第一个旁瓣的大小
-    // qwqfixme: 可能需要补充信息
-    // static constexpr float kStopband = -53.0f;
-    // static constexpr float kTransmit = 3.3f;
 
     static void Window(std::span<float> window, float beta, bool for_analyze_not_fir) noexcept {
         const size_t N = window.size();

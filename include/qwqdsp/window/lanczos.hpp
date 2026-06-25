@@ -1,8 +1,8 @@
 #pragma once
-#include <cstddef>
-#include <span>
-#include <numbers>
 #include <cmath>
+#include <cstddef>
+#include <numbers>
+#include <span>
 
 namespace qwqdsp_window {
 /// @ref https://www.recordingblogs.com/wiki/lanczos-window
@@ -12,10 +12,6 @@ struct Lanczos {
     static constexpr float kMainlobeWidth = 1.625f;
     static constexpr float kSidelobe = -26.5935f;
     static constexpr float kSidelobeRolloff = -12.0f;
-    // 和滤波器设计有关的
-    // 卷积之后第一个旁瓣的大小
-    static constexpr float kStopband = -38.55f;
-    // static constexpr float kTransmit = 5.5f;
 
     static void Window(std::span<float> x, bool for_analyze_not_fir) noexcept {
         if (for_analyze_not_fir) {
@@ -71,4 +67,4 @@ private:
         }
     }
 };
-}
+} // namespace qwqdsp_window

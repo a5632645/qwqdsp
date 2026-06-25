@@ -12,25 +12,6 @@ struct BlackmanNuttall {
     static constexpr float kSidelobe = -98.3f;
     static constexpr float kSidelobeRolloff = -12.7f;
 
-    template <bool period>
-    static float Get(int n, int L) noexcept {
-        constexpr float a0 = 0.3635819f;
-        constexpr float a1 = 0.4891775f;
-        constexpr float a2 = 0.1365995f;
-        constexpr float a3 = 0.0106411f;
-        constexpr float twopi = std::numbers::pi_v<float> * 2;
-
-        float t;
-        if constexpr (period) {
-            t = static_cast<float>(n) / static_cast<float>(L);
-        }
-        else {
-            t = static_cast<float>(n) / static_cast<float>(L - 1);
-        }
-
-        return a0 - a1 * std::cos(twopi * t) + a2 * std::cos(twopi * 2 * t) - a3 * std::cos(twopi * 3 * t);
-    }
-
     static void Window(std::span<float> x, bool for_analyze_not_fir) noexcept {
         const size_t L = x.size();
         if (for_analyze_not_fir) {
@@ -74,6 +55,25 @@ struct BlackmanNuttall {
             x[n] = a0 - twopi * a1 * std::cos(twopi * t) + twopi * 2 * a2 * std::cos(twopi * 2 * t)
                  - a3 * twopi * 3 * std::cos(twopi * 3 * t);
         }
+    }
+private:
+    template <bool period>
+    static float Get(int n, int L) noexcept {
+        constexpr float a0 = 0.3635819f;
+        constexpr float a1 = 0.4891775f;
+        constexpr float a2 = 0.1365995f;
+        constexpr float a3 = 0.0106411f;
+        constexpr float twopi = std::numbers::pi_v<float> * 2;
+
+        float t;
+        if constexpr (period) {
+            t = static_cast<float>(n) / static_cast<float>(L);
+        }
+        else {
+            t = static_cast<float>(n) / static_cast<float>(L - 1);
+        }
+
+        return a0 - a1 * std::cos(twopi * t) + a2 * std::cos(twopi * 2 * t) - a3 * std::cos(twopi * 3 * t);
     }
 };
 } // namespace qwqdsp_window

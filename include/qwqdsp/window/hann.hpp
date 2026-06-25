@@ -1,7 +1,7 @@
 #pragma once
+#include <cmath>
 #include <numbers>
 #include <span>
-#include <cmath>
 
 namespace qwqdsp_window {
 /// @ref https://www.recordingblogs.com/wiki/hann-window
@@ -11,10 +11,6 @@ struct Hann {
     static constexpr float kMainlobeWidth = 3.0f;
     static constexpr float kSidelobe = -31.5565f;
     static constexpr float kSidelobeRolloff = -18.0f;
-    // 和滤波器设计有关的
-    // 卷积之后第一个旁瓣的大小
-    static constexpr float kStopband = -44.0f;
-    static constexpr float kTransmit = 3.1f;
 
     static void Window(std::span<float> x, bool for_analyze_not_fir) noexcept {
         const size_t N = x.size();
@@ -56,4 +52,4 @@ struct Hann {
         }
     }
 };
-}
+} // namespace qwqdsp_window

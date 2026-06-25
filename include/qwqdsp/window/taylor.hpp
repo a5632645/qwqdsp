@@ -6,10 +6,6 @@
 
 namespace qwqdsp_window {
 struct Taylor {
-    static constexpr float sq(float x) noexcept {
-        return x * x;
-    }
-
     /**
      * @param side_lobe > 0
      * @note 如果要用于分析，请使用N+1的窗然后丢弃最后一个样本
@@ -85,5 +81,9 @@ struct Taylor {
             dwindow[i] = static_cast<float>((back_val[i] - front_val[i]) / (2 * time_delta));
         }
     }
+private:
+    static constexpr float sq(float x) noexcept {
+        return x * x;
+    }
 };
-}
+} // namespace qwqdsp_window

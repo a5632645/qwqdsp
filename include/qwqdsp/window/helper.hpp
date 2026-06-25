@@ -26,7 +26,7 @@ struct Helper {
     }
 
     static void ZeroPhasePad(std::span<float> output, std::span<const float> input) noexcept {
-        assert(input.size() % 2 == 1); 
+        assert(input.size() % 2 == 1);
         assert(output.size() >= input.size());
         auto k = (input.size() - 1) / 2;
         std::fill(output.begin(), output.end(), 0.0f);
@@ -40,4 +40,4 @@ struct Helper {
         std::fill(it, output.end(), 0.0f);
     }
 };
-}
+} // namespace qwqdsp_window
