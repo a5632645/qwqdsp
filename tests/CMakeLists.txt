@@ -47,6 +47,7 @@ add_qwqdsp_dsp_test(minimum_phase_fir nogui/filter/minimum_phase_fir.cpp)
 add_qwqdsp_dsp_test(paralle_allpass nogui/filter/paralle_allpass.cpp)
 add_qwqdsp_dsp_test(reverse_iir nogui/filter/reverse_iir.cpp)
 add_qwqdsp_dsp_test(residual_chebyshev nogui/filter/residual_chebyshev.cpp)
+add_qwqdsp_dsp_test(any_hilbert nogui/filter/any_hilbert.cpp)
 
 # ── Audio FX ──
 add_qwqdsp_dsp_test(auto_notch nogui/audiofx/auto_notch.cpp)
