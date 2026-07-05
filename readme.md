@@ -24,11 +24,9 @@
 
 `core`
 
-- `qwqdsp.hpp`: 全库聚合头文件，一次性包含所有模块。
 - `convert.hpp`: 频率/单位转换工具 — `Freq2W`, `Freq2Pitch`, `Pitch2Freq`, `Freq2Mel`, `Mel2Freq`, `Samples2Decay`, `Db2Gain`, `Gain2Db`，以及模拟域频率/带宽/Q 值转换函数。
 - `extension_marcos.hpp`: 编译器扩展宏 — `QWQDSP_FORCE_INLINE`, `QWQDSP_AUTO_VECTORLIZE` 等。
 - `polymath.hpp`: 多精度数学工具 — 快速 `SinPi`, `SinCycle`, `CosCycle` 等三角函数近似实现。
-- `interpolation.hpp`: 插值聚合头（转发到 `interpolation/` 子目录）。
 - `interpolation4.hpp`: 备用插值聚合 — `Lagrange3rd`, `SPPCHIP` 等内联实现。
 - `algebraic_waveshaper.hpp`: 代数波形塑形器 — `Naive`, `ADAA`（反锯齿，0.5 采样延迟）, `ADAA_MV`, `ADAA_MV_Compensation`。
 - `adsr_envelope.hpp`: ADSR 包络发生器 — `AdsrEnvelope`（Attack/Decay/Sustain/Release 阶段控制）。
@@ -56,6 +54,7 @@
 - `iir_hilbert.hpp`: IIR Hilbert 变换器（宽带 90° 移相）。
 - `iir_hilbert4.hpp`: 可变阶 IIR Hilbert 变换器。
 - `iir_cpx_hilbert.hpp`: 复数 IIR Hilbert 变换器。
+- `any_hilbert.hpp`: 任意阶 IIR Hilbert 变换器 — `AnyHilbert`（基于并联全通结构）。
 - `formant.hpp`: 共振峰滤波器 — `FormantFilter`。
 - `linkwitz_riley.hpp`: Linkwitz-Riley 分频滤波器的简单实现。
 - `match_biquad.hpp`: 双二阶匹配滤波器 — `MatchBiquad`。
@@ -66,12 +65,10 @@
 - `transpose_sallen_key.hpp`: 转置 Sallen-Key 2 极点滤波器。
 - `allpass.hpp`: 全通滤波器。
 - `analog_responce.hpp`: 模拟响应建模工具。
-- `comfomal.hpp`: 共形映射滤波器设计工具。
 - `gold_rader.hpp`: Gold-Rader 滤波器。
 - `iir_design.hpp`: IIR 滤波器设计工具。
 - `iir_design_extra.hpp`: 额外 IIR 设计工具。
 - `fast_set_iir_paralle.hpp`: Fast Set IIR 并联实现。
-- `cheby_hilbert.hpp`: 切比雪夫 IIR Hilbert 变换器 — `ChebyHilbert`（基于切比雪夫滤波器设计的并联复数全通结构）。
 - `fixed/`: 定点数（fixed-point）滤波器实现子模块：
   - `fixed.hpp`: 聚合头。
   - `acc_traits.hpp`: 累加器类型特性。
@@ -128,6 +125,8 @@
 - `resample_iir_dynamic.hpp`: 动态 IIR 重采样器 — 可变采样率转换。
 - `delay_line.hpp`: 延迟线效果 — `DelayLine`（带反馈、混音控制）。
 - `elliptic_blep.hpp`: 椭圆 BLEP 效果 — 基于椭圆滤波器的 BLEP 校正。
+- `oversample.hpp`: 过采样器 — `Oversample`（多级半带滤波器过采样/降采样）。
+- `polyphase_resample_fir.hpp`: 多相 FIR 重采样 — `PolyphaseDownsamplerFir` / `PolyphaseUpsamplerFir`（多相结构上采样/下采样）。
 
 ### SIMD 优化模块 (SIMD Element Modules)
 
@@ -154,7 +153,6 @@
 
 `window`
 
-- `window.hpp`: 聚合头。
 - `blackman.hpp`: Blackman 窗。
 - `blackman_harris.hpp`: 4 项 Blackman-Harris 窗（`kSidelobe=-92dB`）。
 - `blackman_harris_3term.hpp`: 3 项 Blackman-Harris 窗（`kSidelobe=-71.48dB`，主瓣宽 3）。
