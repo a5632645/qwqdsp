@@ -92,6 +92,7 @@ if (QWQDSP_HAVE_RAYLIB)
     add_qwqdsp_gui_test(interpolations gui/interpolations.cpp)
     add_qwqdsp_gui_test(auto_notch_rt gui/auto_notch_rt.cpp)
     add_qwqdsp_gui_test(filters gui/filters.cpp NO_MINIAUDIO)
+    add_qwqdsp_gui_test(filters2 gui/filters2.cpp NO_MINIAUDIO)
 
     # ── Spectral (GUI) ──
     add_qwqdsp_gui_test(pfb_view gui/spectral/polyphase_filter_bank_view.cpp)
