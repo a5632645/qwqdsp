@@ -29,7 +29,7 @@ static constexpr int kCanvasW = kWindowWidth - kCanvasX - 20;
 static constexpr int kCanvasH = kWindowHeight - kCanvasY - 60;
 
 // ── 频谱图参数 ──
-static constexpr float kDbFloor = -60.0f;
+static constexpr float kDbFloor = -72.0f;
 static constexpr float kFreqMin = 20.0f;
 static constexpr float kFreqMax = 20000.0f;
 
@@ -41,7 +41,7 @@ static const Color kBgColor = {20, 20, 20, 255};
 
 static constexpr int kSampleRate = 48000;
 static constexpr int kFftSize = 4096;
-static constexpr int kHopSize = kFftSize / 4;
+static constexpr int kHopSize = kFftSize / 8;
 
 // 滚动时长: 全屏可见时间范围
 static constexpr float kScrollSeconds = 3.0f;
@@ -52,7 +52,7 @@ static constexpr int kImageWidth = static_cast<int>(kScrollSeconds * kSampleRate
 // ----------------------------------------
 
 // #define USE_FREQ_REASSIGNMENT
-static TimeReassignmentFrame<ViridisColormap> frame_;
+static TimeReassignmentFrame<MagmaColormap> frame_;
 static SpectrogramColumn column_;
 static ScrollingImage image_;
 
@@ -131,7 +131,7 @@ int main(void) {
     // ── 初始化 ──
     column_.Init(kCanvasH, kSampleRate, kFftSize, kHopSize);
 #ifdef USE_FREQ_REASSIGNMENT
-    frame_.Init(kSampleRate, kFftSize, 1, kCanvasH, kFreqMin, kFreqMax, kDbFloor);
+    frame_.Init(kSampleRate, kFftSize, 4, kCanvasH, kFreqMin, kFreqMax, kDbFloor);
 #else
     frame_.Init(kSampleRate, kFftSize, kHopSize, 4, kCanvasH, kFreqMin, kFreqMax, kDbFloor);
 #endif

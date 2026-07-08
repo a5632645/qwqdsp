@@ -130,11 +130,11 @@ struct TfDerivativeReassignmentFramePeakFilter {
             float c_pos = (group_delay + 0.5f) * subColScale_;
 
             // ── 2D 双线性分布 ──
-            y_pos = std::clamp(y_pos, 0.0f, static_cast<float>(outputHeight_ - 1));
+            y_pos = std::clamp(y_pos, 0.0f, static_cast<float>(outputHeight_ - 0.01f));
             int y_idx = static_cast<int>(std::floor(y_pos));
             bool y_last = (y_idx >= outputHeight_ - 1);
 
-            c_pos = std::clamp(c_pos, 0.0f, static_cast<float>(subColumns_ - 1));
+            c_pos = std::clamp(c_pos, 0.0f, static_cast<float>(subColumns_ - 0.01f));
             int c_idx = static_cast<int>(std::floor(c_pos));
             bool c_last = (c_idx >= subColumns_ - 1);
 

@@ -100,7 +100,7 @@ struct TimeReassignmentFrame {
 
             // ── 水平位置 ──
             float c_pos = (group_delay + 0.5f) * subColScale_;
-            c_pos = std::clamp(c_pos, 0.0f, static_cast<float>(subColumns_ - 1));
+            c_pos = std::clamp(c_pos, 0.0f, static_cast<float>(subColumns_ - 0.01f));
             int c_idx = static_cast<int>(std::floor(c_pos));
             float c_frac = c_pos - static_cast<float>(c_idx);
             bool c_last = (c_idx >= subColumns_ - 1);
