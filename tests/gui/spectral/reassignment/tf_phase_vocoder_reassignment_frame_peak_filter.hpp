@@ -60,6 +60,8 @@ struct TfPhaseVocoderReassignmentFrame {
         X_h_.resize(binSize_);
         X_th_.resize(binSize_);
         lastPhase_.resize(binSize_, 0.0f);
+        freq_c_arr_.resize(binSize_);
+        sidelobe_mask_.resize(binSize_);
 
         col_buf_.resize(subColumns_ * outputHeight_, 0.0f);
         column_.resize(outputHeight_);
@@ -85,23 +87,65 @@ struct TfPhaseVocoderReassignmentFrame {
         std::fill(fft_in_.begin() + fftSize_, fft_in_.end(), 0.0f);
         fft_.FFT(fft_in_, X_th_);
 
-        // ── 3. 遍历每个 bin → PV 频率 + 时间重分配 + 2D 分布 ──
+        // ── 3a. 第一趟: 计算 bin_dev (freq_c_arr_) + 更新 lastPhase_ ──
         for (int k = 0; k < binSize_; ++k) {
-            const float mag_lin = std::abs(X_h_[k]);
-            if (mag_lin < 1e-8f)
+            freq_c_arr_[k] = 0.0f;
+            if (std::abs(X_h_[k]) < 1e-8f)
                 continue;
-
-            const float mag_sq = std::max(std::norm(X_h_[k]), kEps);
-
-            // ── Phase Vocoder 瞬时频率 (Bernsee) ──
             float phase = std::arg(X_h_[k]);
             float dphi = phase - lastPhase_[k];
             lastPhase_[k] = phase;
             dphi -= static_cast<float>(k) * expct_;
             float qpd = std::floor((dphi + std::numbers::pi_v<float>) / two_pi);
             dphi -= qpd * two_pi;
-            float bin_dev = osamp_ * dphi / two_pi;
-            float inst_freq_hz = (static_cast<float>(k) + bin_dev) * bin_hz;
+            freq_c_arr_[k] = osamp_ * dphi / two_pi;
+        }
+
+        // ── 3b. 旁瓣检测 ──
+        constexpr int kFirstSideLobeBins = 4;
+        std::fill(sidelobe_mask_.begin(), sidelobe_mask_.end(), 0);
+        // for (int j = 1; j < kFirstSideLobeBins; ++j) {
+        //     float f_rs_j = static_cast<float>(j) + freq_c_arr_[j];
+        //     float f_rs_j1 = static_cast<float>(j + 1) + freq_c_arr_[j + 1];
+        //     if (f_rs_j > static_cast<float>(j) && f_rs_j1 < static_cast<float>(j + 1)) {
+        //         if ((f_rs_j - static_cast<float>(j)) < (static_cast<float>(j + 1) - f_rs_j1))
+        //             sidelobe_mask_[j] = 1;
+        //         else
+        //             sidelobe_mask_[j + 1] = 1;
+        //     }
+        // }
+        // for (int j = kFirstSideLobeBins; j < binSize_ - 2; ++j) {
+        //     float f_rs_j = static_cast<float>(j) + freq_c_arr_[j];
+        //     float f_rs_j1 = static_cast<float>(j + 1) + freq_c_arr_[j + 1];
+        //     if (f_rs_j > static_cast<float>(j) && f_rs_j1 < static_cast<float>(j + 1)) {
+        //         if ((f_rs_j - static_cast<float>(j)) > (static_cast<float>(j + 1) - f_rs_j1))
+        //             sidelobe_mask_[j] = 1;
+        //         else
+        //             sidelobe_mask_[j + 1] = 1;
+        //     }
+        // }
+
+        for (int j = 1; j < binSize_ - 2; ++j) {
+            float f_rs_j = static_cast<float>(j) + freq_c_arr_[j];
+            float f_rs_j1 = static_cast<float>(j + 1) + freq_c_arr_[j + 1];
+            if (f_rs_j > static_cast<float>(j) && f_rs_j1 < static_cast<float>(j + 1)) {
+                if ((f_rs_j - static_cast<float>(j)) > (static_cast<float>(j + 1) - f_rs_j1))
+                    sidelobe_mask_[j] = 1;
+                else
+                    sidelobe_mask_[j + 1] = 1;
+            }
+        }
+
+        // ── 3c. 遍历每个 bin → 时间重分配 + 2D 分布 (跳过旁瓣) ──
+        for (int k = 0; k < binSize_; ++k) {
+            if (sidelobe_mask_[k])
+                continue;
+            const float mag_lin = std::abs(X_h_[k]);
+            if (mag_lin < 1e-8f)
+                continue;
+
+            const float mag_sq = std::max(std::norm(X_h_[k]), kEps);
+            float inst_freq_hz = (static_cast<float>(k) + freq_c_arr_[k]) * bin_hz;
 
             // ── 时间矩重分配: group_delay ∈ [-0.5, 0.5] ──
             auto const& xh = X_h_[k];
@@ -193,6 +237,8 @@ private:
     std::vector<float> twindow_;
     std::vector<std::complex<float>> X_h_, X_th_;
     std::vector<float> lastPhase_;
+    std::vector<float> freq_c_arr_;
+    std::vector<uint8_t> sidelobe_mask_;
     std::vector<float> col_buf_; // [subCol * outputHeight + y]
     std::vector<Color> column_;
 };
