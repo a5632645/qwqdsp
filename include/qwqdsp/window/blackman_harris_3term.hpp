@@ -51,7 +51,7 @@ struct BlackmanHarrisThreeTerm {
         size_t L = x.size();
         for (size_t n = 0; n < L; ++n) {
             float t = static_cast<float>(n) / static_cast<float>(L);
-            x[n] = -twopi * a1 * std::sin(twopi * t) + twopi * 2 * a2 * std::sin(twopi * 2 * t);
+            x[n] = twopi * a1 * std::sin(twopi * t) - twopi * 2 * a2 * std::sin(twopi * 2 * t);
         }
     }
 private:

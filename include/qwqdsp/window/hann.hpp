@@ -48,7 +48,7 @@ struct Hann {
         const size_t N = x.size();
         for (size_t n = 0; n < N; ++n) {
             const float t = n / static_cast<float>(N);
-            x[n] = std::numbers::pi_v<float> * 2 * std::sin(std::numbers::pi_v<float> * 2 * t);
+            x[n] = std::numbers::pi_v<float> * std::sin(std::numbers::pi_v<float> * 2 * t);
         }
     }
 };
