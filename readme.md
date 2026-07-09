@@ -150,7 +150,8 @@
 | [`ivantsovy_state_space.ipynb`](notebooks/ivantsovy_state_space.ipynb) | Ivantsov 状态空间滤波器与其他滤波器架构(TDF2/SVF/LatticeLadder)对比 |
 | [`ola.ipynb`](notebooks/ola.ipynb) | 时变 FFT 卷积与 OLA/WOLA 完美重建实验 |
 | [`ola_long_convolution.ipynb`](notebooks/ola_long_convolution.ipynb) | 均匀分块 OLA 长脉冲响应卷积 |
-| [`reassignment.ipynb`](notebooks/reassignment.ipynb) | 时间-频率重分配方法实现与分析 |
+| [`reassignment_basic.ipynb`](notebooks/reassignment_basic.ipynb) | 时间-频率重分配方法实现 |
+| [`reassignment_low.ipynb`](notebooks/reassignment_low.ipynb) | 时间-频率重分配方法在低频的实现 |
 | [`sst.ipynb`](notebooks/sst.ipynb) | ssqueezepy 库的 STFT/CWT 时频分析演示 |
 | [`tpt_filter.ipynb`](notebooks/tpt_filter.ipynb) | SymPy 推导 TPT 滤波器（SVF/Sallen-Key/梯形）差分方程 |
 

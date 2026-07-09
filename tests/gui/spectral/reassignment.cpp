@@ -14,9 +14,11 @@
 #include "reassignment/tf_derivative_reassignment_frame_peak_filter.hpp"
 #include "reassignment/tf_reassignment_frame.hpp"
 #include "reassignment/time_reassignment_frame.hpp"
+#include "reassignment/tf_phase_vocoder_reassignment_frame.hpp"
 
 #include "reassignment/magma_colormap.hpp"
 #include "reassignment/viridis_colormap.hpp"
+#include "reassignment/jet_colormap.hpp"
 
 // ── 窗口与 UI 常量 ──
 static constexpr int kWindowWidth = 800;
@@ -40,7 +42,7 @@ static const Color kTextColor = {180, 180, 180, 255};
 static const Color kBgColor = {20, 20, 20, 255};
 
 static constexpr int kSampleRate = 48000;
-static constexpr int kFftSize = 4096;
+static constexpr int kFftSize = 2048;
 static constexpr int kHopSize = kFftSize / 8;
 
 // 滚动时长: 全屏可见时间范围
@@ -52,7 +54,7 @@ static constexpr int kImageWidth = static_cast<int>(kScrollSeconds * kSampleRate
 // ----------------------------------------
 
 // #define USE_FREQ_REASSIGNMENT
-static TimeReassignmentFrame<MagmaColormap> frame_;
+static TfPhaseVocoderReassignmentFrame<ViridisColormap> frame_;
 static SpectrogramColumn column_;
 static ScrollingImage image_;
 
@@ -62,9 +64,8 @@ static ScrollingImage image_;
 
 extern "C" void MaCaptureCallback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount) {
     (void)pDevice;
+    (void)pOutput;
     float const* src = reinterpret_cast<float const*>(pInput);
-    float* dst = reinterpret_cast<float*>(pOutput);
-    std::copy_n(src, frameCount, dst);
 
     column_.ProcessAudio({src, frameCount}, frame_, [&](std::span<const Color> col) { image_.PushColumn(col); });
 }
@@ -110,12 +111,10 @@ int main(void) {
     InitWindow(kWindowWidth, kWindowHeight, "Spectrogram - miniaudio + qwqdsp + raylib");
     SetTargetFPS(60);
 
-    // ── miniaudio 全双工 ──
-    ma_device_config config = ma_device_config_init(ma_device_type_duplex);
+    // ── miniaudio 回环捕获 ──
+    ma_device_config config = ma_device_config_init(ma_device_type_loopback);
     config.capture.format = ma_format_f32;
     config.capture.channels = 1;
-    config.playback.format = ma_format_f32;
-    config.playback.channels = 1;
     config.sampleRate = static_cast<ma_uint32>(kSampleRate);
     config.dataCallback = MaCaptureCallback;
     config.pUserData = nullptr;
@@ -133,7 +132,7 @@ int main(void) {
 #ifdef USE_FREQ_REASSIGNMENT
     frame_.Init(kSampleRate, kFftSize, 4, kCanvasH, kFreqMin, kFreqMax, kDbFloor);
 #else
-    frame_.Init(kSampleRate, kFftSize, kHopSize, 4, kCanvasH, kFreqMin, kFreqMax, kDbFloor);
+    frame_.Init(kSampleRate, kFftSize, kHopSize, 1, kCanvasH, kFreqMin, kFreqMax, kDbFloor);
 #endif
     image_.Init(kImageWidth, kCanvasH);
 

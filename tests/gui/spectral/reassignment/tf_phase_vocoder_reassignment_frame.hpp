@@ -16,17 +16,23 @@
 #include "raylib.h"
 
 /**
- * @brief 原始帧+窗 → 导数窗频率重分配 + 时间矩重分配 → magma 颜色输出
+ * @brief Phase Vocoder 瞬时频率 + 时间矩重分配 → 颜色输出
  *
- * 复制自 TfReassignmentFrame，但不使用 1-sample 时移和频率轴 roll。
- * 频率位置通过导数窗 x·dw 估计，时间位置通过时间加权窗 x·(n-center)w 估计。
+ * X_h  = FFT(x·w)                           (标准窗)
+ * X_th = FFT(x·(n-center)w[n])              (时间重分配)
  *
- * X_h  = FFT(x·w)
- * X_dh = FFT(x·dw)               (导数窗频率重分配)
- * X_th = FFT(x·(n-center)w[n])   (时间重分配)
+ * 频率: Bernsee Phase Vocoder
+ *   Δφ = angle(X_h[m]) - lastPhase
+ *   Δφ -= k · 2π · hop / N          (减去 bin 预期相位增量)
+ *   Δφ_wrapped → [-π, π]
+ *   bin_dev = N/hop · Δφ_wrapped / (2π)
+ *   f_inst = (k + bin_dev) · sr / N
+ *
+ * 时间: 时间加权窗法 (与导数窗版本相同)
+ *   group_delay = Re(conj(X_h)·X_th) / (|X_h|² · N)
  */
 template <typename Colormap>
-struct TfDerivativeReassignmentFramePeakFilter {
+struct TfPhaseVocoderReassignmentFrame {
     void Init(int sampleRate, int fftSize, int hopSize, int zeroPad, int outputHeight, float freqMin, float freqMax,
               float dbFloor) noexcept {
         sampleRate_ = sampleRate;
@@ -43,60 +49,82 @@ struct TfDerivativeReassignmentFramePeakFilter {
         logMin_ = std::log10(freqMin);
         logMax_ = std::log10(freqMax);
         subColScale_ = static_cast<float>(subColumns_);
+        expct_ = std::numbers::pi_v<float> * 2.0f * static_cast<float>(hopSize) / static_cast<float>(fftLen_);
+        osamp_ = static_cast<float>(fftSize) / static_cast<float>(hopSize);
 
         fft_.Init(fftLen_);
 
         fft_in_.resize(fftLen_, 0.0f);
         window_.resize(fftSize_);
-        dwindow_.resize(fftSize_);
         twindow_.resize(fftSize_);
         X_h_.resize(binSize_);
-        X_dh_.resize(binSize_);
         X_th_.resize(binSize_);
+        lastPhase_.resize(binSize_, 0.0f);
+        freq_c_arr_.resize(binSize_);
+        sidelobe_mask_.resize(binSize_);
 
         col_buf_.resize(subColumns_ * outputHeight_, 0.0f);
         column_.resize(outputHeight_);
 
-        freq_c_arr_.resize(binSize_);
-        sidelobe_mask_.resize(binSize_);
-
-        InitDerivativeWindow();
+        InitWindow();
     }
 
     void Process(std::span<const float> raw_frame, std::span<const float> /*window*/,
                  std::span<const float> /*windowed_frame*/) noexcept {
+        constexpr float kEps = 1e-20f;
+        const float bin_hz = static_cast<float>(sampleRate_) / static_cast<float>(fftLen_);
+        const float two_pi = std::numbers::pi_v<float> * 2.0f;
+
         // ── 1. X_h = FFT(x * w) ──
         for (int i = 0; i < fftSize_; ++i)
             fft_in_[i] = raw_frame[i] * window_[i];
         std::fill(fft_in_.begin() + fftSize_, fft_in_.end(), 0.0f);
         fft_.FFT(fft_in_, X_h_);
 
-        // ── 2. X_dh = FFT(x * dw) ──
-        for (int i = 0; i < fftSize_; ++i)
-            fft_in_[i] = raw_frame[i] * dwindow_[i];
-        std::fill(fft_in_.begin() + fftSize_, fft_in_.end(), 0.0f);
-        fft_.FFT(fft_in_, X_dh_);
-
-        // ── 3. X_th = FFT(x * (n-center)w[n]) ──
+        // ── 2. X_th = FFT(x * (n-center)w[n]) ──
         for (int i = 0; i < fftSize_; ++i)
             fft_in_[i] = raw_frame[i] * twindow_[i];
         std::fill(fft_in_.begin() + fftSize_, fft_in_.end(), 0.0f);
         fft_.FFT(fft_in_, X_th_);
 
-        // ── 4a. 计算 freq_corr 并检测旁瓣 ──
-        constexpr float kEps = 1e-20f;
+        // ── 3a. 第一趟: 计算 bin_dev (freq_c_arr_) + 更新 lastPhase_ ──
         for (int k = 0; k < binSize_; ++k) {
             freq_c_arr_[k] = 0.0f;
             if (std::abs(X_h_[k]) < 1e-8f)
                 continue;
-            float mag_sq = std::max(std::norm(X_h_[k]), 1e-20f);
-            auto xdh = X_dh_[k] / (2.0f * std::numbers::pi_v<float>);
-            auto const& xh = X_h_[k];
-            float up = xdh.imag() * xh.real() - xdh.real() * xh.imag();
-            freq_c_arr_[k] = -up / mag_sq * zeroPad_;
+            float phase = std::arg(X_h_[k]);
+            float dphi = phase - lastPhase_[k];
+            lastPhase_[k] = phase;
+            dphi -= static_cast<float>(k) * expct_;
+            float qpd = std::floor((dphi + std::numbers::pi_v<float>) / two_pi);
+            dphi -= qpd * two_pi;
+            freq_c_arr_[k] = osamp_ * dphi / two_pi;
         }
 
+        // ── 3b. 旁瓣检测 ──
+        constexpr int kFirstSideLobeBins = 4;
         std::fill(sidelobe_mask_.begin(), sidelobe_mask_.end(), 0);
+        // for (int j = 1; j < kFirstSideLobeBins; ++j) {
+        //     float f_rs_j = static_cast<float>(j) + freq_c_arr_[j];
+        //     float f_rs_j1 = static_cast<float>(j + 1) + freq_c_arr_[j + 1];
+        //     if (f_rs_j > static_cast<float>(j) && f_rs_j1 < static_cast<float>(j + 1)) {
+        //         if ((f_rs_j - static_cast<float>(j)) < (static_cast<float>(j + 1) - f_rs_j1))
+        //             sidelobe_mask_[j] = 1;
+        //         else
+        //             sidelobe_mask_[j + 1] = 1;
+        //     }
+        // }
+        // for (int j = kFirstSideLobeBins; j < binSize_ - 2; ++j) {
+        //     float f_rs_j = static_cast<float>(j) + freq_c_arr_[j];
+        //     float f_rs_j1 = static_cast<float>(j + 1) + freq_c_arr_[j + 1];
+        //     if (f_rs_j > static_cast<float>(j) && f_rs_j1 < static_cast<float>(j + 1)) {
+        //         if ((f_rs_j - static_cast<float>(j)) > (static_cast<float>(j + 1) - f_rs_j1))
+        //             sidelobe_mask_[j] = 1;
+        //         else
+        //             sidelobe_mask_[j + 1] = 1;
+        //     }
+        // }
+
         for (int j = 1; j < binSize_ - 2; ++j) {
             float f_rs_j = static_cast<float>(j) + freq_c_arr_[j];
             float f_rs_j1 = static_cast<float>(j + 1) + freq_c_arr_[j + 1];
@@ -108,9 +136,7 @@ struct TfDerivativeReassignmentFramePeakFilter {
             }
         }
 
-        // ── 4. 遍历每个 bin → 主瓣合并 + 2D 重分配 ──
-        const float bin_hz = static_cast<float>(sampleRate_) / static_cast<float>(fftLen_);
-
+        // ── 3c. 遍历每个 bin → 时间重分配 + 2D 分布 (跳过旁瓣) ──
         for (int k = 0; k < binSize_; ++k) {
             if (sidelobe_mask_[k])
                 continue;
@@ -119,15 +145,10 @@ struct TfDerivativeReassignmentFramePeakFilter {
                 continue;
 
             const float mag_sq = std::max(std::norm(X_h_[k]), kEps);
-
-            // ── 导数窗频率重分配: inst_freq_hz ──
-            auto xdh = X_dh_[k] / (2.0f * std::numbers::pi_v<float>);
-            auto const& xh = X_h_[k];
-            float up = xdh.imag() * xh.real() - xdh.real() * xh.imag();
-            float freq_c = -up / mag_sq * zeroPad_;
-            float inst_freq_hz = (static_cast<float>(k) + freq_c) * bin_hz;
+            float inst_freq_hz = (static_cast<float>(k) + freq_c_arr_[k]) * bin_hz;
 
             // ── 时间矩重分配: group_delay ∈ [-0.5, 0.5] ──
+            auto const& xh = X_h_[k];
             float time_num = xh.real() * X_th_[k].real() + xh.imag() * X_th_[k].imag();
             float time_offset = time_num / mag_sq;
             float group_delay = time_offset / static_cast<float>(fftSize_);
@@ -174,7 +195,7 @@ struct TfDerivativeReassignmentFramePeakFilter {
             }
         }
 
-        // ── 5. 弹出最旧子列 → dB → Color ──
+        // ── 4. 弹出最旧子列 → dB → Color ──
         constexpr float kDbEps = 1e-12f;
         for (int y = 0; y < outputHeight_; ++y) {
             float dB = 20.0f * std::log10(col_buf_[y] + kDbEps);
@@ -197,14 +218,10 @@ struct TfDerivativeReassignmentFramePeakFilter {
         return outputHeight_;
     }
 private:
-    void InitDerivativeWindow() noexcept {
+    void InitWindow() noexcept {
         qwqdsp_window::BlackmanHarrisThreeTerm::Window(window_, true);
         const float window_gain = qwqdsp_window::Helper::NormalizeGain(window_);
         for (float& v : window_)
-            v *= window_gain;
-
-        qwqdsp_window::BlackmanHarrisThreeTerm::DWindow(dwindow_);
-        for (float& v : dwindow_)
             v *= window_gain;
 
         qwqdsp_window::Helper::TWindow(twindow_, window_);
@@ -212,14 +229,14 @@ private:
 
     int sampleRate_{}, fftSize_{}, hopSize_{}, zeroPad_{}, fftLen_{}, binSize_{};
     int subColumns_{}, outputHeight_{};
-    float freqMin_{}, freqMax_{}, logMin_{}, logMax_{}, dbFloor_{}, subColScale_{};
+    float freqMin_{}, freqMax_{}, logMin_{}, logMax_{}, dbFloor_{}, subColScale_{}, expct_{}, osamp_{};
 
     qwqdsp_spectral::RealFFT fft_;
     std::vector<float> fft_in_;
     std::vector<float> window_;
-    std::vector<float> dwindow_;
     std::vector<float> twindow_;
-    std::vector<std::complex<float>> X_h_, X_dh_, X_th_;
+    std::vector<std::complex<float>> X_h_, X_th_;
+    std::vector<float> lastPhase_;
     std::vector<float> freq_c_arr_;
     std::vector<uint8_t> sidelobe_mask_;
     std::vector<float> col_buf_; // [subCol * outputHeight + y]

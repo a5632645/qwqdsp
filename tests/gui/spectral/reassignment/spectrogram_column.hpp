@@ -6,6 +6,10 @@
 
 #include <qwqdsp/window/blackman_harris.hpp>
 #include <qwqdsp/window/helper.hpp>
+#include <qwqdsp/window/hamming.hpp>
+#include <qwqdsp/window/blackman.hpp>
+#include <qwqdsp/window/hann.hpp>
+#include <qwqdsp/window/blackman_harris_3term.hpp>
 
 #include "raylib.h"
 
@@ -23,7 +27,7 @@ struct SpectrogramColumn {
         hop_size_ = hopSize;
 
         window_.resize(fft_size_);
-        qwqdsp_window::BlackmanHarris::Window(window_, true);
+        qwqdsp_window::BlackmanHarrisThreeTerm::Window(window_, true);
         qwqdsp_window::Helper::Normalize(window_);
 
         in_buffer_.resize(fft_size_, 0.0f);

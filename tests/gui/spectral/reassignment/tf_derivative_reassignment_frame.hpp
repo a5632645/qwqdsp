@@ -10,6 +10,8 @@
 
 #include <qwqdsp/spectral/real_fft.hpp>
 #include <qwqdsp/window/blackman_harris.hpp>
+#include <qwqdsp/window/blackman_harris_3term.hpp>
+#include <qwqdsp/window/window.hpp>
 #include <qwqdsp/window/helper.hpp>
 
 #include "raylib.h"
@@ -167,12 +169,12 @@ struct TfDerivativeReassignmentFrame {
     }
 private:
     void InitDerivativeWindow() noexcept {
-        qwqdsp_window::BlackmanHarris::Window(window_, true);
+        qwqdsp_window::BlackmanHarrisThreeTerm::Window(window_, true);
         const float window_gain = qwqdsp_window::Helper::NormalizeGain(window_);
         for (float& v : window_)
             v *= window_gain;
 
-        qwqdsp_window::BlackmanHarris::DWindow(dwindow_);
+        qwqdsp_window::BlackmanHarrisThreeTerm::DWindow(dwindow_);
         for (float& v : dwindow_)
             v *= window_gain;
 
