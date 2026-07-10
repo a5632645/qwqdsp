@@ -19,7 +19,7 @@ struct Helper {
 
     static void TWindow(std::span<float> buffer, std::span<const float> window) noexcept {
         assert(buffer.size() == window.size());
-        float offset = 0.5f * window.size();
+        float offset = 0.5f * (window.size() - 1);
         for (int k = 0; k < window.size(); ++k) {
             buffer[k] = window[k] * (k - offset);
         }
