@@ -43,7 +43,7 @@ static const Color kTextColor = {180, 180, 180, 255};
 static const Color kBgColor = {20, 20, 20, 255};
 
 static constexpr int kSampleRate = 48000;
-static constexpr int kFftSize = 2048;
+static constexpr int kFftSize = 4096;
 static constexpr int kHopSize = kFftSize / 8;
 
 // 滚动时长: 全屏可见时间范围

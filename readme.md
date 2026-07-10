@@ -107,7 +107,7 @@
 | [`spectrum/`](tests/gui/spectral/spectrum/) | LED 条形图频谱分析仪（25 bin，嵌入式 C 移植） |
 | [`spectrum2/`](tests/gui/spectral/spectrum2/) | Mel 滤波器组频谱分析仪（81 bin + 32 频带） |
 | [`spectrum4.cpp`](tests/gui/spectral/spectrum4.cpp) | 粗略的多分辨率频谱分析仪 |
-| [`reassignment.cpp`](tests/gui/spectral/reassignment.cpp) | 实时频谱重分配时频图 |
+| [`reassignment.cpp`](tests/gui/spectral/reassignment.cpp) | 实时频谱重分配(`最强是时间频率重分配+收敛指示器`)时频图 |
 
 ### 🎛️ 合成器 (Synth)
 `tests/gui/synth/`
