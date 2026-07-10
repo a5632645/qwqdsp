@@ -18,6 +18,8 @@
 /**
  * @brief Phase Vocoder 瞬时频率 + 时间矩重分配 → 颜色输出
  *
+ * EnablePeakFilter=true 时启用 Loris 式重分配最小值旁瓣剔除。
+ *
  * X_h  = FFT(x·w)                           (标准窗)
  * X_th = FFT(x·(n-center)w[n])              (时间重分配)
  *
@@ -28,10 +30,10 @@
  *   bin_dev = N/hop · Δφ_wrapped / (2π)
  *   f_inst = (k + bin_dev) · sr / N
  *
- * 时间: 时间加权窗法 (与导数窗版本相同)
+ * 时间: 时间加权窗法
  *   group_delay = Re(conj(X_h)·X_th) / (|X_h|² · N)
  */
-template <typename Colormap>
+template <typename Colormap, bool EnablePeakFilter = false>
 struct TfPhaseVocoderReassignmentFrame {
     void Init(int sampleRate, int fftSize, int hopSize, int zeroPad, int outputHeight, float freqMin, float freqMax,
               float dbFloor) noexcept {
@@ -61,6 +63,11 @@ struct TfPhaseVocoderReassignmentFrame {
         X_th_.resize(binSize_);
         lastPhase_.resize(binSize_, 0.0f);
 
+        if constexpr (EnablePeakFilter) {
+            freq_c_arr_.resize(binSize_);
+            sidelobe_mask_.resize(binSize_);
+        }
+
         col_buf_.resize(subColumns_ * outputHeight_, 0.0f);
         column_.resize(outputHeight_);
 
@@ -85,8 +92,44 @@ struct TfPhaseVocoderReassignmentFrame {
         std::fill(fft_in_.begin() + fftSize_, fft_in_.end(), 0.0f);
         fft_.FFT(fft_in_, X_th_);
 
-        // ── 3. 遍历每个 bin → PV 频率 + 时间重分配 + 2D 分布 ──
+        // ── 3a. 第一趟: 计算 bin_dev (仅 EnablePeakFilter 需提前算) ──
+        if constexpr (EnablePeakFilter) {
+            for (int k = 0; k < binSize_; ++k) {
+                freq_c_arr_[k] = 0.0f;
+                if (std::abs(X_h_[k]) < 1e-8f)
+                    continue;
+                float phase = std::arg(X_h_[k]);
+                float dphi = phase - lastPhase_[k];
+                lastPhase_[k] = phase;
+                dphi -= static_cast<float>(k) * expct_;
+                float qpd = std::floor((dphi + std::numbers::pi_v<float>) / two_pi);
+                dphi -= qpd * two_pi;
+                freq_c_arr_[k] = osamp_ * dphi / two_pi;
+            }
+        }
+
+        // ── 3b. 旁瓣检测 (仅 EnablePeakFilter) ──
+        if constexpr (EnablePeakFilter) {
+            std::fill(sidelobe_mask_.begin(), sidelobe_mask_.end(), 0);
+            for (int j = 1; j < binSize_ - 2; ++j) {
+                float f_rs_j = static_cast<float>(j) + freq_c_arr_[j];
+                float f_rs_j1 = static_cast<float>(j + 1) + freq_c_arr_[j + 1];
+                if (f_rs_j > static_cast<float>(j) && f_rs_j1 < static_cast<float>(j + 1)) {
+                    if ((f_rs_j - static_cast<float>(j)) > (static_cast<float>(j + 1) - f_rs_j1))
+                        sidelobe_mask_[j] = 1;
+                    else
+                        sidelobe_mask_[j + 1] = 1;
+                }
+            }
+        }
+
+        // ── 3c. 遍历每个 bin → 时间重分配 + 2D 分布 ──
         for (int k = 0; k < binSize_; ++k) {
+            if constexpr (EnablePeakFilter) {
+                if (sidelobe_mask_[k])
+                    continue;
+            }
+
             const float mag_lin = std::abs(X_h_[k]);
             if (mag_lin < 1e-8f)
                 continue;
@@ -94,13 +137,18 @@ struct TfPhaseVocoderReassignmentFrame {
             const float mag_sq = std::max(std::norm(X_h_[k]), kEps);
 
             // ── Phase Vocoder 瞬时频率 (Bernsee) ──
-            float phase = std::arg(X_h_[k]);
-            float dphi = phase - lastPhase_[k];
-            lastPhase_[k] = phase;
-            dphi -= static_cast<float>(k) * expct_;
-            float qpd = std::floor((dphi + std::numbers::pi_v<float>) / two_pi);
-            dphi -= qpd * two_pi;
-            float bin_dev = osamp_ * dphi / two_pi;
+            float bin_dev;
+            if constexpr (EnablePeakFilter) {
+                bin_dev = freq_c_arr_[k];
+            } else {
+                float phase = std::arg(X_h_[k]);
+                float dphi = phase - lastPhase_[k];
+                lastPhase_[k] = phase;
+                dphi -= static_cast<float>(k) * expct_;
+                float qpd = std::floor((dphi + std::numbers::pi_v<float>) / two_pi);
+                dphi -= qpd * two_pi;
+                bin_dev = osamp_ * dphi / two_pi;
+            }
             float inst_freq_hz = (static_cast<float>(k) + bin_dev) * bin_hz;
 
             // ── 时间矩重分配: group_delay ∈ [-0.5, 0.5] ──
@@ -193,6 +241,8 @@ private:
     std::vector<float> twindow_;
     std::vector<std::complex<float>> X_h_, X_th_;
     std::vector<float> lastPhase_;
+    std::vector<float> freq_c_arr_;
+    std::vector<uint8_t> sidelobe_mask_;
     std::vector<float> col_buf_; // [subCol * outputHeight + y]
     std::vector<Color> column_;
 };
