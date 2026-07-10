@@ -32,6 +32,10 @@ inline std::string WormholeWav() {
     return (GetInputDir() / "wormhole.wav").string();
 }
 
+inline std::string SweepWav() {
+    return (GetInputDir() / "sweep.wav").string();
+}
+
 inline std::string InputFile(std::string str) {
     return (GetInputDir() / str).string();
 }
