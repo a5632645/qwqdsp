@@ -15,6 +15,7 @@
 #include "reassignment/tf_reassignment_frame.hpp"
 #include "reassignment/time_reassignment_frame.hpp"
 #include "reassignment/tf_phase_vocoder_reassignment_frame.hpp"
+#include "reassignment/tf_derivative_reassignment_frame_conv.hpp"
 
 #include "reassignment/magma_colormap.hpp"
 #include "reassignment/viridis_colormap.hpp"
@@ -54,7 +55,7 @@ static constexpr int kImageWidth = static_cast<int>(kScrollSeconds * kSampleRate
 // ----------------------------------------
 
 // #define USE_FREQ_REASSIGNMENT
-static TfPhaseVocoderReassignmentFrame<ViridisColormap> frame_;
+static TfDerivativeReassignmentFrameConv<ViridisColormap> frame_;
 static SpectrogramColumn column_;
 static ScrollingImage image_;
 
