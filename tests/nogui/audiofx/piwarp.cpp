@@ -8,6 +8,10 @@
 #include <vector>
 #include <work_dir.hpp>
 
+// ------------------------------------------------------------
+// FFT视作滤波器组，取共轭反转每个子带
+// ------------------------------------------------------------
+
 struct Piwarp1Class {
     Piwarp1Class(int fft_size) {
         window_.resize(fft_size);
@@ -63,6 +67,10 @@ static void Piwarp1() {
     file.save(qwqdsp_support::OutputFile("piwarp1.wav"));
 }
 
+// ------------------------------------------------------------
+// DFT视作滤波器组，取共轭反转每个子带
+// ------------------------------------------------------------
+
 struct Piwarp2Class {
     Piwarp2Class(int dft_size) {
         window_.resize(dft_size);
@@ -100,10 +108,10 @@ struct Piwarp2Class {
 };
 
 static void Piwarp2() {
-    AudioFile<float> file{qwqdsp_support::SweepWav()};
+    AudioFile<float> file{qwqdsp_support::InputFile("carry.wav")};
     auto& x_vec = file.samples.front();
 
-    constexpr int filter_banks = 200;
+    constexpr int filter_banks = 256;
     constexpr int dft_size = filter_banks * 4 - 1;
     Piwarp2Class piwarp2{dft_size};
 
@@ -125,7 +133,54 @@ static void Piwarp2() {
     file.save(qwqdsp_support::OutputFile("piwarp2.wav"));
 }
 
+// ------------------------------------------------------------
+// DFT每个取共轭 等价于 实数信号反向时间
+// ------------------------------------------------------------
+
+struct Piwarp3Class {
+    Piwarp3Class(int dft_size) {
+        window_.resize(dft_size);
+        qwqdsp_window::Hann::Window(window_, true);
+    }
+
+    void operator()(std::span<const float> in, std::span<float> out) noexcept {
+        int len = in.size();
+        for (int i = 0; i < in.size(); ++i) {
+            out[i] = window_[i] * in[len - i - 1];
+        }
+    }
+
+    std::vector<float> window_;
+};
+
+static void Piwarp3() {
+    AudioFile<float> file{qwqdsp_support::InputFile("carry.wav")};
+    // AudioFile<float> file{qwqdsp_support::SweepWav()};
+    auto& x_vec = file.samples.front();
+
+    constexpr int filter_banks = 50;
+
+    qwqdsp_segement::AnalyzeSynthsisOffline as;
+    as.SetSize(filter_banks);
+
+    // 下采样倍数必须设置为弱COLA条件的倍数
+    // 增加子带采样率会导致梳妆滤波
+    as.SetInputHop(filter_banks / 2);
+    as.SetOutputHop(filter_banks / 2);
+    as.Reset();
+
+    std::vector<float> y_vec;
+    Piwarp3Class piwarp3{filter_banks};
+    as.Process(x_vec, y_vec, piwarp3);
+
+    file.setNumSamplesPerChannel(y_vec.size());
+    file.samples.front() = std::move(y_vec);
+    file.setNumChannels(1);
+    file.save(qwqdsp_support::OutputFile("piwarp3.wav"));
+}
+
 int main() {
     Piwarp1();
     Piwarp2();
+    Piwarp3();
 }
