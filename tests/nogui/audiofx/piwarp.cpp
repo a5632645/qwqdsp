@@ -2,6 +2,7 @@
 #include <audio_ops.hpp>
 #include <complex>
 #include <qwqdsp/segement/analyze_synthsis_offline.hpp>
+#include <qwqdsp/segement/analyze_synthsis_offline2.hpp>
 #include <qwqdsp/spectral/ipp_real_fft.hpp>
 #include <qwqdsp/window/hann.hpp>
 #include <qwqdsp/window/window.hpp>
@@ -154,8 +155,8 @@ struct Piwarp3Class {
 };
 
 static void Piwarp3() {
-    AudioFile<float> file{qwqdsp_support::InputFile("carry.wav")};
-    // AudioFile<float> file{qwqdsp_support::SweepWav()};
+    // AudioFile<float> file{qwqdsp_support::InputFile("carry.wav")};
+    AudioFile<float> file{qwqdsp_support::SweepWav()};
     auto& x_vec = file.samples.front();
 
     constexpr int filter_banks = 50;
@@ -179,8 +180,115 @@ static void Piwarp3() {
     file.save(qwqdsp_support::OutputFile("piwarp3.wav"));
 }
 
+// ------------------------------------------------------------
+// DFT每个取共轭 等价于 实数信号反向时间
+// ------------------------------------------------------------
+
+struct Piwarp4Class {
+    Piwarp4Class(int in_size, int out_size) {
+        window_.resize(std::max(in_size, out_size));
+        qwqdsp_window::Hann::Window(window_, true);
+        buffer_.resize(out_size);
+
+        in_size_ = in_size;
+        out_size_ = out_size;
+    }
+
+    void operator()(std::span<const float> in, std::span<float> out) noexcept {
+        // 将 buffer_ 从 in_size_ 线性插值拉伸到 out_size_
+        for (int i = 0; i < out_size_; ++i) {
+            float pos = static_cast<float>(i) * (in_size_ - 1) / (out_size_ - 1);
+            int idx = static_cast<int>(pos);
+            float frac = pos - idx;
+            if (idx + 1 < in_size_) {
+                buffer_[i] = in[idx] * (1.0f - frac) + in[idx + 1] * frac;
+            }
+            else {
+                buffer_[i] = in[idx];
+            }
+        }
+
+        int len = out.size();
+        for (int i = 0; i < out.size(); ++i) {
+            out[i] = window_[i] * buffer_[len - i - 1];
+        }
+    }
+
+    std::vector<float> window_;
+    std::vector<float> buffer_;
+    int in_size_{};
+    int out_size_{};
+};
+
+struct Piwarp5Class {
+    Piwarp5Class(int in_size, int out_size) {
+        window_.resize(in_size);
+        qwqdsp_window::Hann::Window(window_, true);
+        buffer_.resize(in_size);
+
+        in_size_ = in_size;
+        out_size_ = out_size;
+    }
+
+    void operator()(std::span<const float> in, std::span<float> out) noexcept {
+        int len = in.size();
+        for (int i = 0; i < in.size(); ++i) {
+            buffer_[i] = window_[i] * in[len - i - 1];
+        }
+
+        // 将 buffer_ 从 in_size_ 线性插值拉伸到 out_size_
+        for (int i = 0; i < out_size_; ++i) {
+            float pos = static_cast<float>(i) * (in_size_ - 1) / (out_size_ - 1);
+            int idx = static_cast<int>(pos);
+            float frac = pos - idx;
+            if (idx + 1 < in_size_) {
+                out[i] = buffer_[idx] * (1.0f - frac) + buffer_[idx + 1] * frac;
+            }
+            else {
+                out[i] = buffer_[idx];
+            }
+        }
+    }
+
+    std::vector<float> window_;
+    std::vector<float> buffer_;
+    int in_size_{};
+    int out_size_{};
+};
+
+static void Piwarp4() {
+    // AudioFile<float> file{qwqdsp_support::InputFile("pwm.wav")};
+    // AudioFile<float> file{qwqdsp_support::SweepWav()};
+    AudioFile<float> file{qwqdsp_support::WormholeWav()};
+    auto& x_vec = file.samples.front();
+
+    constexpr int filter_banks = 100;
+    constexpr int out_size = 200;
+
+    qwqdsp_segement::AnalyzeSynthsisOffline2 as;
+    as.SetInputSize(filter_banks);
+    as.SetOutputSize(out_size);
+
+    // 下采样倍数必须设置为弱COLA条件的倍数
+    // 增加子带采样率会导致梳妆滤波
+    as.SetInputHop(filter_banks / 2);
+    as.SetOutputHop(filter_banks / 2);
+    as.Reset();
+
+    std::vector<float> y_vec;
+    Piwarp5Class piwarp4{filter_banks, out_size};
+    as.Process(x_vec, y_vec, piwarp4);
+
+    file.setNumSamplesPerChannel(y_vec.size());
+    // file.samples.emplace_back(std::move(y_vec));
+    file.samples.front() = std::move(y_vec);
+    file.setNumChannels(1);
+    file.save(qwqdsp_support::OutputFile("piwarp4.wav"));
+}
+
 int main() {
-    Piwarp1();
-    Piwarp2();
-    Piwarp3();
+    // Piwarp1();
+    // Piwarp2();
+    // Piwarp3();
+    Piwarp4();
 }

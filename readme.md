@@ -53,7 +53,7 @@
 | [`resample.cpp`](tests/nogui/audiofx/resample.cpp) | 扫频重采样至 96 kHz，测试FIR/IIR/多相 重采样 |
 | [`reverb.cpp`](tests/nogui/audiofx/reverb.cpp) | C 风格 FDN 混响 |
 | [`oversample.cpp`](tests/nogui/audiofx/oversample.cpp) | 过采样对代数波形塑形器的失真抑制效果对比 |
-| [`piwarp.cpp`](tests/nogui/audiofx/piwarp.cpp) | 让我们使用STFT滤波器组来使用piwarp!(这里是OLA实现，可能存在一些误差) |
+| [`piwarp.cpp`](tests/nogui/audiofx/piwarp.cpp) | 重新实现piwarp的效果!(STFT滤波器组/时间反向/时间拉伸反向) |
 
 ### 📊 频谱处理示例 (Spectral Demos)
 
