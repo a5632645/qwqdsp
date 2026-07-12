@@ -52,7 +52,7 @@ struct TfPhaseVocoderReassignmentFrame {
         logMax_ = std::log10(freqMax);
         subColScale_ = static_cast<float>(subColumns_);
         expct_ = std::numbers::pi_v<float> * 2.0f * static_cast<float>(hopSize) / static_cast<float>(fftLen_);
-        osamp_ = static_cast<float>(fftSize) / static_cast<float>(hopSize);
+        osamp_ = static_cast<float>(fftLen_) / static_cast<float>(hopSize);
 
         fft_.Init(fftLen_);
 
