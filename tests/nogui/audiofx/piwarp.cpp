@@ -44,15 +44,15 @@ struct Piwarp1Class {
 };
 
 static void Piwarp1() {
-    AudioFile<float> file{qwqdsp_support::InputFile("carry.wav")};
+    AudioFile<float> file{qwqdsp_support::WormholeWav()};
     auto& x_vec = file.samples.front();
 
-    constexpr int fft_size = 512;
+    constexpr int fft_size = 1024;
 
     qwqdsp_segement::AnalyzeSynthsisOffline as;
     as.SetSize(fft_size);
 
-    // 下采样倍数必须设置为弱COLA条件的倍数
+    // R必须设置为弱COLA条件的倍数
     // 增加子带采样率会导致梳妆滤波
     as.SetInputHop(fft_size / 4);
     as.SetOutputHop(fft_size / 4);
@@ -109,20 +109,22 @@ struct Piwarp2Class {
 };
 
 static void Piwarp2() {
-    AudioFile<float> file{qwqdsp_support::InputFile("carry.wav")};
+    AudioFile<float> file{qwqdsp_support::WormholeWav()};
     auto& x_vec = file.samples.front();
 
-    constexpr int filter_banks = 256;
-    constexpr int dft_size = filter_banks * 4 - 1;
+    constexpr int filter_banks = 200;
+    constexpr int dft_size = (filter_banks - 1) * 4;
     Piwarp2Class piwarp2{dft_size};
 
     qwqdsp_segement::AnalyzeSynthsisOffline as;
     as.SetSize(piwarp2.fft_.GetFFTSize());
 
-    // 下采样倍数必须设置为弱COLA条件的倍数
+    // R必须设置为弱COLA条件的倍数
     // 增加子带采样率会导致梳妆滤波
-    as.SetInputHop(dft_size / 4);
-    as.SetOutputHop(dft_size / 4);
+    // as.SetInputHop(dft_size / 4);
+    // as.SetOutputHop(dft_size / 4);
+    as.SetInputHop(filter_banks - 1);
+    as.SetOutputHop(filter_banks - 1);
     as.Reset();
 
     std::vector<float> y_vec;
@@ -141,13 +143,13 @@ static void Piwarp2() {
 struct Piwarp3Class {
     Piwarp3Class(int dft_size) {
         window_.resize(dft_size);
-        qwqdsp_window::Hann::Window(window_, true);
+        qwqdsp_window::BlackmanHarris::Window(window_, true);
     }
 
     void operator()(std::span<const float> in, std::span<float> out) noexcept {
         int len = in.size();
         for (int i = 0; i < in.size(); ++i) {
-            out[i] = window_[i] * in[len - i - 1];
+            out[i] = 2 * window_[i] * in[len - i - 1];
         }
     }
 
@@ -156,22 +158,25 @@ struct Piwarp3Class {
 
 static void Piwarp3() {
     // AudioFile<float> file{qwqdsp_support::InputFile("carry.wav")};
-    AudioFile<float> file{qwqdsp_support::SweepWav()};
+    AudioFile<float> file{qwqdsp_support::WormholeWav()};
     auto& x_vec = file.samples.front();
 
-    constexpr int filter_banks = 50;
+    constexpr int filter_banks = 200;
+    constexpr int len = (filter_banks - 1) * 4;
 
     qwqdsp_segement::AnalyzeSynthsisOffline as;
-    as.SetSize(filter_banks);
+    as.SetSize(len);
 
-    // 下采样倍数必须设置为弱COLA条件的倍数
-    // 增加子带采样率会导致梳妆滤波
-    as.SetInputHop(filter_banks / 2);
-    as.SetOutputHop(filter_banks / 2);
+    // // R必须设置为弱COLA条件的倍数
+    // // 增加子带采样率会导致梳妆滤波
+    // as.SetInputHop(len / 2);
+    // as.SetOutputHop(len / 2);
+    as.SetInputHop(filter_banks - 1);
+    as.SetOutputHop(filter_banks - 1);
     as.Reset();
 
     std::vector<float> y_vec;
-    Piwarp3Class piwarp3{filter_banks};
+    Piwarp3Class piwarp3{len};
     as.Process(x_vec, y_vec, piwarp3);
 
     file.setNumSamplesPerChannel(y_vec.size());
@@ -187,7 +192,7 @@ static void Piwarp3() {
 struct Piwarp4Class {
     Piwarp4Class(int in_size, int out_size) {
         window_.resize(std::max(in_size, out_size));
-        qwqdsp_window::Hann::Window(window_, true);
+        qwqdsp_window::BlackmanHarris::Window(window_, true);
         buffer_.resize(out_size);
 
         in_size_ = in_size;
@@ -223,7 +228,7 @@ struct Piwarp4Class {
 struct Piwarp5Class {
     Piwarp5Class(int in_size, int out_size) {
         window_.resize(in_size);
-        qwqdsp_window::Hann::Window(window_, true);
+        qwqdsp_window::BlackmanHarris::Window(window_, true);
         buffer_.resize(in_size);
 
         in_size_ = in_size;
@@ -233,7 +238,7 @@ struct Piwarp5Class {
     void operator()(std::span<const float> in, std::span<float> out) noexcept {
         int len = in.size();
         for (int i = 0; i < in.size(); ++i) {
-            buffer_[i] = window_[i] * in[len - i - 1];
+            buffer_[i] = 2 * window_[i] * in[len - i - 1];
         }
 
         // 将 buffer_ 从 in_size_ 线性插值拉伸到 out_size_
@@ -262,21 +267,24 @@ static void Piwarp4() {
     AudioFile<float> file{qwqdsp_support::WormholeWav()};
     auto& x_vec = file.samples.front();
 
-    constexpr int filter_banks = 100;
-    constexpr int out_size = 200;
+    constexpr int filter_banks = 200;
+    constexpr int len = (filter_banks - 1) * 4;
+    constexpr int out_size = len * 2.0f;
 
     qwqdsp_segement::AnalyzeSynthsisOffline2 as;
-    as.SetInputSize(filter_banks);
+    as.SetInputSize(len);
     as.SetOutputSize(out_size);
 
-    // 下采样倍数必须设置为弱COLA条件的倍数
+    // R必须设置为弱COLA条件的倍数
     // 增加子带采样率会导致梳妆滤波
-    as.SetInputHop(filter_banks / 2);
-    as.SetOutputHop(filter_banks / 2);
+    // as.SetInputHop(len / 4);
+    // as.SetOutputHop(len / 4);
+    as.SetInputHop(filter_banks - 1);
+    as.SetOutputHop(filter_banks - 1);
     as.Reset();
 
     std::vector<float> y_vec;
-    Piwarp5Class piwarp4{filter_banks, out_size};
+    Piwarp5Class piwarp4{len, out_size};
     as.Process(x_vec, y_vec, piwarp4);
 
     file.setNumSamplesPerChannel(y_vec.size());
@@ -287,8 +295,8 @@ static void Piwarp4() {
 }
 
 int main() {
-    // Piwarp1();
-    // Piwarp2();
-    // Piwarp3();
+    Piwarp1();
+    Piwarp2();
+    Piwarp3();
     Piwarp4();
 }
