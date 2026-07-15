@@ -93,8 +93,16 @@
 |------|------|
 | [`interpolations.cpp`](tests/gui/interpolations.cpp) | 拖拽控制点实时对比四种插值曲线 |
 | [`auto_notch_rt.cpp`](tests/gui/auto_notch_rt.cpp) | 实时啸叫检测与自适应陷波 |
-| [`filters.cpp`](tests/gui/filters.cpp) | 多种滤波器（SVF / Ladder / Sallen-Key / OTA） |
-| [`filters2.cpp`](tests/gui/filters2.cpp) | 过采样 + 非线性滤波器 |
+
+### 🔊 GUI 音频效果 (GUI Audio FX)
+
+`tests/gui/audiofx/`
+
+| 文件 | 说明 |
+|------|------|
+| [`echo.cpp`](tests/gui/audiofx/echo.cpp) | 立体声回声效果（预延迟/回声时间/Repeat/高低通滤波） |
+| [`filters.cpp`](tests/gui/audiofx/filters.cpp) | 多种滤波器（SVF / Ladder / Sallen-Key / OTA） |
+| [`filters2.cpp`](tests/gui/audiofx/filters2.cpp) | 过采样 + 非线性滤波器 |
 
 ### 📈 频谱分析 (Spectral)
 `tests/gui/spectral/`
@@ -257,7 +265,7 @@
 | [`oversample.hpp`](include/qwqdsp/fx/oversample.hpp) | `Oversample` 多级半带过采样/降采样器 |
 | [`pitch_shifter.hpp`](include/qwqdsp/fx/pitch_shifter.hpp) | `PitchShifter` 环形缓冲音高移位器 |
 | [`pitch_shifter2.hpp`](include/qwqdsp/fx/pitch_shifter2.hpp) | `PhaseVocoder` 相位声码器音高移位 |
-| [`plat_reverb.hpp`](include/qwqdsp/fx/plat_reverb.hpp) | `PlateReverb` Dattorro 板式混响 |
+| [`plate_reverb.hpp`](include/qwqdsp/fx/plate_reverb.hpp) | `PlateReverb` Dattorro 板式混响 |
 | [`polyphase_resample_fir.hpp`](include/qwqdsp/fx/polyphase_resample_fir.hpp) | `PolyphaseDownsamplerFir` 多相下采样 FIR<br>`PolyphaseUpsamplerFir` 多相上采样 FIR |
 | [`resample.hpp`](include/qwqdsp/fx/resample.hpp) | `Resample` 重采样器 |
 | [`resample_iir.hpp`](include/qwqdsp/fx/resample_iir.hpp) | `ResampleIIR` IIR 重采样器 |

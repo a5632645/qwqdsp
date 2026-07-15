@@ -2,7 +2,7 @@
 #include "delay_line.hpp"
 #include "limiter.hpp"
 #include "oversample.hpp"
-#include "plat_reverb.hpp"
+#include "plate_reverb.hpp"
 #include "resample_coeffs.h"
 #include "resample_iir_dynamic.hpp"
 #include "resample_iir.hpp"

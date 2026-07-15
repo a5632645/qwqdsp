@@ -2,11 +2,6 @@
 
 #include <cmath>
 
-// --------------------------------------------------------------------------------
-// Copyright Takuya OOURA, 1996-2001
-// You may use, copy, modify and distribute this code for any purpose (include commercial use) and without fee.
-// Please refer to this package when you modify this code.
-// --------------------------------------------------------------------------------
 namespace qwqdsp_spectral::internal {
 void cdft(int, int, float *, int *, float *) noexcept;
 void rdft(int, int, float *, int *, float *) noexcept;
