@@ -63,6 +63,7 @@ struct TfPhaseVocoderReassignmentFrameConv {
         lastPhase_.resize(binSize_, 0.0f);
 
         col_buf_.resize(subColumns_ * outputHeight_, 0.0f);
+        weight_buf_.resize(subColumns_ * outputHeight_, 0.0f);
         column_.resize(outputHeight_);
 
         InitDerivativeWindow();
@@ -171,16 +172,21 @@ struct TfPhaseVocoderReassignmentFrameConv {
 
             if (y_last && c_last) {
                 col_buf_[c_idx * outputHeight_ + y_idx] += mag_lin;
+                weight_buf_[c_idx * outputHeight_ + y_idx] += 1.0f;
             }
             else if (y_last) {
                 float c_frac = c_pos - static_cast<float>(c_idx);
                 col_buf_[c_idx * outputHeight_ + y_idx] += mag_lin * (1.0f - c_frac);
                 col_buf_[(c_idx + 1) * outputHeight_ + y_idx] += mag_lin * c_frac;
+                weight_buf_[c_idx * outputHeight_ + y_idx] += 1.0f;
+                weight_buf_[(c_idx + 1) * outputHeight_ + y_idx] += 1.0f;
             }
             else if (c_last) {
                 float y_frac = y_pos - static_cast<float>(y_idx);
                 col_buf_[c_idx * outputHeight_ + y_idx] += mag_lin * (1.0f - y_frac);
                 col_buf_[c_idx * outputHeight_ + y_idx + 1] += mag_lin * y_frac;
+                weight_buf_[c_idx * outputHeight_ + y_idx] += (1.0f - y_frac);
+                weight_buf_[c_idx * outputHeight_ + y_idx + 1] += y_frac;
             }
             else {
                 float c_frac = c_pos - static_cast<float>(c_idx);
@@ -189,13 +195,18 @@ struct TfPhaseVocoderReassignmentFrameConv {
                 col_buf_[(c_idx + 1) * outputHeight_ + y_idx] += mag_lin * c_frac * (1.0f - y_frac);
                 col_buf_[c_idx * outputHeight_ + y_idx + 1] += mag_lin * (1.0f - c_frac) * y_frac;
                 col_buf_[(c_idx + 1) * outputHeight_ + y_idx + 1] += mag_lin * c_frac * y_frac;
+                weight_buf_[c_idx * outputHeight_ + y_idx] += (1.0f - y_frac);
+                weight_buf_[(c_idx + 1) * outputHeight_ + y_idx] += (1.0f - y_frac);
+                weight_buf_[c_idx * outputHeight_ + y_idx + 1] += y_frac;
+                weight_buf_[(c_idx + 1) * outputHeight_ + y_idx + 1] += y_frac;
             }
         }
 
         // ── 6. 弹出最旧子列 → dB → Color ──
         constexpr float kDbEps = 1e-12f;
         for (int y = 0; y < outputHeight_; ++y) {
-            float dB = 20.0f * std::log10(col_buf_[y] + kDbEps);
+            float avg = col_buf_[y] / (weight_buf_[y] + 1e-8f);
+            float dB = 20.0f * std::log10(avg + kDbEps);
             dB = std::clamp(dB, dbFloor_, 0.0f);
             int idx = static_cast<int>((dB - dbFloor_) / (-dbFloor_) * 255.0f);
             idx = std::clamp(idx, 0, 255);
@@ -204,7 +215,10 @@ struct TfPhaseVocoderReassignmentFrameConv {
 
         std::memmove(col_buf_.data(), col_buf_.data() + outputHeight_,
                      (subColumns_ - 1) * outputHeight_ * sizeof(float));
+        std::memmove(weight_buf_.data(), weight_buf_.data() + outputHeight_,
+                     (subColumns_ - 1) * outputHeight_ * sizeof(float));
         std::fill(col_buf_.begin() + (subColumns_ - 1) * outputHeight_, col_buf_.end(), 0.0f);
+        std::fill(weight_buf_.begin() + (subColumns_ - 1) * outputHeight_, weight_buf_.end(), 0.0f);
     }
 
     std::span<const Color> GetColumn() const noexcept {
@@ -249,5 +263,6 @@ private:
     std::vector<float> lastPhase_;
     std::vector<float> tdwindow_;
     std::vector<float> col_buf_; // [subCol * outputHeight + y]
+    std::vector<float> weight_buf_;
     std::vector<Color> column_;
 };

@@ -1,6 +1,8 @@
 #pragma once
+#include "gnuplot2.hpp"
 #include "gray.hpp"
 #include "jet.hpp"
 #include "magma.hpp"
 #include "parula.hpp"
+#include "turbo.hpp"
 #include "viridis.hpp"

@@ -6,6 +6,7 @@
 #include "miniaudio.h"
 #include "raylib.h"
 
+#include "reassignment/colormap_adapter.hpp"
 #include "reassignment/freq_reassignment_frame.hpp"
 #include "reassignment/scrolling_image.hpp"
 #include "reassignment/spectrogram_column.hpp"
@@ -16,10 +17,7 @@
 #include "reassignment/tf_phase_vocoder_reassignment_frame_conv.hpp"
 #include "reassignment/tf_reassignment_frame.hpp"
 #include "reassignment/time_reassignment_frame.hpp"
-
-#include "reassignment/jet_colormap.hpp"
-#include "reassignment/magma_colormap.hpp"
-#include "reassignment/viridis_colormap.hpp"
+#include <qwqdsp/colormap/colormap.hpp>
 
 // ── 音频参数 ──
 static constexpr int kSampleRate = 48000;
@@ -55,6 +53,8 @@ static const Color kGridColor = {50, 50, 50, 255};
 static const Color kTextColor = {180, 180, 180, 255};
 static const Color kBgColor = {20, 20, 20, 255};
 
+using ColorMap = ColormapAdapter<qwqdsp_colormap::Magma>;
+
 // ----------------------------------------
 // 全局状态
 // ----------------------------------------
@@ -89,16 +89,16 @@ static constexpr const char* kFrameNames[] = {
 };
 static_assert(std::size(kFrameNames) == static_cast<int>(FrameType::kCount));
 
-static SpectrogramFrame<MagmaColormap> f_sp;
-static FreqReassignmentFrame<MagmaColormap> f_freq;
-static TimeReassignmentFrame<MagmaColormap> f_time;
-static TfReassignmentFrame<MagmaColormap> f_tf;
-static TfPhaseVocoderReassignmentFrame<MagmaColormap, false> f_pv;
-static TfPhaseVocoderReassignmentFrame<MagmaColormap, true> f_pv_pk;
-static TfDerivativeReassignmentFrame<MagmaColormap, false> f_deriv;
-static TfDerivativeReassignmentFrame<MagmaColormap, true> f_deriv_pk;
-static TfPhaseVocoderReassignmentFrameConv<MagmaColormap> f_pv_conv;
-static TfDerivativeReassignmentFrameConv<MagmaColormap> f_deriv_conv;
+static SpectrogramFrame<ColorMap> f_sp;
+static FreqReassignmentFrame<ColorMap> f_freq;
+static TimeReassignmentFrame<ColorMap> f_time;
+static TfReassignmentFrame<ColorMap> f_tf;
+static TfPhaseVocoderReassignmentFrame<ColorMap, false> f_pv;
+static TfPhaseVocoderReassignmentFrame<ColorMap, true> f_pv_pk;
+static TfDerivativeReassignmentFrame<ColorMap, false> f_deriv;
+static TfDerivativeReassignmentFrame<ColorMap, true> f_deriv_pk;
+static TfPhaseVocoderReassignmentFrameConv<ColorMap> f_pv_conv;
+static TfDerivativeReassignmentFrameConv<ColorMap> f_deriv_conv;
 
 static SpectrogramColumn column_;
 static ScrollingImage image_;

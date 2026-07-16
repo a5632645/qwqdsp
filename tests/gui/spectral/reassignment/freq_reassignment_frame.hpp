@@ -41,6 +41,7 @@ struct FreqReassignmentFrame {
         X_h_.resize(binSize_);
         X_t_.resize(binSize_);
         col_lin_.resize(outputHeight_, 0.0f);
+        weight_.resize(outputHeight_, 0.0f);
         column_.resize(outputHeight_);
     }
 
@@ -62,6 +63,7 @@ struct FreqReassignmentFrame {
 
         // ── 3. 遍历每个 bin: 互谱 → 瞬时频率 → 能量线性分布 ──
         std::fill(col_lin_.begin(), col_lin_.end(), 0.0f);
+        std::fill(weight_.begin(), weight_.end(), 0.0f);
         const float two_pi = 2.0f * std::numbers::pi_v<float>;
 
         for (int k = 0; k < binSize_; ++k) {
@@ -94,18 +96,22 @@ struct FreqReassignmentFrame {
             int y_idx = static_cast<int>(std::floor(y_pos));
             if (y_idx >= outputHeight_ - 1) {
                 col_lin_[outputHeight_ - 1] += mag_lin;
+                weight_[outputHeight_ - 1] += 1.0f;
                 continue;
             }
             float y_frac = y_pos - static_cast<float>(y_idx);
 
             col_lin_[y_idx] += mag_lin * (1.0f - y_frac);
+            weight_[y_idx] += (1.0f - y_frac);
             col_lin_[y_idx + 1] += mag_lin * y_frac;
+            weight_[y_idx + 1] += y_frac;
         }
 
-        // ── 4. 线性幅度 → dB → magma 颜色 ──
+        // ── 4. 平均幅度 → dB → magma 颜色 ──
         constexpr float kEps = 1e-12f;
         for (int y = 0; y < outputHeight_; ++y) {
-            float dB = 20.0f * std::log10(col_lin_[y] + kEps);
+            float avg = col_lin_[y] / (weight_[y] + 1e-8f);
+            float dB = 20.0f * std::log10(avg + kEps);
             dB = std::clamp(dB, dbFloor_, 0.0f);
             int idx = static_cast<int>((dB - dbFloor_) / (-dbFloor_) * 255.0f);
             idx = std::clamp(idx, 0, 255);
@@ -130,5 +136,6 @@ private:
     std::vector<float> shift_in_;
     std::vector<std::complex<float>> X_h_, X_t_;
     std::vector<float> col_lin_;
+    std::vector<float> weight_;
     std::vector<Color> column_;
 };
