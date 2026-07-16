@@ -36,7 +36,6 @@ struct SpectrogramFrame {
         fft_in_.resize(fft_len_, 0.0f);
         gain_.resize(bin_size_);
         column_.resize(height_);
-        colMax_.resize(height_);
         row_to_bin_.resize(height_);
 
         // ── 预计算每行 → 最近单 bin ──
@@ -48,14 +47,6 @@ struct SpectrogramFrame {
             int bin = static_cast<int>(std::round(f_center / bin_spacing));
             row_to_bin_[y] = std::clamp(bin, 0, bin_size_ - 1);
         }
-
-        // ── 自适应 crossover ──
-        const float pixelSlope =
-            std::log(10.0f) * (log_max_ - log_min_) / static_cast<float>(height_ - 1);
-        const float crossoverHz = bin_spacing / pixelSlope;
-        crossoverY_ = static_cast<int>((1.0f - (std::log10(crossoverHz) - log_min_) / (log_max_ - log_min_)) *
-                                       static_cast<float>(height_ - 1));
-        crossoverY_ = std::clamp(crossoverY_, 0, height_ - 1);
     }
 
     void Process(std::span<const float> /*raw_frame*/, std::span<const float> /*window*/,
@@ -65,36 +56,10 @@ struct SpectrogramFrame {
         std::fill(fft_in_.begin() + fft_size_, fft_in_.end(), 0.0f);
         fft_.FFTGainPhase(fft_in_, gain_);
 
-        const float bin_spacing = static_cast<float>(sample_rate_) / static_cast<float>(fft_len_);
-        const float log_step = (log_max_ - log_min_) / static_cast<float>(height_);
-
-        // ── Pass 1 — 低频 nearest-bin ──
-        for (int y = crossoverY_; y < height_; ++y) {
-            int bin = row_to_bin_[y];
-            colMax_[y] = 20.0f * std::log10(gain_[bin] + 1e-12f);
-        }
-
-        // ── Pass 2 — 高频 max-hold ──
-        for (int y = 0; y < crossoverY_; ++y) {
-            // 像素 y 覆盖 [f_top, f_bot)
-            float f_top = std::pow(10.0f, log_max_ - static_cast<float>(y) * log_step);
-            float f_bot = std::pow(10.0f, log_max_ - static_cast<float>(y + 1) * log_step);
-            int bin_top = static_cast<int>(std::round(f_top / bin_spacing));
-            int bin_bot = static_cast<int>(std::round(f_bot / bin_spacing));
-            bin_top = std::clamp(bin_top, 0, bin_size_ - 1);
-            bin_bot = std::clamp(bin_bot, bin_top, bin_size_ - 1);
-
-            float maxDb = -1e12f;
-            for (int b = bin_top; b <= bin_bot; ++b) {
-                float dB = 20.0f * std::log10(gain_[b] + 1e-12f);
-                if (dB > maxDb) maxDb = dB;
-            }
-            colMax_[y] = maxDb;
-        }
-
-        // ── colMax → 颜色 ──
+        // ── 每行查最近 bin → dB → magma 颜色 ──
         for (int y = 0; y < height_; ++y) {
-            float dB = std::clamp(colMax_[y], db_floor_, 0.0f);
+            int bin = row_to_bin_[y];
+            float dB = 20.0f * std::log10(gain_[bin] + 1e-12f);
             int idx = static_cast<int>((dB - db_floor_) / (-db_floor_) * 255.0f);
             idx = std::clamp(idx, 0, 255);
             column_[y] = Colormap::kTable[idx];
@@ -112,9 +77,8 @@ private:
     qwqdsp_spectral::RealFftAdv fft_;
     std::vector<float> fft_in_;
     std::vector<float> gain_;
-    std::vector<float> colMax_;
     std::vector<Color> column_;
     std::vector<int> row_to_bin_;
     float freq_min_{}, freq_max_{}, log_min_{}, log_max_{}, db_floor_{};
-    int bin_size_{}, height_{}, sample_rate_{}, fft_size_{}, zero_pad_{}, fft_len_{}, crossoverY_{};
+    int bin_size_{}, height_{}, sample_rate_{}, fft_size_{}, zero_pad_{}, fft_len_{};
 };

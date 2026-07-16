@@ -15,6 +15,8 @@
 #include "reassignment/tf_derivative_reassignment_frame_conv.hpp"
 #include "reassignment/tf_phase_vocoder_reassignment_frame.hpp"
 #include "reassignment/tf_phase_vocoder_reassignment_frame_conv.hpp"
+#include "reassignment/nc_reassignment_frame.hpp"
+#include "reassignment/nc_time_reassignment_frame.hpp"
 #include "reassignment/tf_reassignment_frame.hpp"
 #include "reassignment/time_reassignment_frame.hpp"
 #include <qwqdsp/colormap/colormap.hpp>
@@ -29,6 +31,8 @@ static constexpr int kHopSize = kFftSize / 16;
 static constexpr int kZeroPadSimple = 4;
 // 全 TF 类（子列缓冲已提供时间精度）
 static constexpr int kZeroPadFull = 1;
+// ── NC 方法 ──
+static constexpr int kNcZeroPad = 2;
 
 // ── 频谱图显示 ──
 static constexpr float kDbFloor = -72.0f;
@@ -71,10 +75,12 @@ enum class FrameType : int {
     kTfDerivativePeak,
     kTfPhaseVocoderConv,
     kTfDerivativeConv,
+    kNcMethod,
+    kNcTimeMethod,
     kCount
 };
 
-static FrameType g_frame_type = FrameType::kTfPhaseVocoderPeak;
+static FrameType g_frame_type = FrameType::kNcTimeMethod;
 
 static constexpr const char* kFrameNames[] = {
     "Spectrogram",
@@ -87,6 +93,8 @@ static constexpr const char* kFrameNames[] = {
     "Derivative + Peak Filter",
     "Phase Vocoder + Convergence",
     "Derivative + Convergence",
+    "NC Method",
+    "NC Time",
 };
 static_assert(std::size(kFrameNames) == static_cast<int>(FrameType::kCount));
 
@@ -100,8 +108,11 @@ static TfDerivativeReassignmentFrame<ColorMap, false, kMinWeight> f_deriv;
 static TfDerivativeReassignmentFrame<ColorMap, true, kMinWeight> f_deriv_pk;
 static TfPhaseVocoderReassignmentFrameConv<ColorMap, kMinWeight> f_pv_conv;
 static TfDerivativeReassignmentFrameConv<ColorMap, kMinWeight> f_deriv_conv;
+static NcReassignmentFrame<ColorMap> f_nc;
+static NcTimeReassignmentFrame<ColorMap> f_nc_time;
 
 static SpectrogramColumn column_;
+static SpectrogramColumn nc_column_;
 static ScrollingImage image_;
 
 // ----------------------------------------
@@ -144,6 +155,12 @@ extern "C" void MaCaptureCallback(ma_device* pDevice, void* pOutput, const void*
             break;
         case FrameType::kTfDerivativeConv:
             column_.ProcessAudio({src, frameCount}, f_deriv_conv, push);
+            break;
+        case FrameType::kNcMethod:
+            nc_column_.ProcessAudio({src, frameCount}, f_nc, push);
+            break;
+        case FrameType::kNcTimeMethod:
+            column_.ProcessAudio({src, frameCount}, f_nc_time, push);
             break;
         default:
             break;
@@ -219,6 +236,9 @@ int main(void) {
     f_deriv_pk.Init(kSampleRate, kFftSize, kHopSize, kZeroPadFull, kCanvasH, kFreqMin, kFreqMax, kDbFloor);
     f_pv_conv.Init(kSampleRate, kFftSize, kHopSize, kZeroPadFull, kCanvasH, kFreqMin, kFreqMax, kDbFloor);
     f_deriv_conv.Init(kSampleRate, kFftSize, kHopSize, kZeroPadFull, kCanvasH, kFreqMin, kFreqMax, kDbFloor);
+    nc_column_.Init(kCanvasH, kSampleRate, kFftSize, kHopSize);
+    f_nc.Init(kSampleRate, kFftSize, kNcZeroPad, kCanvasH, kFreqMin, kFreqMax, kDbFloor);
+    f_nc_time.Init(kSampleRate, kFftSize, kHopSize, kNcZeroPad, kCanvasH, kFreqMin, kFreqMax, kDbFloor);
     image_.Init(kImageWidth, kCanvasH);
 
     // ── 主循环 ──
@@ -232,6 +252,12 @@ int main(void) {
         }
         else if (ch == '0') {
             g_frame_type = FrameType::kTfDerivativeConv;
+        }
+        else if (ch == '-') {
+            g_frame_type = FrameType::kNcMethod;
+        }
+        else if (ch == '=') {
+            g_frame_type = FrameType::kNcTimeMethod;
         }
 
         BeginDrawing();
@@ -266,12 +292,21 @@ int main(void) {
             // 0 1 2 3
             // 4 5 6
             // 7 8 9
-            constexpr int kCountPerRow[] = {4, 3, 3};
+            // 10 11
+            constexpr int kCountPerRow[] = {4, 3, 3, 2};
             int idx = 0;
-            for (int row = 0; row < 3; ++row) {
+            for (int row = 0; row < 4; ++row) {
                 for (int col = 0; col < kCountPerRow[row]; ++col, ++idx) {
                     char buf[48];
-                    int key = (idx < 9) ? ('1' + idx) : '0';
+                    char key;
+                    if (idx < 9)
+                        key = '1' + idx;
+                    else if (idx == 9)
+                        key = '0';
+                    else if (idx == 10)
+                        key = '-';
+                    else
+                        key = '=';
                     snprintf(buf, sizeof(buf), "%c:%s", key, kFrameNames[idx]);
                     int x = kCanvasX + col * kCellW;
                     int y = kCanvasY + kCanvasH + 4 + row * kRowH;
