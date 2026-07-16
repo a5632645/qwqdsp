@@ -2,7 +2,8 @@
 #include <qwqdsp/pitch/mpm.hpp>
 
 #include <cmath>
-#include <cstdio>
+#include <format>
+#include <iostream>
 #include <numbers>
 #include <vector>
 
@@ -20,7 +21,7 @@ static void generateSine(std::vector<float>& buffer, float freq, float sample_ra
 // 测试 FastYin
 // ------------------------------------------------------------
 static int testFastYin() noexcept {
-    std::printf("  [FastYin] ... ");
+    std::cout << "  [FastYin] ... ";
     int failed = 0;
 
     float const fs = 44100.0f;
@@ -50,16 +51,17 @@ static int testFastYin() noexcept {
         float err = (pitch.pitch_hz > 0) ? std::abs(pitch.pitch_hz - test_freq) / test_freq : 1.0f;
 
         if (err > 0.05f) {
-            std::printf("\n    FAIL (%.0f Hz): got %.1f Hz (err=%.2f%%)", test_freq, pitch.pitch_hz, err * 100.0f);
+            std::cout << std::format("\n    FAIL ({:.0f} Hz): got {:.1f} Hz (err={:.2f}%)", test_freq, pitch.pitch_hz,
+                                     err * 100.0f);
             failed++;
         }
         else {
-            std::printf(" %.0f=%.1f(%.1f%%)", test_freq, pitch.pitch_hz, err * 100.0f);
+            std::cout << std::format(" {:.0f}={:.1f}({:.1f}%)", test_freq, pitch.pitch_hz, err * 100.0f);
         }
     }
 
     if (failed == 0)
-        std::printf("  OK\n");
+        std::cout << "  OK\n";
     return failed;
 }
 
@@ -67,7 +69,7 @@ static int testFastYin() noexcept {
 // 测试 MPM
 // ------------------------------------------------------------
 static int testMPM() noexcept {
-    std::printf("  [MPM] ... ");
+    std::cout << "  [MPM] ... ";
     int failed = 0;
 
     float const fs = 44100.0f;
@@ -94,16 +96,17 @@ static int testMPM() noexcept {
         float err = (pitch.pitch_hz > 0) ? std::abs(pitch.pitch_hz - test_freq) / test_freq : 1.0f;
 
         if (err > tolerance) {
-            std::printf("\n    FAIL (%.0f Hz): got %.1f Hz (err=%.2f%%)", test_freq, pitch.pitch_hz, err * 100.0f);
+            std::cout << std::format("\n    FAIL ({:.0f} Hz): got {:.1f} Hz (err={:.2f}%)", test_freq, pitch.pitch_hz,
+                                     err * 100.0f);
             failed++;
         }
         else {
-            std::printf(" %.0f=%.1f(%.1f%%)", test_freq, pitch.pitch_hz, err * 100.0f);
+            std::cout << std::format(" {:.0f}={:.1f}({:.1f}%)", test_freq, pitch.pitch_hz, err * 100.0f);
         }
     }
 
     if (failed == 0)
-        std::printf("  OK\n");
+        std::cout << "  OK\n";
     return failed;
 }
 
@@ -111,7 +114,7 @@ static int testMPM() noexcept {
 // 测试非周期性检测 (噪声输入应返回高 non_period_ratio)
 // ------------------------------------------------------------
 static int testNonPeriodic() noexcept {
-    std::printf("  [NonPeriodic] ... ");
+    std::cout << "  [NonPeriodic] ... ";
     int failed = 0;
 
     float const fs = 44100.0f;
@@ -129,7 +132,7 @@ static int testNonPeriodic() noexcept {
         yin.Process(noise);
         auto p = yin.GetPitch();
         if (p.non_period_ratio < 0.5f) {
-            std::printf("\n    FastYin non_period=%.3f (expected >0.5)", p.non_period_ratio);
+            std::cout << std::format("\n    FastYin non_period={:.3f} (expected >0.5)", p.non_period_ratio);
             failed++;
         }
     }
@@ -141,41 +144,41 @@ static int testNonPeriodic() noexcept {
         mpm.Process(noise);
         auto p = mpm.GetPitch();
         if (p.non_period_ratio < 0.5f) {
-            std::printf("\n    MPM non_period=%.3f (expected >0.5)", p.non_period_ratio);
+            std::cout << std::format("\n    MPM non_period={:.3f} (expected >0.5)", p.non_period_ratio);
             failed++;
         }
     }
 
     if (failed == 0)
-        std::printf("OK\n");
+        std::cout << "OK\n";
     return failed;
 }
 
 // ------------------------------------------------------------
 int main() {
-    std::printf("音高检测算法测试\n");
-    std::printf("============================\n\n");
+    std::cout << "Pitch detection algorithm test\n";
+    std::cout << "============================\n\n";
 
     int failed = 0;
 
-    std::printf("--- FastYin ---\n");
+    std::cout << "--- FastYin ---\n";
     failed += testFastYin();
-    std::printf("\n");
+    std::cout << "\n";
 
-    std::printf("--- MPM ---\n");
+    std::cout << "--- MPM ---\n";
     failed += testMPM();
-    std::printf("\n");
+    std::cout << "\n";
 
-    std::printf("--- 非周期性检测 ---\n");
+    std::cout << "--- Non-periodic Detection ---\n";
     failed += testNonPeriodic();
-    std::printf("\n");
+    std::cout << "\n";
 
-    std::printf("============================\n");
+    std::cout << "============================\n";
     if (failed == 0) {
-        std::printf("全部通过!\n");
+        std::cout << "All passed!\n";
     }
     else {
-        std::printf("失败 %d 个测试\n", failed);
+        std::cout << std::format("Failed {} test(s)\n", failed);
     }
 
     return failed;

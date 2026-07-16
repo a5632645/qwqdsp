@@ -10,8 +10,9 @@
 #include <cmath>
 #include <complex>
 #include <cstdint>
-#include <cstdio>
 #include <filesystem>
+#include <format>
+#include <iostream>
 #include <numbers>
 #include <vector>
 
@@ -227,11 +228,11 @@ static constexpr uint8_t kMagma[256][4] = {
 int main() {
     // ---- 读取 WAV ----
     auto input_path = qwqdsp_support::GetInputDir() / "wormhole.wav";
-    std::printf("读取: %s\n", input_path.string().c_str());
+    std::cout << std::format("Reading: {}\n", input_path.string());
 
     AudioFile<float> audio;
     if (!audio.load(input_path.string())) {
-        std::printf("FAIL: 无法加载 WAV 文件\n");
+        std::cout << "FAIL: cannot load WAV file\n";
         return 1;
     }
 
@@ -240,7 +241,7 @@ int main() {
     int const num_samples = audio.getNumSamplesPerChannel();
     auto const& samples = audio.samples[0];
 
-    std::printf("  fs=%d Hz, ch=%d, samples=%d\n", static_cast<int>(fs), num_channels, num_samples);
+    std::cout << std::format("  fs={} Hz, ch={}, samples={}\n", static_cast<int>(fs), num_channels, num_samples);
 
     // ---- 参数 ----
     int const block_size = 2048;
@@ -283,7 +284,7 @@ int main() {
     float mag_max = -1e9f;
     std::vector<std::vector<float>> frame_mags(num_frames);
 
-    std::printf("STFT 分析 %d 帧 ...\n", num_frames);
+    std::cout << std::format("STFT analysis of {} frames ...\n", num_frames);
 
     for (int f = 0; f < num_frames; ++f) {
         int offset = f * step_size;
@@ -316,7 +317,7 @@ int main() {
 
     float mag_min = mag_max - 80.0f; // 80 dB 动态范围
 
-    std::printf("  频谱动态: %.0f–%.0f dB\n", mag_min, mag_max);
+    std::cout << std::format("  Spectral dynamic range: {:.0f} - {:.0f} dB\n", mag_min, mag_max);
 
     // ---- 绘制 STFT 谱 ----
     for (int x = 0; x < img_w; ++x) {
@@ -369,7 +370,7 @@ int main() {
 
     // ---- HMM 解码 ----
     auto pitch_track = pyin.GetPitchTrack();
-    std::printf("解码完成, %zu 帧\n", pitch_track.size());
+    std::cout << std::format("Decoding complete, {} frames\n", pitch_track.size());
 
     // ---- 绘制基频轨迹 (亮青色，叠加在 STFT 上) ----
     int prev_y = -1;
@@ -425,10 +426,10 @@ int main() {
     int result = stbi_write_png(out_path.string().c_str(), img_w, img_h, bpp, image.data(), img_w * bpp);
 
     if (result) {
-        std::printf("输出: %s (%dx%d)\n", out_path.string().c_str(), img_w, img_h);
+        std::cout << std::format("Output: {} ({}x{})\n", out_path.string(), img_w, img_h);
     }
     else {
-        std::printf("FAIL: 写入 PNG 失败\n");
+        std::cout << "FAIL: cannot write PNG\n";
         return 1;
     }
 
@@ -437,7 +438,7 @@ int main() {
     for (auto p : pitch_track)
         if (p > 0.0f)
             voiced++;
-    std::printf("有声帧: %d/%zu\n", voiced, pitch_track.size());
-    std::printf("完成!\n");
+    std::cout << std::format("Voiced frames: {}/{}\n", voiced, pitch_track.size());
+    std::cout << "Done!\n";
     return 0;
 }

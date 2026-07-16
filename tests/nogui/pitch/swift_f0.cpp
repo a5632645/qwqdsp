@@ -7,9 +7,10 @@
 #include <algorithm>
 #include <cmath>
 #include <complex>
-#include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <format>
+#include <iostream>
 #include <numbers>
 #include <vector>
 
@@ -33,7 +34,7 @@ static bool readBinary(const std::filesystem::path& path, std::vector<float>& ou
     FILE* f = nullptr;
     fopen_s(&f, path.string().c_str(), "rb");
     if (!f) {
-        std::printf("    FAIL: cannot open %s\n", path.string().c_str());
+        std::cout << std::format("    FAIL: cannot open {}\n", path.string());
         return false;
     }
     fseek(f, 0, SEEK_END);
@@ -127,7 +128,7 @@ static void computeLogMagSTFT(const std::vector<float>& audio, std::vector<float
 // 测试 1: 手搓 STFT vs 参考 log-mag
 // ------------------------------------------------------------
 static int testSTFTPipeline() noexcept {
-    std::printf("  [STFT vs Reference] ...\n");
+    std::cout << "  [STFT vs Reference] ...\n";
     int failed = 0;
 
     auto data_dir = qwqdsp_support::GetWorkDir() / "swift_f0";
@@ -150,7 +151,7 @@ static int testSTFTPipeline() noexcept {
     // 检查维度
     int T_ref = static_cast<int>(log_mag_ref.size()) / F;
     if (T != T_ref || F != kNumMelBins) {
-        std::printf("    FAIL: shape mismatch ref=(%d,%d) our=(%d,%d)\n", T_ref, F, T, F);
+        std::cout << std::format("    FAIL: shape mismatch ref=({},{}) our=({},{})\n", T_ref, F, T, F);
         return 1;
     }
 
@@ -168,21 +169,21 @@ static int testSTFTPipeline() noexcept {
     }
     mean_abs_err /= static_cast<float>(n);
 
-    std::printf("    T=%d, F=%d\n", T, F);
-    std::printf("    max abs err: %.8f\n", max_abs_err);
-    std::printf("    mean abs err: %.8f\n", mean_abs_err);
+    std::cout << std::format("    T={}, F={}\n", T, F);
+    std::cout << std::format("    max abs err: {:.8f}\n", max_abs_err);
+    std::cout << std::format("    mean abs err: {:.8f}\n", mean_abs_err);
 
     // 打印前 5 帧对比
-    std::printf("    frame 0 ref: ");
+    std::cout << "    frame 0 ref: ";
     for (int f = 0; f < std::min(5, F); ++f)
-        std::printf(" %8.4f", log_mag_ref[f]);
-    std::printf("\n    frame 0 our: ");
+        std::cout << std::format(" {:8.4f}", log_mag_ref[f]);
+    std::cout << "\n    frame 0 our: ";
     for (int f = 0; f < std::min(5, F); ++f)
-        std::printf(" %8.4f", log_mag_our[f]);
-    std::printf("\n");
+        std::cout << std::format(" {:8.4f}", log_mag_our[f]);
+    std::cout << "\n";
 
     if (max_abs_err > 10.0f) {
-        std::printf("    FAIL: STFT mismatch (max_abs_err=%.6f)\n", max_abs_err);
+        std::cout << std::format("    FAIL: STFT mismatch (max_abs_err={:.6f})\n", max_abs_err);
         // 显示最大误差位置
         int max_idx = 0;
         float max_v = 0;
@@ -194,11 +195,12 @@ static int testSTFTPipeline() noexcept {
             }
         }
         int mt = max_idx / F, mf = max_idx % F;
-        std::printf("      max at [%d,%d]: ref=%.6f our=%.6f\n", mt, mf, log_mag_ref[max_idx], log_mag_our[max_idx]);
+        std::cout << std::format("      max at [{},{}]: ref={:.6f} our={:.6f}\n", mt, mf, log_mag_ref[max_idx],
+                                 log_mag_our[max_idx]);
         failed++;
     }
     else {
-        std::printf("    OK\n");
+        std::cout << "    OK\n";
     }
     return failed;
 }
@@ -207,7 +209,7 @@ static int testSTFTPipeline() noexcept {
 // 测试 2: swift_f0 模型推理 (使用参考 log-mag)
 // ------------------------------------------------------------
 static int testSwiftF0Inference() noexcept {
-    std::printf("  [SwiftF0 Inference] ...\n");
+    std::cout << "  [SwiftF0 Inference] ...\n";
     int failed = 0;
 
     // 读取测试数据
@@ -225,7 +227,7 @@ static int testSwiftF0Inference() noexcept {
     int T = static_cast<int>(pitch_ref.size());
     int F = qwqdsp_swift_f0::kNumMelBins;
 
-    std::printf("    T=%d, F=%d\n", T, F);
+    std::cout << std::format("    T={}, F={}\n", T, F);
 
     // 构建 Eigen Tensor 输入
     Eigen::Tensor<float, 2> input(T, F);
@@ -244,28 +246,28 @@ static int testSwiftF0Inference() noexcept {
     float pitch_err = maxRelError(pitch_hz.data(), pitch_ref.data(), T);
     float conf_err = maxRelError(confidence.data(), conf_ref.data(), T);
 
-    std::printf("    pitch max rel err:  %.6f (%s)\n", pitch_err, pitch_err < 0.01f ? "OK" : "FAIL");
-    std::printf("    conf  max rel err:  %.6f (%s)\n", conf_err, conf_err < 0.01f ? "OK" : "FAIL");
+    std::cout << std::format("    pitch max rel err:  {:.6f} ({})\n", pitch_err, pitch_err < 0.01f ? "OK" : "FAIL");
+    std::cout << std::format("    conf  max rel err:  {:.6f} ({})\n", conf_err, conf_err < 0.01f ? "OK" : "FAIL");
 
     if (pitch_err >= 0.01f) {
-        std::printf("    FAIL: pitch error too large\n");
-        std::printf("    idx  ref_hz    our_hz\n");
+        std::cout << "    FAIL: pitch error too large\n";
+        std::cout << "    idx  ref_hz    our_hz\n";
         for (int i = 0; i < std::min(10, T); ++i) {
-            std::printf("    %3d  %8.2f  %8.2f\n", i, pitch_ref[i], pitch_hz[i]);
+            std::cout << std::format("    {:3d}  {:8.2f}  {:8.2f}\n", i, pitch_ref[i], pitch_hz[i]);
         }
         failed++;
     }
     if (conf_err >= 0.01f) {
-        std::printf("    FAIL: confidence error too large\n");
-        std::printf("    idx  ref_conf  our_conf\n");
+        std::cout << "    FAIL: confidence error too large\n";
+        std::cout << "    idx  ref_conf  our_conf\n";
         for (int i = 0; i < std::min(10, T); ++i) {
-            std::printf("    %3d  %8.4f  %8.4f\n", i, conf_ref[i], confidence[i]);
+            std::cout << std::format("    {:3d}  {:8.4f}  {:8.4f}\n", i, conf_ref[i], confidence[i]);
         }
         failed++;
     }
 
     if (failed == 0)
-        std::printf("    OK\n");
+        std::cout << "    OK\n";
     return failed;
 }
 
@@ -273,7 +275,7 @@ static int testSwiftF0Inference() noexcept {
 // 测试 3: 完整管线 (手搓 STFT + 模型推理)
 // ------------------------------------------------------------
 static int testFullPipeline() noexcept {
-    std::printf("  [Full Pipeline (STFT + Inference)] ...\n");
+    std::cout << "  [Full Pipeline (STFT + Inference)] ...\n";
     int failed = 0;
 
     auto data_dir = qwqdsp_support::GetWorkDir() / "swift_f0";
@@ -297,7 +299,7 @@ static int testFullPipeline() noexcept {
     computeLogMagSTFT(audio, log_mag_our, T, F);
 
     if (T != T_ref || F != kNumMelBins) {
-        std::printf("    FAIL: shape mismatch\n");
+        std::cout << "    FAIL: shape mismatch\n";
         return 1;
     }
 
@@ -318,20 +320,20 @@ static int testFullPipeline() noexcept {
     float pitch_err = maxRelError(pitch_hz.data(), pitch_ref.data(), T);
     float conf_err = maxRelError(confidence.data(), conf_ref.data(), T);
 
-    std::printf("    pitch max rel err:  %.6f (%s)\n", pitch_err, pitch_err < 0.03f ? "OK" : "FAIL");
-    std::printf("    conf  max rel err:  %.6f (%s)\n", conf_err, conf_err < 0.15f ? "OK" : "FAIL");
+    std::cout << std::format("    pitch max rel err:  {:.6f} ({})\n", pitch_err, pitch_err < 0.03f ? "OK" : "FAIL");
+    std::cout << std::format("    conf  max rel err:  {:.6f} ({})\n", conf_err, conf_err < 0.15f ? "OK" : "FAIL");
 
     if (pitch_err >= 0.03f) {
-        std::printf("    FAIL: full pipeline pitch error\n");
+        std::cout << "    FAIL: full pipeline pitch error\n";
         failed++;
     }
     if (conf_err >= 0.15f) {
-        std::printf("    FAIL: full pipeline confidence error\n");
+        std::cout << "    FAIL: full pipeline confidence error\n";
         failed++;
     }
 
     if (failed == 0)
-        std::printf("    OK\n");
+        std::cout << "    OK\n";
     return failed;
 }
 
@@ -339,22 +341,22 @@ static int testFullPipeline() noexcept {
 // 主函数
 // ------------------------------------------------------------
 int main() {
-    std::printf("swift_f0 model test\n");
-    std::printf("==================\n\n");
+    std::cout << "swift_f0 model test\n";
+    std::cout << "==================\n\n";
 
     int total = 0;
     total += testSTFTPipeline();
-    std::printf("\n");
+    std::cout << "\n";
     total += testSwiftF0Inference();
-    std::printf("\n");
+    std::cout << "\n";
     total += testFullPipeline();
 
-    std::printf("\n");
+    std::cout << "\n";
     if (total > 0) {
-        std::printf("FAILED: %d test(s)\n", total);
+        std::cout << std::format("FAILED: {} test(s)\n", total);
     }
     else {
-        std::printf("All tests passed.\n");
+        std::cout << "All tests passed.\n";
     }
     return total;
 }

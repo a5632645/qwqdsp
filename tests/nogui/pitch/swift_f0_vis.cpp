@@ -10,8 +10,9 @@
 #include <cmath>
 #include <complex>
 #include <cstdint>
-#include <cstdio>
 #include <filesystem>
+#include <format>
+#include <iostream>
 #include <numbers>
 #include <vector>
 
@@ -236,11 +237,11 @@ constexpr float kEps = 1.0e-8f;
 int main() {
     // ---- 读取 WAV ----
     auto input_path = qwqdsp_support::GetInputDir() / "wormhole.wav";
-    std::printf("读取: %s\n", input_path.string().c_str());
+    std::cout << std::format("Reading: {}\n", input_path.string());
 
     AudioFile<float> audio;
     if (!audio.load(input_path.string())) {
-        std::printf("FAIL: 无法加载 WAV 文件\n");
+        std::cout << "FAIL: cannot load WAV file\n";
         return 1;
     }
 
@@ -249,7 +250,7 @@ int main() {
     int const num_samples = audio.getNumSamplesPerChannel();
     auto const& samples = audio.samples[0];
 
-    std::printf("  fs=%.0f Hz, ch=%d, samples=%d\n", fs, num_channels, num_samples);
+    std::cout << std::format("  fs={:.0f} Hz, ch={}, samples={}\n", fs, num_channels, num_samples);
 
     // ---- 重采样到 16kHz (简单线性插值) ----
     std::vector<float> audio_16k;
@@ -265,7 +266,7 @@ int main() {
             idx = std::min(idx, num_samples - 2);
             audio_16k[i] = samples[idx] * (1.0f - frac) + samples[idx + 1] * frac;
         }
-        std::printf("  重采样: %d → %d samples\n", num_samples, num_samples_16k);
+        std::cout << std::format("  Resampled: {} -> {} samples\n", num_samples, num_samples_16k);
     }
     else {
         audio_16k.assign(samples.begin(), samples.end());
@@ -302,7 +303,7 @@ int main() {
     float mag_max = -1e9f;
     std::vector<std::vector<float>> frame_mags(num_frames);
 
-    std::printf("STFT 分析 %d 帧 ...\n", num_frames);
+    std::cout << std::format("STFT analysis of {} frames ...\n", num_frames);
 
     for (int f = 0; f < num_frames; ++f) {
         int offset = f * kHop;
@@ -334,7 +335,7 @@ int main() {
 
     float mag_min = mag_max - 80.0f;
 
-    std::printf("  频谱动态: %.0f–%.0f dB\n", mag_min, mag_max);
+    std::cout << std::format("  Spectral dynamic range: {:.0f} - {:.0f} dB\n", mag_min, mag_max);
 
     // ---- 绘制 STFT 谱 ----
     for (int x = 0; x < img_w; ++x) {
@@ -379,7 +380,7 @@ int main() {
     }
 
     // ---- swift_f0 推理 ----
-    std::printf("swift_f0 推理 ...\n");
+    std::cout << "swift_f0 inference ...\n";
 
     // 构建 log-mag 频谱 [T, 132]
     Eigen::Tensor<float, 2> log_mag(num_frames, qwqdsp_swift_f0::kNumMelBins);
@@ -399,7 +400,7 @@ int main() {
     qwqdsp_swift_f0::SwiftF0Inference inference;
     inference.Process(log_mag, pitch_hz, confidence);
 
-    std::printf("  完成, %d 帧\n", num_frames);
+    std::cout << std::format("  Done, {} frames\n", num_frames);
 
     // ---- 绘制基频轨迹 (亮青色，叠加在 STFT 上) ----
     int prev_y = -1;
@@ -460,10 +461,10 @@ int main() {
     int result = stbi_write_png(out_path.string().c_str(), img_w, img_h, bpp, image.data(), img_w * bpp);
 
     if (result) {
-        std::printf("输出: %s (%dx%d)\n", out_path.string().c_str(), img_w, img_h);
+        std::cout << std::format("Output: {} ({}x{})\n", out_path.string(), img_w, img_h);
     }
     else {
-        std::printf("FAIL: 写入 PNG 失败\n");
+        std::cout << "FAIL: cannot write PNG\n";
         return 1;
     }
 
@@ -473,7 +474,7 @@ int main() {
         if (confidence(i) > 0.5f)
             voiced++;
     }
-    std::printf("有声帧: %d/%d\n", voiced, num_frames);
-    std::printf("完成!\n");
+    std::cout << std::format("Voiced frames: {}/{}\n", voiced, num_frames);
+    std::cout << "Done!\n";
     return 0;
 }

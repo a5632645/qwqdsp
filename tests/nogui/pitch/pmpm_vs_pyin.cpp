@@ -5,7 +5,8 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstdio>
+#include <format>
+#include <iostream>
 #include <numbers>
 #include <string>
 #include <vector>
@@ -67,10 +68,11 @@ static float processFile(Estimator& est, const std::vector<float>& audio, int sa
 int main() {
     std::string dir = (qwqdsp_support::GetInputDir() / "pitch").string();
 
-    std::printf("pMPM vs pYIN on degraded viola (E3=%.1f Hz)\n", kE3);
-    std::printf("================================================================\n");
-    std::printf("  %-26s  %10s  %10s  %10s  %10s\n", "file", "pmpm(Hz)", "pyin(Hz)", "pmpm_err%", "pyin_err%");
-    std::printf("  %s\n", "----------------------------------------------------------------");
+    std::cout << std::format("pMPM vs pYIN on degraded viola (E3={:.1f} Hz)\n", kE3);
+    std::cout << "================================================================\n";
+    std::cout << std::format("  {:26s}  {:>10s}  {:>10s}  {:>10s}  {:>10s}\n", "file", "pmpm(Hz)", "pyin(Hz)",
+                             "pmpm_err%", "pyin_err%");
+    std::cout << "  -----------------------------------------------------------------\n";
 
     int failed_pmpm = 0;
     int failed_pyin = 0;
@@ -80,7 +82,7 @@ int main() {
 
         AudioFile<float> af;
         if (!af.load(path)) {
-            std::printf("  %-26s  %10s  %10s  %10s  %10s\n", t.label, "ERR", "ERR", "-", "-");
+            std::cout << std::format("  {:26s}  {:>10s}  {:>10s}  {:>10s}  {:>10s}\n", t.label, "ERR", "ERR", "-", "-");
             ++failed_pmpm;
             ++failed_pyin;
             continue;
@@ -125,16 +127,17 @@ int main() {
         if (pyin_err > kErrTol || pyin_pitch <= 0.0f)
             ++failed_pyin;
 
-        std::printf("  %-26s  %8.1f   %8.1f   %8.2f   %8.2f", t.label, pmpm_pitch, pyin_pitch, pmpm_err, pyin_err);
+        std::cout << std::format("  {:26s}  {:8.1f}   {:8.1f}   {:8.2f}   {:8.2f}", t.label, pmpm_pitch, pyin_pitch,
+                                 pmpm_err, pyin_err);
 
         if (pmpm_err > kErrTol || pmpm_pitch <= 0.0f)
-            std::printf("  !pmpm");
+            std::cout << "  !pmpm";
         if (pyin_err > kErrTol || pyin_pitch <= 0.0f)
-            std::printf("  !pyin");
-        std::printf("\n");
+            std::cout << "  !pyin";
+        std::cout << "\n";
     }
 
-    std::printf("  %s\n", "================================================================\n");
-    std::printf("  pMPM fails: %d, pYIN fails: %d\n", failed_pmpm, failed_pyin);
+    std::cout << "  ================================================================\n";
+    std::cout << std::format("  pMPM fails: {}, pYIN fails: {}\n", failed_pmpm, failed_pyin);
     return failed_pmpm + failed_pyin;
 }

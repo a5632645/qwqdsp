@@ -47,8 +47,7 @@ public:
     // --------------------------------------------------------
     // 处理一帧音频，返回候选基频列表（已按概率降序排列）。
     // 候选不超过 max_candidates 个，概率低于 min_prob 的被过滤。
-    std::vector<PyinCandidate> Process(std::span<const float> block,
-                                       int max_candidates = 5,
+    std::vector<PyinCandidate> Process(std::span<const float> block, int max_candidates = 5,
                                        float min_prob = 0.01f) noexcept {
         computeAutocorrelation(block);
         auto peaks = peakPicking();
@@ -102,16 +101,13 @@ public:
 
         // 按概率降序排列
         std::sort(candidates.begin(), candidates.end(),
-                  [](const PyinCandidate& a, const PyinCandidate& b) {
-                      return a.probability > b.probability;
-                  });
+                  [](const PyinCandidate& a, const PyinCandidate& b) { return a.probability > b.probability; });
 
         if (candidates.size() > static_cast<size_t>(max_candidates))
             candidates.resize(max_candidates);
 
         return candidates;
     }
-
 private:
     static constexpr float kCutoffBegin = 0.80f;
     static constexpr float kCutoffStep = 0.01f;
@@ -210,8 +206,7 @@ private:
     // --------------------------------------------------------
     // parabolicInterpolation
     // --------------------------------------------------------
-    static std::pair<float, float> parabolicInterpolation(std::vector<float> const& array,
-                                                          size_t x) noexcept {
+    static std::pair<float, float> parabolicInterpolation(std::vector<float> const& array, size_t x) noexcept {
         if (x < 1) {
             size_t x_adj = (array[x] <= array[x + 1]) ? x : x + 1;
             return {static_cast<float>(x_adj), array[x_adj]};

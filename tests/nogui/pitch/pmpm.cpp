@@ -2,7 +2,8 @@
 #include <qwqdsp/pitch/pmpm/pmpm_core.hpp>
 
 #include <cmath>
-#include <cstdio>
+#include <format>
+#include <iostream>
 #include <numbers>
 #include <vector>
 
@@ -33,7 +34,7 @@ static bool hasFrequency(std::span<const qwqdsp_pitch::PyinCandidate> candidates
 // 测试 PmpmCore: 正确频率应出现在候选列表中
 // ------------------------------------------------------------
 static int testPmpmCore() noexcept {
-    std::printf("  [PmpmCore] ... ");
+    std::cout << "  [PmpmCore] ... ";
 
     float const fs = 44100.0f;
     int const block_size = 2048;
@@ -50,30 +51,30 @@ static int testPmpmCore() noexcept {
     auto candidates = core.Process(buffer, 10, 0.001f);
 
     if (candidates.empty()) {
-        std::printf("FAIL: no candidates\n");
+        std::cout << "FAIL: no candidates\n";
         return 1;
     }
 
     bool found = hasFrequency(candidates, test_freq);
-    std::printf("%zu candidates, 440 Hz %s", candidates.size(), found ? "found" : "MISSING");
+    std::cout << std::format("{} candidates, 440 Hz {}", candidates.size(), found ? "found" : "MISSING");
     for (auto const& c : candidates) {
-        std::printf("  [%.1f Hz, %.4f]", c.pitch_hz, c.probability);
+        std::cout << std::format("  [{:.1f} Hz, {:.4f}]", c.pitch_hz, c.probability);
     }
 
     if (!found) {
-        std::printf("  FAIL\n");
+        std::cout << "  FAIL\n";
         return 1;
     }
 
     // 概率排序检查
     for (size_t i = 1; i < candidates.size(); ++i) {
         if (candidates[i].probability > candidates[i - 1].probability) {
-            std::printf("  FAIL: not sorted by probability\n");
+            std::cout << "  FAIL: not sorted by probability\n";
             return 1;
         }
     }
 
-    std::printf("  OK\n");
+    std::cout << "  OK\n";
     return 0;
 }
 
@@ -81,7 +82,7 @@ static int testPmpmCore() noexcept {
 // 测试多种频率
 // ------------------------------------------------------------
 static int testMultipleFrequencies() noexcept {
-    std::printf("  [PmpmCore Multi-Freq] ... ");
+    std::cout << "  [PmpmCore Multi-Freq] ... ";
 
     float const fs = 44100.0f;
     int const block_size = 2048;
@@ -108,7 +109,7 @@ static int testMultipleFrequencies() noexcept {
         auto candidates = core.Process(buffer, 5, 0.001f);
 
         if (candidates.empty()) {
-            std::printf("FAIL (%.0f Hz): no candidates\n", t.freq);
+            std::cout << std::format("FAIL ({:.0f} Hz): no candidates\n", t.freq);
             return 1;
         }
 
@@ -116,12 +117,12 @@ static int testMultipleFrequencies() noexcept {
         float err = std::abs(best - t.freq) / t.freq;
 
         if (err > t.min_tolerance) {
-            std::printf("FAIL (%.0f Hz): got %.1f Hz (err=%.2f%%)\n", t.freq, best, err * 100.0f);
+            std::cout << std::format("FAIL ({:.0f} Hz): got {:.1f} Hz (err={:.2f}%)\n", t.freq, best, err * 100.0f);
             return 1;
         }
     }
 
-    std::printf("all OK\n");
+    std::cout << "all OK\n";
     return 0;
 }
 
@@ -129,7 +130,7 @@ static int testMultipleFrequencies() noexcept {
 // 测试 PmpmCore + MonoPitchHmm 完整流程
 // ------------------------------------------------------------
 static int testPmpmFull() noexcept {
-    std::printf("  [Pmpm Full Pipeline] ... ");
+    std::cout << "  [Pmpm Full Pipeline] ... ";
 
     float const fs = 44100.0f;
     int const block_size = 2048;
@@ -154,7 +155,7 @@ static int testPmpmFull() noexcept {
     auto pitch_track = pmpm.GetPitchTrack();
 
     if (pitch_track.empty()) {
-        std::printf("FAIL: empty pitch track\n");
+        std::cout << "FAIL: empty pitch track\n";
         return 1;
     }
 
@@ -168,46 +169,47 @@ static int testPmpmFull() noexcept {
     }
 
     if (voiced_count == 0) {
-        std::printf("FAIL: no voiced frames\n");
+        std::cout << "FAIL: no voiced frames\n";
         return 1;
     }
 
     float avg_pitch = pitch_sum / voiced_count;
     float pitch_error = std::abs(avg_pitch - test_freq) / test_freq;
 
-    std::printf("voiced=%d/%d, avg=%.1f Hz (err=%.2f%%)", voiced_count, num_frames, avg_pitch, pitch_error * 100.0f);
+    std::cout << std::format("voiced={}/{}, avg={:.1f} Hz (err={:.2f}%)", voiced_count, num_frames, avg_pitch,
+                             pitch_error * 100.0f);
 
     if (pitch_error > 0.15f) {
-        std::printf("  FAIL\n");
+        std::cout << "  FAIL\n";
         return 1;
     }
 
-    std::printf("  OK\n");
+    std::cout << "  OK\n";
     return 0;
 }
 
 // ------------------------------------------------------------
 int main() {
-    std::printf("pMPM 测试\n");
-    std::printf("============================\n\n");
+    std::cout << "pMPM test\n";
+    std::cout << "============================\n\n";
 
     int failed = 0;
 
-    std::printf("--- PmpmCore ---\n");
+    std::cout << "--- PmpmCore ---\n";
     failed += testPmpmCore();
     failed += testMultipleFrequencies();
-    std::printf("\n");
+    std::cout << "\n";
 
-    std::printf("--- 完整流程 ---\n");
+    std::cout << "--- Full Pipeline ---\n";
     failed += testPmpmFull();
-    std::printf("\n");
+    std::cout << "\n";
 
-    std::printf("============================\n");
+    std::cout << "============================\n";
     if (failed == 0) {
-        std::printf("全部通过!\n");
+        std::cout << "All passed!\n";
     }
     else {
-        std::printf("失败 %d 个测试\n", failed);
+        std::cout << std::format("Failed {} test(s)\n", failed);
     }
 
     return failed;
