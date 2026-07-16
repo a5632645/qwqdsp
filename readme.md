@@ -14,10 +14,15 @@
 ## 📦 依赖 (Dependencies)
 
 - **C++20** 或更高版本。
-- **[Eigen3](https://eigen.tuxfamily.org)**（可选）：启用 `QWQDSP_HAVE_EIGEN`。
-- **[Intel IPP](https://www.intel.com/content/www/us/en/developer/tools/oneapi/ipp.html)**（可选）：启用 `QWQDSP_HAVE_IPP`，使用 IPP 作为 FFT 后端。
-- **[SIMDe](https://github.com/simd-everywhere/simde)**（可选）：启用 `QWQDSP_HAVE_SIMDE`，在非 x86 平台上模拟 SIMD 指令。
-- **[raylib](https://www.raylib.com)**（可选）：构建 GUI 测试和 `playing` 可执行程序。
+
+| 依赖 | 开关 | 外部链接方式 | 作用 |
+|------|------|-------------|------|
+| **Eigen3** | `QWQDSP_USE_EIGEN=ON` | `target_link_libraries(qwqdsp PUBLIC eigen)` | 定义 `QWQDSP_HAVE_EIGEN`，启用 `rls_filter`、`swift_f0` 等 |
+| **Intel IPP** | `QWQDSP_USE_IPP=ON` | `target_link_libraries(qwqdsp PUBLIC IPP::ipps)` | 定义 `QWQDSP_HAVE_IPP`，替换 Ooura FFT 为 IPP 后端 |
+| **SIMDe** | `QWQDSP_USE_SIMDE=ON` | `target_link_libraries(qwqdsp PUBLIC simde)` | 定义 `QWQDSP_HAVE_SIMDE`，非 x86 平台模拟 SIMD |
+| **raylib** | `QWQDSP_USE_RAYLIB=ON` | `add_subdirectory(raylib)` | 构建 GUI 测试和 `playing` 可执行程序 |
+
+> **依赖管理约定**：`qwqdsp/CMakeLists.txt` 只读取外部传入的 `QWQDSP_USE_*` 变量并定义对应的 `QWQDSP_HAVE_*` 编译宏，**不负责** `target_link_libraries` 和 `find_package`。外部 CMake 在 `add_subdirectory(qwqdsp)` 之后手动链接依赖。参见根 `CMakeLists.txt` 示例。
 
 ---
 

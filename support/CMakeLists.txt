@@ -1,8 +1,16 @@
 add_library(qwqdsp_support INTERFACE)
 target_include_directories(qwqdsp_support INTERFACE .)
 
-if (TARGET raylib)
-    add_library(qwqdsp_support_slider STATIC
+# stb_image_write 图像输出库
+add_library(qwqdsp_support_stb_image
+    OBJECT
+    "stb_image_write.c"
+)
+target_include_directories(qwqdsp_support_stb_image PUBLIC .)
+target_link_libraries(qwqdsp_support_stb_image PUBLIC qwqdsp_support)
+
+if(QWQDSP_USE_RAYLIB)
+    add_library(qwqdsp_support_slider OBJECT
         slider.cpp
     )
     target_include_directories(qwqdsp_support_slider PUBLIC .)

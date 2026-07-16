@@ -5,4 +5,4 @@ struct Pitch {
     float non_period_ratio{};
 };
 
-}
+} // namespace qwqdsp_pitch

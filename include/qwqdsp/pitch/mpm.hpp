@@ -1,10 +1,13 @@
 #pragma once
+#include "qwqdsp/pitch/pitch.hpp"
+#include "qwqdsp/spectral/oouras_real_fft.hpp"
 #include <span>
 #include <vector>
-#include "qwqdsp/spectral/oouras_real_fft.hpp"
-#include "qwqdsp/pitch/pitch.hpp"
 
 namespace qwqdsp_pitch {
+/**
+ * @ref https://github.com/sevagh/pitch-detection
+ */
 class MPM {
 public:
     void Init(float fs, size_t block_size) {
@@ -13,23 +16,23 @@ public:
         SetMinPitch(min_pitch_);
         SetMaxPitch(max_pitch_);
 
-        fft_in_buffer_.resize(block_size*2);
-        fft_out_buffer_.resize(block_size*2+2);
-        fft_.Init(block_size*2);
+        fft_in_buffer_.resize(block_size * 2);
+        fft_out_buffer_.resize(block_size * 2 + 2);
+        fft_.Init(block_size * 2);
         max_positions_.resize(block_size);
         estimates_.resize(block_size);
     }
-    
+
     void Process(std::span<const float> block) noexcept {
         std::copy_n(block.begin(), block.size(), fft_in_buffer_.begin());
         std::fill_n(fft_in_buffer_.begin() + block.size(), block.size(), 0);
         fft_.FFT(fft_in_buffer_.data(), fft_out_buffer_.data());
         size_t const num_bins = fft_.GetFFTSize() / 2 + 1;
         for (size_t i = 0; i < num_bins; ++i) {
-            float re = fft_out_buffer_[2*i];
-            float im = fft_out_buffer_[2*i + 1];
-            fft_out_buffer_[2*i] = (re*re + im*im);
-            fft_out_buffer_[2*i + 1]=0;
+            float re = fft_out_buffer_[2 * i];
+            float im = fft_out_buffer_[2 * i + 1];
+            fft_out_buffer_[2 * i] = (re * re + im * im);
+            fft_out_buffer_[2 * i + 1] = 0;
         }
         fft_.IFFT(fft_out_buffer_.data(), fft_in_buffer_.data());
 
@@ -39,8 +42,7 @@ public:
         float highest_amplitude = -FLT_MAX;
         estimates_.clear();
         for (int i : max_positions_) {
-            highest_amplitude =
-                std::max(highest_amplitude, autocorrelation[static_cast<size_t>(i)]);
+            highest_amplitude = std::max(highest_amplitude, autocorrelation[static_cast<size_t>(i)]);
             if (fft_in_buffer_[static_cast<size_t>(i)] > MPM_SMALL_CUTOFF) {
                 auto x = parabolic_interpolation(autocorrelation, static_cast<size_t>(i));
                 estimates_.push_back(x);
@@ -118,7 +120,7 @@ private:
 
         float first_power = 0;
         for (float x : block) {
-            first_power += x*x;
+            first_power += x * x;
         }
 
         float sum = 0;
@@ -137,8 +139,7 @@ private:
         }
     }
 
-    void peak_picking(const std::vector<float> &nsdf) noexcept
-    {
+    void peak_picking(const std::vector<float>& nsdf) noexcept {
         max_positions_.clear();
 
         int pos = min_bin_;
@@ -154,8 +155,9 @@ private:
             pos = 1;
 
         while (pos < size - 1) {
-            if (nsdf[static_cast<size_t>(pos)] > nsdf[static_cast<size_t>(pos) - 1] && nsdf[static_cast<size_t>(pos)] >= nsdf[static_cast<size_t>(pos) + 1] &&
-                (cur_max_pos == 0 || nsdf[static_cast<size_t>(pos)] > nsdf[static_cast<size_t>(cur_max_pos)])) {
+            if (nsdf[static_cast<size_t>(pos)] > nsdf[static_cast<size_t>(pos) - 1]
+                && nsdf[static_cast<size_t>(pos)] >= nsdf[static_cast<size_t>(pos) + 1]
+                && (cur_max_pos == 0 || nsdf[static_cast<size_t>(pos)] > nsdf[static_cast<size_t>(cur_max_pos)])) {
                 cur_max_pos = pos;
             }
             pos++;
@@ -174,7 +176,7 @@ private:
         }
     }
 
-    static std::pair<float, float> parabolic_interpolation(const std::vector<float> &array, size_t x) noexcept {
+    static std::pair<float, float> parabolic_interpolation(const std::vector<float>& array, size_t x) noexcept {
         size_t x_adjusted;
 
         if (x < 1) {
@@ -186,12 +188,11 @@ private:
         else {
             float den = array[x + 1] + array[x - 1] - 2 * array[x];
             float delta = array[x - 1] - array[x + 1];
-            return (den != 0.0f)
-                    ? std::make_pair(static_cast<float>(x), array[x])
-                    : std::make_pair(static_cast<float>(x) + delta / (2 * den),
-                            array[x] - delta * delta / (8 * den));
+            return (den == 0.0f)
+                     ? std::make_pair(static_cast<float>(x), array[x])
+                     : std::make_pair(static_cast<float>(x) + delta / (2 * den), array[x] - delta * delta / (8 * den));
         }
         return std::make_pair(static_cast<float>(x_adjusted), array[x_adjusted]);
     }
 };
-}
+} // namespace qwqdsp_pitch

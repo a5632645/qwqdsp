@@ -1,11 +1,11 @@
 #pragma once
-#include <algorithm>
-#include <cstddef>
-#include <vector>
-#include <span>
-#include <cmath>
-#include "qwqdsp/spectral/real_fft.hpp"
 #include "qwqdsp/pitch/pitch.hpp"
+#include "qwqdsp/spectral/real_fft.hpp"
+#include <algorithm>
+#include <cmath>
+#include <cstddef>
+#include <span>
+#include <vector>
 
 namespace qwqdsp_pitch {
 /**
@@ -43,7 +43,8 @@ public:
 
             // powers[tau] = sum x[i+tau]^2 = sum x[j]^2, j from tau to N/2+tau
             for (int tau = 1; tau < max_tal; ++tau) {
-                powers_[tau] = powers_[tau - 1] - block[tau - 1] * block[tau - 1] + block[tau + max_tal] * block[tau + max_tal];
+                powers_[tau] =
+                    powers_[tau - 1] - block[tau - 1] * block[tau - 1] + block[tau + max_tal] * block[tau + max_tal];
             }
 
             // fft circular correlation of x[0:N/2] and x[tau:N/2+tau]
@@ -158,4 +159,4 @@ private:
     int min_bin_{};
     int max_bin_{};
 };
-}
+} // namespace qwqdsp_pitch

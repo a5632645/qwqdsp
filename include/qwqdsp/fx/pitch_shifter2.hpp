@@ -4,10 +4,12 @@
 #include <numbers>
 #include <cmath>
 #include <complex>
-#include <qwqdsp/spectral/ipp_real_fft.hpp>
 #include <qwqdsp/segement/analyze_synthsis_online.hpp>
 #include <qwqdsp/window/hann.hpp>
 #include <qwqdsp/window/blackman.hpp>
+
+#ifdef QWQDSP_HAVE_IPP
+#include <qwqdsp/spectral/ipp_real_fft.hpp>
 
 namespace qwqdsp_fx {
 class PhaseVocoder {
@@ -107,3 +109,4 @@ private:
     qwqdsp_spectral::IppRealFFT fft_;
 };
 } // namespace qwqdsp_fx
+#endif // QWQDSP_HAVE_IPP

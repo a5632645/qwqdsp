@@ -1383,7 +1383,7 @@ int32_t AudioSampleConverter<T>::sampleToThirtyTwoBitInt (T sample)
             else if (sample <= -1.f)
                 return std::numeric_limits<int32_t>::lowest() + 1; // starting at 1 preserves symmetry
             else
-                return static_cast<int32_t> (sample * std::numeric_limits<int32_t>::max());
+                return static_cast<int32_t> (sample * static_cast<float>(std::numeric_limits<int32_t>::max()));
         }
         else
         {

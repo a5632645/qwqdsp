@@ -1,42 +1,45 @@
-cmake_minimum_required(VERSION 3.11)
+cmake_minimum_required(VERSION 3.22)
 project(qwqdsp)
 
-option(QWQDSP_BUILD_TESTS "Disable building tests" ON)
+option(QWQDSP_BUILD_TESTS "building tests" ON)
 
-# check for intel ipp
-set(IPP_SHARED OFF)
-find_package(IPP)
-set(qwqdsp_have_ipp ${IPP_FOUND})
+# 依赖由外部 CMake 控制:
+# QWQDSP_USE_EIGEN  — 定义 QWQDSP_HAVE_EIGEN  (需外部链接 qwqdsp_eigen)
+# QWQDSP_USE_IPP    — 定义 QWQDSP_HAVE_IPP    (需外部链接 IPP::ipps)
+# QWQDSP_USE_SIMDE  — 定义 QWQDSP_HAVE_SIMDE  (需外部链接 simde)
+# QWQDSP_USE_RAYLIB — 构建 playing 和 GUI 测试 (需外部提供 raylib)
 
 # main library
 add_library(qwqdsp
     STATIC
-        "source/oouras.cpp"
-        "source/real_fft.cpp"
-        "source/complex_fft.cpp"
+    "source/oouras.cpp"
+    "source/real_fft.cpp"
+    "source/complex_fft.cpp"
 )
 target_include_directories(qwqdsp PUBLIC "./include")
 set_target_properties(qwqdsp PROPERTIES CXX_STANDARD 20)
 
-# external library
-if (TARGET eigen)
-    target_link_libraries(qwqdsp PUBLIC Eigen3::Eigen)
-    target_compile_definitions(qwqdsp PUBLIC QWQDSP_HAVE_EIGEN=1)
+# 仅定义编译宏 — 链接由外部 CMake 负责
+if(QWQDSP_USE_EIGEN)
+    target_compile_definitions(qwqdsp PUBLIC QWQDSP_HAVE_EIGEN)
 endif()
-if (qwqdsp_have_ipp)
-    target_link_libraries(qwqdsp PUBLIC IPP::ipps)
-    target_compile_definitions(qwqdsp PUBLIC QWQDSP_HAVE_IPP=1)
+
+if(QWQDSP_USE_IPP)
+    target_compile_definitions(qwqdsp PUBLIC QWQDSP_HAVE_IPP)
+else()
+    message(STATUS "[qwqdsp] no intel ipp, fallback to oouras")
 endif()
-if (TARGET simde)
-    target_link_libraries(qwqdsp PUBLIC simde)
+
+if(QWQDSP_USE_SIMDE)
     target_compile_definitions(qwqdsp PUBLIC QWQDSP_HAVE_SIMDE)
 endif()
 
-add_subdirectory(support)
-
 # enable tests
-if (QWQDSP_BUILD_TESTS)
-    if (QWQDSP_HAVE_RAYLIB)
+if(QWQDSP_BUILD_TESTS)
+    add_subdirectory(support)
+    add_subdirectory(tests)
+
+    if(QWQDSP_USE_RAYLIB)
         add_executable(playing
             "playing/playing.cpp"
         )
@@ -44,12 +47,10 @@ if (QWQDSP_BUILD_TESTS)
         target_link_libraries(playing PRIVATE qwqdsp_support_slider qwqdsp_support)
         set_target_properties(playing PROPERTIES CXX_STANDARD 20)
 
-        if (MSVC)
+        if(MSVC)
             target_compile_options(playing PUBLIC /arch:AVX2)
         else()
             target_compile_options(playing PUBLIC -mavx2)
         endif()
     endif()
-    
-    add_subdirectory(tests)
 endif()
