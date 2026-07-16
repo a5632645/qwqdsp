@@ -28,7 +28,7 @@
  * X_th  = FFT(x·(n-center)w[n])    (时间重分配)
  * X_tdh = FFT(x·(n-center)dw[n])   (仅用于 conv)
  */
-template <typename Colormap>
+template <typename Colormap, float kMinWeight = 0.1f>
 struct TfPhaseVocoderReassignmentFrameConv {
     void Init(int sampleRate, int fftSize, int hopSize, int zeroPad, int outputHeight, float freqMin, float freqMax,
               float dbFloor) noexcept {
@@ -205,18 +205,21 @@ struct TfPhaseVocoderReassignmentFrameConv {
         // ── 6. 弹出最旧子列 → dB → Color ──
         constexpr float kDbEps = 1e-12f;
         for (int y = 0; y < outputHeight_; ++y) {
-            float avg = col_buf_[y] / (weight_buf_[y] + 1e-8f);
-            float dB = 20.0f * std::log10(avg + kDbEps);
+            float dB;
+            if (weight_buf_[y] < kMinWeight) {
+                dB = dbFloor_;
+            } else {
+                float avg = col_buf_[y] / weight_buf_[y];
+                dB = 20.0f * std::log10(avg + kDbEps);
+            }
             dB = std::clamp(dB, dbFloor_, 0.0f);
             int idx = static_cast<int>((dB - dbFloor_) / (-dbFloor_) * 255.0f);
             idx = std::clamp(idx, 0, 255);
             column_[y] = Colormap::kTable[idx];
         }
 
-        std::memmove(col_buf_.data(), col_buf_.data() + outputHeight_,
-                     (subColumns_ - 1) * outputHeight_ * sizeof(float));
-        std::memmove(weight_buf_.data(), weight_buf_.data() + outputHeight_,
-                     (subColumns_ - 1) * outputHeight_ * sizeof(float));
+        std::move(col_buf_.begin() + outputHeight_, col_buf_.end(), col_buf_.begin());
+        std::move(weight_buf_.begin() + outputHeight_, weight_buf_.end(), weight_buf_.begin());
         std::fill(col_buf_.begin() + (subColumns_ - 1) * outputHeight_, col_buf_.end(), 0.0f);
         std::fill(weight_buf_.begin() + (subColumns_ - 1) * outputHeight_, weight_buf_.end(), 0.0f);
     }

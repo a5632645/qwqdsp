@@ -18,7 +18,7 @@
  * X_h = FFT(x·w)，X_t = FFT(x[n-1]·w[n])。
  * 互谱相位差 → 瞬时频率 → 能量线性分布到输出网格。
  */
-template <typename Colormap>
+template <typename Colormap, float kMinWeight = 0.1f>
 struct FreqReassignmentFrame {
     void Init(int sampleRate, int fftSize, int zeroPad, int outputHeight, float freqMin, float freqMax,
               float dbFloor) noexcept {
@@ -110,8 +110,14 @@ struct FreqReassignmentFrame {
         // ── 4. 平均幅度 → dB → magma 颜色 ──
         constexpr float kEps = 1e-12f;
         for (int y = 0; y < outputHeight_; ++y) {
-            float avg = col_lin_[y] / (weight_[y] + 1e-8f);
-            float dB = 20.0f * std::log10(avg + kEps);
+            float dB;
+            if (weight_[y] < kMinWeight) {
+                dB = dbFloor_;
+            }
+            else {
+                float avg = col_lin_[y] / weight_[y];
+                dB = 20.0f * std::log10(avg + kEps);
+            }
             dB = std::clamp(dB, dbFloor_, 0.0f);
             int idx = static_cast<int>((dB - dbFloor_) / (-dbFloor_) * 255.0f);
             idx = std::clamp(idx, 0, 255);

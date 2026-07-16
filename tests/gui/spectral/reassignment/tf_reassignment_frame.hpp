@@ -22,7 +22,7 @@
  * X_t = FFT(x[n-1]·w[n])           (频率重分配)
  * X_pf = roll(X_h,1), X_pf[0]=0    (时间重分配 → 群延迟)
  */
-template <typename Colormap>
+template <typename Colormap, float kMinWeight = 0.1f>
 struct TfReassignmentFrame {
     void Init(int sampleRate, int fftSize, int hopSize, int zeroPad, int outputHeight, float freqMin, float freqMax,
               float dbFloor) noexcept {
@@ -151,8 +151,13 @@ struct TfReassignmentFrame {
         // ── 5. 弹出最旧子列 → dB → Color ──
         constexpr float kEps = 1e-12f;
         for (int y = 0; y < outputHeight_; ++y) {
-            float avg = col_buf_[y] / (weight_buf_[y] + 1e-8f);
-            float dB = 20.0f * std::log10(avg + kEps);
+            float dB;
+            if (weight_buf_[y] < kMinWeight) {
+                dB = dbFloor_;
+            } else {
+                float avg = col_buf_[y] / weight_buf_[y];
+                dB = 20.0f * std::log10(avg + kEps);
+            }
             dB = std::clamp(dB, dbFloor_, 0.0f);
             int idx = static_cast<int>((dB - dbFloor_) / (-dbFloor_) * 255.0f);
             idx = std::clamp(idx, 0, 255);
@@ -160,10 +165,8 @@ struct TfReassignmentFrame {
         }
 
         // 左移: col_buf_[0..n-2] = col_buf_[1..n-1]
-        std::memmove(col_buf_.data(), col_buf_.data() + outputHeight_,
-                     (subColumns_ - 1) * outputHeight_ * sizeof(float));
-        std::memmove(weight_buf_.data(), weight_buf_.data() + outputHeight_,
-                     (subColumns_ - 1) * outputHeight_ * sizeof(float));
+        std::move(col_buf_.begin() + outputHeight_, col_buf_.end(), col_buf_.begin());
+        std::move(weight_buf_.begin() + outputHeight_, weight_buf_.end(), weight_buf_.begin());
         // 清零新列
         std::fill(col_buf_.begin() + (subColumns_ - 1) * outputHeight_, col_buf_.end(), 0.0f);
         std::fill(weight_buf_.begin() + (subColumns_ - 1) * outputHeight_, weight_buf_.end(), 0.0f);
