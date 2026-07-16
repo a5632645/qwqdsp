@@ -9,7 +9,7 @@
 #include <qwqdsp/window/blackman.hpp>
 
 #ifdef QWQDSP_HAVE_IPP
-#include <qwqdsp/spectral/ipp_real_fft.hpp>
+#include <qwqdsp/spectral/real_fft.hpp>
 
 namespace qwqdsp_fx {
 class PhaseVocoder {
@@ -106,7 +106,7 @@ private:
     std::array<float, kFFT> analyze_window_;
     std::array<float, kBins> synthsis_phase_{};
     qwqdsp_segement::AnalyzeSynthsisOnline segement_;
-    qwqdsp_spectral::IppRealFFT fft_;
+    qwqdsp_spectral::RealFFT fft_;
 };
 } // namespace qwqdsp_fx
 #endif // QWQDSP_HAVE_IPP

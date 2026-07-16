@@ -1,8 +1,8 @@
 #pragma once
-#include <vector>
 #include <bit>
 #include <cassert>
 #include <cmath>
+#include <vector>
 
 namespace qwqdsp_spectral {
 /**
@@ -30,10 +30,7 @@ public:
      * @param output_real size()=fft_size
      * @param output_imag size()=fft_size
      */
-    void FFT(
-        const float* input_real, const float* input_imag,
-        float* outupt_real, float* output_imag
-    ) noexcept {
+    void FFT(const float* input_real, const float* input_imag, float* outupt_real, float* output_imag) noexcept {
         for (size_t i = 0; i < fft_size_; ++i) {
             buffer_[2 * i] = input_real[i];
             buffer_[2 * i + 1] = input_imag[i];
@@ -53,10 +50,7 @@ public:
      * @param out_real size()=fft_size
      * @param out_imag size()=fft_size
      */
-    void IFFT(
-        const float* in_real, const float* in_imag,
-        float* out_real, float* out_imag
-    ) noexcept {
+    void IFFT(const float* in_real, const float* in_imag, float* out_real, float* out_imag) noexcept {
         buffer_[0] = in_real[0];
         buffer_[1] = in_imag[0];
         for (size_t i = 1; i < fft_size_; ++i) {
@@ -71,12 +65,11 @@ public:
         }
     }
 private:
-    static void cftmdl(int n, int l, float *a, float *w) noexcept
-    {
+    static void cftmdl(int n, int l, float* a, float* w) noexcept {
         int j, j1, j2, j3, k, k1, k2, m, m2;
         float wk1r, wk1i, wk2r, wk2i, wk3r, wk3i;
         float x0r, x0i, x1r, x1i, x2r, x2i, x3r, x3i;
-        
+
         m = l << 2;
         for (j = 0; j < l; j += 2) {
             j1 = j + l;
@@ -197,12 +190,11 @@ private:
         }
     }
 
-    static void cft1st(int n, float *a, float *w) noexcept
-    {
+    static void cft1st(int n, float* a, float* w) noexcept {
         int j, k1, k2;
         float wk1r, wk1i, wk2r, wk2i, wk3r, wk3i;
         float x0r, x0i, x1r, x1i, x2r, x2i, x3r, x3i;
-        
+
         x0r = a[0] + a[2];
         x0i = a[1] + a[3];
         x1r = a[0] - a[2];
@@ -301,11 +293,10 @@ private:
         }
     }
 
-    static void cftbsub(int n, float *a, float *w) noexcept
-    {
+    static void cftbsub(int n, float* a, float* w) noexcept {
         int j, j1, j2, j3, l;
         float x0r, x0i, x1r, x1i, x2r, x2i, x3r, x3i;
-        
+
         l = 2;
         if (n > 8) {
             cft1st(n, a, w);
@@ -337,7 +328,8 @@ private:
                 a[j3] = x1r + x3i;
                 a[j3 + 1] = x1i + x3r;
             }
-        } else {
+        }
+        else {
             for (j = 0; j < l; j += 2) {
                 j1 = j + l;
                 x0r = a[j] - a[j1];
@@ -350,11 +342,10 @@ private:
         }
     }
 
-    static void rftbsub(int n, float *a, int nc, float *c) noexcept
-    {
+    static void rftbsub(int n, float* a, int nc, float* c) noexcept {
         int j, k, kk, ks, m;
         float wkr, wki, xr, xi, yr, yi;
-        
+
         a[1] = -a[1];
         m = n >> 1;
         ks = 2 * nc / m;
@@ -376,11 +367,10 @@ private:
         a[m + 1] = -a[m + 1];
     }
 
-    static void rftfsub(int n, float *a, int nc, float *c) noexcept
-    {
+    static void rftfsub(int n, float* a, int nc, float* c) noexcept {
         int j, k, kk, ks, m;
         float wkr, wki, xr, xi, yr, yi;
-        
+
         m = n >> 1;
         ks = 2 * nc / m;
         kk = 0;
@@ -400,26 +390,26 @@ private:
         }
     }
 
-    static void cdft(int n, int isgn, float *a, int *ip, float *w) noexcept
-    {
+    static void cdft(int n, int isgn, float* a, int* ip, float* w) noexcept {
         if (n > 4) {
             if (isgn >= 0) {
                 bitrv2(n, ip + 2, a);
                 cftfsub(n, a, w);
-            } else {
+            }
+            else {
                 bitrv2conj(n, ip + 2, a);
                 cftbsub(n, a, w);
             }
-        } else if (n == 4) {
+        }
+        else if (n == 4) {
             cftfsub(n, a, w);
         }
     }
 
-    static void bitrv2conj(int n, int *ip, float *a) noexcept
-    {
+    static void bitrv2conj(int n, int* ip, float* a) noexcept {
         int j, j1, k, k1, l, m, m2;
         float xr, xi, yr, yi;
-        
+
         ip[0] = 0;
         l = n;
         m = 1;
@@ -490,7 +480,8 @@ private:
                 k1 += m2;
                 a[k1 + 1] = -a[k1 + 1];
             }
-        } else {
+        }
+        else {
             a[1] = -a[1];
             a[m2 + 1] = -a[m2 + 1];
             for (k = 1; k < m; k++) {
@@ -523,11 +514,10 @@ private:
         }
     }
 
-    static void cftfsub(int n, float *a, float *w) noexcept
-    {
+    static void cftfsub(int n, float* a, float* w) noexcept {
         int j, j1, j2, j3, l;
         float x0r, x0i, x1r, x1i, x2r, x2i, x3r, x3i;
-        
+
         l = 2;
         if (n > 8) {
             cft1st(n, a, w);
@@ -559,7 +549,8 @@ private:
                 a[j3] = x1r + x3i;
                 a[j3 + 1] = x1i - x3r;
             }
-        } else {
+        }
+        else {
             for (j = 0; j < l; j += 2) {
                 j1 = j + l;
                 x0r = a[j] - a[j1];
@@ -572,11 +563,10 @@ private:
         }
     }
 
-    static void makect(int nc, int *ip, float *c) noexcept
-    {
+    static void makect(int nc, int* ip, float* c) noexcept {
         int j, nch;
         float delta;
-        
+
         ip[1] = nc;
         if (nc > 1) {
             nch = nc >> 1;
@@ -593,7 +583,7 @@ private:
     static void makewt(int nw, int* ip, float* w) noexcept {
         int j, nwh;
         float delta, x, y;
-        
+
         ip[0] = nw;
         ip[1] = 1;
         if (nw > 2) {
@@ -617,11 +607,10 @@ private:
         }
     }
 
-    static void bitrv2(int n, int *ip, float *a) noexcept
-    {
+    static void bitrv2(int n, int* ip, float* a) noexcept {
         int j, j1, k, k1, l, m, m2;
         float xr, xi, yr, yi;
-        
+
         ip[0] = 0;
         l = n;
         m = 1;
@@ -688,7 +677,8 @@ private:
                 a[k1] = xr;
                 a[k1 + 1] = xi;
             }
-        } else {
+        }
+        else {
             for (k = 1; k < m; k++) {
                 for (j = 0; j < k; j++) {
                     j1 = 2 * j + ip[k];
@@ -721,4 +711,4 @@ private:
     std::vector<float> w_;
     std::vector<float> buffer_;
 };
-}
+} // namespace qwqdsp_spectral

@@ -4,7 +4,7 @@
 #include <qwqdsp/oscillator/blep_coeff.hpp>
 #include <qwqdsp/oscillator/noise.hpp>
 #include <qwqdsp/oscillator/polyblep.hpp>
-#include <qwqdsp/spectral/ipp_real_fft.hpp>
+#include <qwqdsp/spectral/real_fft.hpp>
 #include <qwqdsp/window/blackman.hpp>
 #include <qwqdsp/window/hann.hpp>
 
@@ -12,7 +12,7 @@ constexpr float noise_gain = 1e-1f;
 
 static std::vector<float> PowerSpectrum(const std::vector<float>& x) {
     const size_t n = x.size();
-    qwqdsp_spectral::IppRealFFT fft;
+    qwqdsp_spectral::RealFFT fft;
     fft.Init(n);
     std::vector<float> fft_out(n + 2);
     fft.FFT(x.data(), fft_out.data());

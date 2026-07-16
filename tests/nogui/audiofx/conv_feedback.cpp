@@ -3,7 +3,7 @@
 #include <qwqdsp/filter/fir.hpp>
 #include <qwqdsp/fx/uniform_convolution.hpp>
 #include <qwqdsp/oscillator/noise.hpp>
-#include <qwqdsp/spectral/real_fft.hpp>
+#include <qwqdsp/spectral/real_fft_adv.hpp>
 
 static void ShouldBeDelay32() {
     qwqdsp_fx::UniformConvolution conv;
@@ -84,7 +84,7 @@ static void RandomFeedback() {
         ir[i] = x;
     }
 
-    qwqdsp_spectral::RealFFT fft;
+    qwqdsp_spectral::RealFftAdv fft;
     fft.Init(std::size(ir));
     float gains[std::size(ir) / 2 + 1];
     fft.FFTGainPhase(ir, gains);
@@ -157,7 +157,7 @@ static void RandomPhase() {
     std::fill(gains, gains + bins, 1.0f);
     std::fill(phases, phases + bins, 1.0f);
 
-    qwqdsp_spectral::RealFFT fft;
+    qwqdsp_spectral::RealFftAdv fft;
     fft.Init(ir_size);
     fft.IFFTGainPhase(ir, gains, phases);
     conv.SetIR(ir);

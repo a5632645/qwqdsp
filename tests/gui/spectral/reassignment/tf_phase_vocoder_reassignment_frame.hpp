@@ -8,7 +8,7 @@
 #include <span>
 #include <vector>
 
-#include <qwqdsp/spectral/real_fft.hpp>
+#include <qwqdsp/spectral/real_fft_adv.hpp>
 #include <qwqdsp/window/blackman_harris.hpp>
 #include <qwqdsp/window/blackman_harris_3term.hpp>
 #include <qwqdsp/window/helper.hpp>
@@ -235,7 +235,7 @@ private:
     int subColumns_{}, outputHeight_{};
     float freqMin_{}, freqMax_{}, logMin_{}, logMax_{}, dbFloor_{}, subColScale_{}, expct_{}, osamp_{};
 
-    qwqdsp_spectral::RealFFT fft_;
+    qwqdsp_spectral::RealFftAdv fft_;
     std::vector<float> fft_in_;
     std::vector<float> window_;
     std::vector<float> twindow_;

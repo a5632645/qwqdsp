@@ -1,6 +1,6 @@
 #include <qwqdsp/pitch/swift_f0.hpp>
 #include <qwqdsp/pitch/swift_f0_model.hpp>
-#include <qwqdsp/spectral/real_fft.hpp>
+#include <qwqdsp/spectral/real_fft_adv.hpp>
 #include <qwqdsp/window/hann.hpp>
 #include <work_dir.hpp>
 
@@ -96,7 +96,7 @@ static void computeLogMagSTFT(const std::vector<float>& audio, std::vector<float
     log_mag_out.resize(T * F);
 
     // ---- STFT 准备 ----
-    qwqdsp_spectral::RealFFT fft;
+    qwqdsp_spectral::RealFftAdv fft;
     fft.Init(kNFFT);
     std::vector<float> frame(kNFFT);
     std::vector<float> gain(fft.NumBins()); // 513 bins

@@ -51,26 +51,12 @@ public:
         }
     }
 
-    void FFT(
-        float const* in_real, float const* in_imag,
-        float* out_real, float* out_imag
-    ) noexcept {
-        ippsFFTFwd_CToC_32f(
-            in_real, in_imag,
-            out_real, out_imag,
-            p_fft_spec_, p_buffer_
-        );
+    void FFT(float const* in_real, float const* in_imag, float* out_real, float* out_imag) noexcept {
+        ippsFFTFwd_CToC_32f(in_real, in_imag, out_real, out_imag, p_fft_spec_, p_buffer_);
     }
 
-    void IFFT(
-        float const* in_real, float const* in_imag,
-        float* out_real, float* out_imag
-    ) noexcept {
-        ippsFFTInv_CToC_32f(
-            in_real, in_imag,
-            out_real, out_imag,
-            p_fft_spec_, p_buffer_
-        );
+    void IFFT(float const* in_real, float const* in_imag, float* out_real, float* out_imag) noexcept {
+        ippsFFTInv_CToC_32f(in_real, in_imag, out_real, out_imag, p_fft_spec_, p_buffer_);
     }
 private:
     size_t fft_size_{};
@@ -79,5 +65,5 @@ private:
     Ipp8u* p_buffer_{};
     IppsFFTSpec_C_32f* p_fft_spec_{};
 };
-}
+} // namespace qwqdsp_spectral
 #endif

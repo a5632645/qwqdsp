@@ -1,6 +1,6 @@
 #include <array>
 
-#include <qwqdsp/spectral/real_fft.hpp>
+#include <qwqdsp/spectral/real_fft_adv.hpp>
 #include <qwqdsp/window/hann.hpp>
 #include <qwqdsp/window/helper.hpp>
 
@@ -45,7 +45,7 @@ constexpr int kHopSize = kFftSize / 4;
 static std::array<float, kFftSize> hann_window_{};
 static std::array<float, kFftSize> in_buffer_{};
 static std::array<float, kFftSize> fft_in_buffer_{};
-static qwqdsp_spectral::RealFFT fft_;
+static qwqdsp_spectral::RealFftAdv fft_;
 static int in_count_{};
 
 // ----------------------------------------

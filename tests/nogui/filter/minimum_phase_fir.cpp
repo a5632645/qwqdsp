@@ -1,6 +1,6 @@
-#include "qwqdsp/spectral/real_fft.hpp"
+#include "qwqdsp/spectral/real_fft_adv.hpp"
 #include "qwqdsp/window/blackman.hpp"
-#include "qwqdsp/spectral/complex_fft.hpp"
+#include "qwqdsp/spectral/complex_fft_adv.hpp"
 #include "qwqdsp/filter/window_fir.hpp"
 #include "qwqdsp/window/helper.hpp"
 #include <cstddef>
@@ -14,7 +14,7 @@ int main() {
     float fir_pad[4096];
     qwqdsp_window::Helper::ZeroPad(fir_pad, fir);
 
-    qwqdsp_spectral::ComplexFFT fft;
+    qwqdsp_spectral::ComplexFftAdv fft;
     fft.Init(4096);
     constexpr size_t num_bins = fft.NumBins(4096);
     float gains[num_bins];
@@ -46,7 +46,7 @@ int main() {
     float fir_pad2[1024];
     qwqdsp_window::Helper::ZeroPad(fir_pad2, fir);
     qwqdsp_window::Helper::ZeroPad(min_phase_pad, slice);
-    qwqdsp_spectral::RealFFT fft2;
+    qwqdsp_spectral::RealFftAdv fft2;
     constexpr size_t num_bins2 = fft2.NumBins(1024);
     float fir_gains[num_bins2];
     float min_phase_gains[num_bins2];

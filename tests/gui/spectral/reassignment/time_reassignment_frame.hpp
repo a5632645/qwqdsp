@@ -8,7 +8,7 @@
 #include <span>
 #include <vector>
 
-#include <qwqdsp/spectral/real_fft.hpp>
+#include <qwqdsp/spectral/real_fft_adv.hpp>
 
 #include "raylib.h"
 
@@ -152,7 +152,7 @@ private:
     int subColumns_{}, outputHeight_{};
     float freqMin_{}, freqMax_{}, logMin_{}, logMax_{}, dbFloor_{}, subColScale_{};
 
-    qwqdsp_spectral::RealFFT fft_;
+    qwqdsp_spectral::RealFftAdv fft_;
     std::vector<float> fft_in_;
     std::vector<std::complex<float>> X_h_, X_pf_;
     std::vector<float> col_buf_; // [subCol * outputHeight + y]

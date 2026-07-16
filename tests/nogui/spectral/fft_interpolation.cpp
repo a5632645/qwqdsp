@@ -1,6 +1,6 @@
 #include <cstddef>
 #include <numbers>
-#include "qwqdsp/spectral/real_fft.hpp"
+#include "qwqdsp/spectral/real_fft_adv.hpp"
 
 int main() {
     float sin[512];
@@ -8,9 +8,9 @@ int main() {
         sin[i] = std::sin(std::numbers::pi_v<float> * 2 * i / 512.0f);
     }
 
-    std::complex<float> spectral[qwqdsp_spectral::RealFFT::NumBins(1024)]{};
+    std::complex<float> spectral[qwqdsp_spectral::RealFftAdv::NumBins(1024)]{};
     float pad_sin[1024];
-    qwqdsp_spectral::RealFFT fft;
+    qwqdsp_spectral::RealFftAdv fft;
     fft.Init(512);
     fft.FFT(sin, {spectral, fft.NumBins()});
     for (size_t i = 0; i < fft.NumBins(); ++i) {

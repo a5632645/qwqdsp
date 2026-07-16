@@ -5,7 +5,7 @@
 #include <span>
 #include <vector>
 
-#include <qwqdsp/spectral/real_fft.hpp>
+#include <qwqdsp/spectral/real_fft_adv.hpp>
 
 #include "raylib.h"
 
@@ -74,7 +74,7 @@ struct SpectrogramFrame {
         return height_;
     }
 private:
-    qwqdsp_spectral::RealFFT fft_;
+    qwqdsp_spectral::RealFftAdv fft_;
     std::vector<float> fft_in_;
     std::vector<float> gain_;
     std::vector<Color> column_;

@@ -2,7 +2,7 @@
 #include <numbers>
 
 #include "qwqdsp/window/helper.hpp"
-#include "qwqdsp/spectral/real_fft.hpp"
+#include "qwqdsp/spectral/real_fft_adv.hpp"
 #include "qwqdsp/window/hamming.hpp"
 #include "qwqdsp/filter/window_fir.hpp"
 
@@ -14,7 +14,7 @@ int main() {
     float pading[1024];
     std::complex<float> spectral[513];
     qwqdsp_window::Helper::ZeroPad(pading, test);
-    qwqdsp_spectral::RealFFT fft;
+    qwqdsp_spectral::RealFftAdv fft;
     fft.Init(1024);
     fft.FFT(pading, spectral);
 

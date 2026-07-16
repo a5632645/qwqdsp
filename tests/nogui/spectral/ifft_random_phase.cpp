@@ -1,11 +1,11 @@
-#include <qwqdsp/spectral/real_fft.hpp>
+#include <qwqdsp/spectral/real_fft_adv.hpp>
 #include <qwqdsp/window/hann.hpp>
 #include <random>
 #include <qwqdsp/convert.hpp>
 
 // @ref https://apulsoft.ch/blog/allpass-fir-approximation/
 int main() {
-    qwqdsp_spectral::RealFFT fft;
+    qwqdsp_spectral::RealFftAdv fft;
     fft.Init(1024);
 
     constexpr int bins = fft.NumBins(1024);

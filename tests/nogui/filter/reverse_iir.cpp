@@ -5,7 +5,7 @@
 #include <complex>
 #include <qwqdsp/filter/rbj.hpp>
 #include <qwqdsp/filter/biquad.hpp>
-#include <qwqdsp/spectral/real_fft.hpp>
+#include <qwqdsp/spectral/real_fft_adv.hpp>
 #include <qwqdsp/convert.hpp>
 
 template <int NDelay>
@@ -127,7 +127,7 @@ int main() {
         ir[i] = f.Tick(ir[i]);
     }
 
-    qwqdsp_spectral::RealFFT fft;
+    qwqdsp_spectral::RealFftAdv fft;
     fft.Init(1024);
 
     float gains[513];

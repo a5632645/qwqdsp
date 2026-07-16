@@ -6,7 +6,7 @@
 #include <cstring>
 #include <numbers>
 
-#include <qwqdsp/spectral/real_fft.hpp>
+#include <qwqdsp/spectral/real_fft_adv.hpp>
 #include <qwqdsp/window/blackman_harris.hpp>
 #include <qwqdsp/window/helper.hpp>
 
@@ -84,7 +84,7 @@ struct FftChannel {
     std::vector<float> window;       // 窗系数（保持不变）
     std::vector<float> win_buf;      // 加窗后工作区
     std::vector<float> gain;         // FFT 幅度输出
-    qwqdsp_spectral::RealFFT fft;
+    qwqdsp_spectral::RealFftAdv fft;
     std::vector<float> mag_dB;      // 平滑后的幅度 dB
     std::vector<float> smoothed_dB; // 平滑状态（每个 bin 独立）
 };
@@ -172,7 +172,7 @@ private:
         std::vector<float> window;
         std::vector<float> win_buf;
         std::vector<float> gain;
-        qwqdsp_spectral::RealFFT fft;
+        qwqdsp_spectral::RealFftAdv fft;
         std::vector<float> smoothed_dB;
     };
     std::array<Channel, kNumResolutions> channels_;

@@ -1,63 +1,33 @@
 #pragma once
-#include <cstddef>
-#include <span>
-#include <vector>
-#include <complex>
-#include <cassert>
-#include <memory>
 
-namespace qwqdsp_spectral {
-#ifdef QWQDSP_HAVE_IPP
-class IppComplexFFT;
+#if defined(QWQDSP_HAVE_IPP)
+#include "backend/ipp_complex_fft.hpp"
+#elif defined(QWQDSP_HAVE_ACCELERATE)
+#include "backend/accelerate_complex_fft.hpp"
+#else
+#include "backend/oouras_complex_fft.hpp"
 #endif
 
+namespace qwqdsp_spectral {
+
 /**
- * 默认输出 [0, 2pi]
- *
- *           奈奎斯特     负频率        零            正频率
- *   -pi ~ pi   0      1 ~ n/2-1      n/2        n/2+1 ~ n-1
- *              零       正频率      奈奎斯特         负频率
- *   0 ~ 2pi    0      1 ~ n/2-1      n/2        n/2+1 ~ n  
+ * @brief 根据编译配置自动选择复数 FFT 后端（IPP > Accelerate > OOURA）
+ *        提供裸 FFT/IFFT 接口，频率输出 [0, 2π)
+ *        高级 span 封装请使用 ComplexFftAdv
  */
 class ComplexFFT {
 public:
-    #ifdef QWQDSP_HAVE_IPP
-    ComplexFFT();
-    ~ComplexFFT();
-    #endif
+    void Init(size_t fft_size) {
+        backend_.Init(fft_size);
+    }
 
-    void Init(size_t fft_size);
-    
-    void FFT(std::span<const float> time, std::span<std::complex<float>> spectral) noexcept;
+    void FFT(const float* in_real, const float* in_imag, float* out_real, float* out_imag) noexcept {
+        backend_.FFT(in_real, in_imag, out_real, out_imag);
+    }
 
-    void FFT(std::span<const std::complex<float>> time, std::span<std::complex<float>> spectral) noexcept;
-
-    void FFT(std::span<const float> time, std::span<float> real, std::span<float> imag) noexcept;
-
-    void FFT(std::span<const std::complex<float>> time, std::span<float> real, std::span<float> imag) noexcept;
-
-    /**
-     * @param phase 可选的，不需要请传入{}
-     */
-    void FFTGainPhase(std::span<const float> time, std::span<float> gain, std::span<float> phase = {}) noexcept;
-
-    void FFTGainPhase(std::span<const std::complex<float>> time, std::span<float> gain, std::span<float> phase = {}) noexcept;
-
-    void IFFT(std::span<float> time, std::span<const std::complex<float>> spectral) noexcept;
-
-    void IFFT(std::span<std::complex<float>> time, std::span<const std::complex<float>> spectral) noexcept;
-
-    void IFFT(std::span<float> time, std::span<const float> real, std::span<const float> imag) noexcept;
-
-    void IFFT(std::span<std::complex<float>> time, std::span<const float> real, std::span<const float> imag) noexcept;
-    
-    void IFFTGainPhase(std::span<float> time, std::span<const float> gain, std::span<const float> phase) noexcept;
-
-    void IFFTGainPhase(std::span<std::complex<float>> time, std::span<const float> gain, std::span<const float> phase) noexcept;
-
-    void Hilbert(std::span<const float> time, std::span<std::complex<float>> output, bool clear_dc) noexcept;
-    
-    void Hilbert(std::span<const float> input, std::span<float> output90, bool clear_dc) noexcept;
+    void IFFT(const float* in_real, const float* in_imag, float* out_real, float* out_imag) noexcept {
+        backend_.IFFT(in_real, in_imag, out_real, out_imag);
+    }
 
     size_t NumBins() const noexcept {
         return fft_size_;
@@ -71,33 +41,15 @@ public:
         return fft_size_;
     }
 
-    /**
-     * [0, 2pi) ---> [-pi, pi) or [-pi, pi) -> [0, 2pi)
-     */
-    template<class TYPE>
-    static void ShuffleFrequency(std::span<TYPE> buffer) {
-        size_t const fft_size = buffer.size();
-        size_t neg_idx = fft_size / 2;
-        size_t pos_idx = 0;
-        for (size_t i = 0; i < fft_size / 2; ++i) {
-            std::swap(buffer[pos_idx], buffer[neg_idx]);
-            ++pos_idx;
-            ++neg_idx;
-        }
-    }
-
 private:
     size_t fft_size_{};
-    #ifndef QWQDSP_HAVE_IPP
-    std::vector<int> ip_;
-    std::vector<float> w_;
-    std::vector<float> buffer_;
-    #else
-    std::unique_ptr<IppComplexFFT> fft_;
-    std::vector<float> real_buffer_;
-    std::vector<float> imag_buffer_;
-    std::vector<float> src_imag_buffer_;
-    std::vector<float> src_real_buffer_;
-    #endif
+#if defined(QWQDSP_HAVE_IPP)
+    IppComplexFFT backend_;
+#elif defined(QWQDSP_HAVE_ACCELERATE)
+    AccelerateComplexFFT backend_;
+#else
+    OourasComplexFFT backend_;
+#endif
 };
-}
+
+} // namespace qwqdsp_spectral

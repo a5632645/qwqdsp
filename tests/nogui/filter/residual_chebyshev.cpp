@@ -3,7 +3,7 @@
 #include <numbers>
 #include <qwqdsp/convert.hpp>
 #include <qwqdsp/filter/biquad.hpp>
-#include <qwqdsp/spectral/real_fft.hpp>
+#include <qwqdsp/spectral/real_fft_adv.hpp>
 
 int main() {
     constexpr int N = 4;
@@ -100,7 +100,7 @@ int main() {
     // fft
     float g1[kIrLen / 2 + 1];
     float g2[kIrLen / 2 + 1];
-    qwqdsp_spectral::RealFFT fft;
+    qwqdsp_spectral::RealFftAdv fft;
     fft.Init(kIrLen);
     fft.FFTGainPhase(ir, g1);
     fft.FFTGainPhase(ir2, g2);

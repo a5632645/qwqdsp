@@ -1,6 +1,6 @@
 #pragma once
 #include "qwqdsp/pitch/pitch.hpp"
-#include "qwqdsp/spectral/oouras_real_fft.hpp"
+#include "qwqdsp/spectral/real_fft.hpp"
 #include <span>
 #include <vector>
 
@@ -97,7 +97,7 @@ private:
     static constexpr float PMPM_CUTOFF_BEGIN = 0.8f;
     static constexpr float PMPM_CUTOFF_STEP = 0.01f;
 
-    qwqdsp_spectral::OourasRealFFT fft_;
+    qwqdsp_spectral::RealFFT fft_;
     std::vector<float> fft_in_buffer_;
     std::vector<float> fft_out_buffer_;
     std::vector<int> max_positions_;

@@ -13,7 +13,7 @@
 #include "qwqdsp/filter/rbj.hpp"
 #include "qwqdsp/filter/biquad.hpp"
 #include "qwqdsp/oscillator/vic_sine_osc.hpp"
-#include "qwqdsp/spectral/ipp_real_fft.hpp"
+#include "qwqdsp/spectral/real_fft.hpp"
 #include "qwqdsp/window/blackman.hpp"
 #include "qwqdsp/window/helper.hpp"
 #include "simd.hpp"
@@ -55,7 +55,7 @@ static constexpr Color kBarBg   = { 20,   20,  20,  255 };
 //        buf[2k+1] = bin_k imag   (k = 1 .. n/2-1)
 //    返回 1 成功, 0 失败
 int rfft_api(int32_t *buf, int n, int inverse) {
-    static qwqdsp_spectral::IppRealFFT s_fft;
+    static qwqdsp_spectral::RealFFT s_fft;
     static int s_prev_n = 0;
 
     if (inverse != 1) return 0;

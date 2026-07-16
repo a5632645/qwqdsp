@@ -3,7 +3,7 @@
 
 #include <qwqdsp/filter/fir.hpp>
 #include <qwqdsp/filter/svf.hpp>
-#include <qwqdsp/spectral/ipp_real_fft.hpp>
+#include <qwqdsp/spectral/real_fft.hpp>
 #include <qwqdsp/window/hann.hpp>
 #include <qwqdsp/window/helper.hpp>
 
@@ -292,7 +292,7 @@ private:
     bool candidates[slen][ipmp_window]{};
     int candidate_count[slen]{};
     float window[slen];
-    qwqdsp_spectral::IppRealFFT fft;
+    qwqdsp_spectral::RealFFT fft;
 
     struct NotchState {
         qwqdsp_filter::SVF filter;

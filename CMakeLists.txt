@@ -13,8 +13,6 @@ option(QWQDSP_BUILD_TESTS "building tests" ON)
 add_library(qwqdsp
     STATIC
     "source/oouras.cpp"
-    "source/real_fft.cpp"
-    "source/complex_fft.cpp"
 )
 target_include_directories(qwqdsp PUBLIC "./include")
 set_target_properties(qwqdsp PROPERTIES CXX_STANDARD 20)
@@ -26,8 +24,12 @@ endif()
 
 if(QWQDSP_USE_IPP)
     target_compile_definitions(qwqdsp PUBLIC QWQDSP_HAVE_IPP)
+    message(STATUS "[qwqdsp] using intel ipp")
+elseif(QWQDSP_USE_ACCELERATE)
+    target_compile_definitions(qwqdsp PUBLIC QWQDSP_HAVE_ACCELERATE)
+    message(STATUS "[qwqdsp] using Apple Accelerate")
 else()
-    message(STATUS "[qwqdsp] no intel ipp, fallback to oouras")
+    message(STATUS "[qwqdsp] no intel ipp/accelerate, fallback to oouras")
 endif()
 
 if(QWQDSP_USE_SIMDE)

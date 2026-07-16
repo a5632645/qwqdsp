@@ -4,8 +4,8 @@
 #include <qwqdsp/filter/fir.hpp>
 #include <qwqdsp/fx/uniform_convolution.hpp>
 #include <qwqdsp/oscillator/noise.hpp>
-#include <qwqdsp/spectral/complex_fft.hpp>
-#include <qwqdsp/spectral/real_fft.hpp>
+#include <qwqdsp/spectral/complex_fft_adv.hpp>
+#include <qwqdsp/spectral/real_fft_adv.hpp>
 #include <qwqdsp/window/hann.hpp>
 #include <random>
 #include <vector>
@@ -28,7 +28,7 @@ void MinPhase(std::span<float, ir_size> x) {
     static float fir_pad[pad_size]{};
     std::copy_n(x.begin(), ir_size, fir_pad);
 
-    qwqdsp_spectral::ComplexFFT fft;
+    qwqdsp_spectral::ComplexFftAdv fft;
     fft.Init(pad_size);
     constexpr size_t num_bins = fft.NumBins(pad_size);
     static float gains[num_bins];
@@ -58,7 +58,7 @@ void MinPhase(std::span<float, ir_size> x) {
 
 template <int ir_size>
 void RandomPhaseIr(std::span<float, ir_size> x, float ripple_db = 0.1f) {
-    qwqdsp_spectral::RealFFT fft;
+    qwqdsp_spectral::RealFftAdv fft;
     fft.Init(ir_size);
 
     constexpr int bins = fft.NumBins(ir_size);
@@ -141,7 +141,7 @@ void RandomPhaseIr2(std::span<float, ir_size> x, float ripple_db = 0.1f) {
     // norm
     int fft_size = NextPow2(ir_size) * 2;
 
-    qwqdsp_spectral::RealFFT fft;
+    qwqdsp_spectral::RealFftAdv fft;
     fft.Init(fft_size);
     std::vector<float> pad;
     pad.resize(fft_size);

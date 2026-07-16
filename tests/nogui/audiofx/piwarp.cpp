@@ -3,7 +3,7 @@
 #include <complex>
 #include <qwqdsp/segement/analyze_synthsis_offline.hpp>
 #include <qwqdsp/segement/analyze_synthsis_offline2.hpp>
-#include <qwqdsp/spectral/ipp_real_fft.hpp>
+#include <qwqdsp/spectral/real_fft.hpp>
 #include <qwqdsp/window/hann.hpp>
 #include <qwqdsp/window/window.hpp>
 #include <vector>
@@ -39,7 +39,7 @@ struct Piwarp1Class {
 
     std::vector<float> window_;
     std::vector<float> buffer_;
-    qwqdsp_spectral::IppRealFFT fft_;
+    qwqdsp_spectral::RealFFT fft_;
     std::vector<float> reim_;
 };
 
@@ -104,7 +104,7 @@ struct Piwarp2Class {
 
     std::vector<float> window_;
     std::vector<float> buffer_;
-    qwqdsp_spectral::IppRealFFT fft_;
+    qwqdsp_spectral::RealFFT fft_;
     std::vector<float> reim_;
 };
 

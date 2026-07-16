@@ -3,7 +3,7 @@
 #include "work_dir.hpp"
 #include <qwqdsp/pitch/swift_f0.hpp>
 #include <qwqdsp/pitch/swift_f0_model.hpp>
-#include <qwqdsp/spectral/real_fft.hpp>
+#include <qwqdsp/spectral/real_fft_adv.hpp>
 #include <qwqdsp/window/hann.hpp>
 
 #include <algorithm>
@@ -293,7 +293,7 @@ int main() {
     };
 
     // ---- STFT 预备 ----
-    qwqdsp_spectral::RealFFT stft_fft;
+    qwqdsp_spectral::RealFftAdv stft_fft;
     stft_fft.Init(kNFFT);
     std::vector<float> frame(kNFFT);
     std::vector<float> gain(stft_fft.NumBins()); // 513 bins

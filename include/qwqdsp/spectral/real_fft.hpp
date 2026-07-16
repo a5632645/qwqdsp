@@ -1,76 +1,58 @@
 #pragma once
-#include <cstddef>
-#include <span>
-#include <vector>
-#include <complex>
-#include <cassert>
-#include <algorithm>
-#include <memory>
 
-namespace qwqdsp_spectral {
-#ifdef QWQDSP_HAVE_IPP
-class IppRealFFT;
+#if defined(QWQDSP_HAVE_IPP)
+#include "backend/ipp_real_fft.hpp"
+#elif defined(QWQDSP_HAVE_ACCELERATE)
+#include "backend/accelerate_real_fft.hpp"
+#else
+#include "backend/oouras_real_fft.hpp"
 #endif
 
+namespace qwqdsp_spectral {
+
+/**
+ * @brief 根据编译配置自动选择 FFT 后端（IPP > Accelerate > OOURA）
+ *        提供裸 CCS 接口（Init / FFT / IFFT）
+ *        高级 span 封装请使用 RealFftAdv
+ */
 class RealFFT {
 public:
-    #ifdef QWQDSP_HAVE_IPP
-    RealFFT();
-    ~RealFFT();
-    #endif
-
-    void Init(size_t fft_size);
-
-    void FFT(std::span<const float> time, std::span<std::complex<float>> spectral) noexcept;
-
-    void FFT(std::span<const float> time, std::span<float> real, std::span<float> imag) noexcept;
-
-    /**
-     * @param phase 可选的，不需要请传入{}
-     */
-    void FFTGainPhase(std::span<const float> time, std::span<float> gain, std::span<float> phase = {}) noexcept;
-
-    void IFFT(std::span<float> time, std::span<const std::complex<float>> spectral) noexcept;
-
-    void IFFT(std::span<float> time, std::span<const float> real, std::span<const float> imag) noexcept;
-
-    void IFFTGainPhase(std::span<float> time, std::span<const float> gain, std::span<const float> phase) noexcept;
-
-    void Hilbert(std::span<const float> input, std::span<float> shift90, bool clear_dc) noexcept;
-
-    /**
-     * @brief 0 ~ N ---> -N/2 ~ N/2
-     */
-    void TimeDomainShift(std::span<float> block) noexcept {
-        assert(block.size() == fft_size_);
-        std::copy_n(block.begin(), fft_size_ / 2, buffer_.begin());
-        for (size_t i = 0; i < fft_size_ / 2; ++i) {
-            block[i] = block[i + fft_size_ / 2];
-        }
-        std::copy_n(buffer_.begin(), fft_size_ / 2, block.begin() + fft_size_ / 2);
+    void Init(size_t fft_size) {
+        backend_.Init(fft_size);
     }
 
-    size_t NumBins() const {
-        return fft_size_ / 2 + 1;
+    void FFT(const float* input, float* output) noexcept {
+        backend_.FFT(input, output);
     }
 
-    static constexpr size_t NumBins(size_t fft_size) {
+    void IFFT(const float* input, float* output) noexcept {
+        backend_.IFFT(input, output);
+    }
+
+    size_t GetFFTSize() const noexcept {
+        return backend_.GetFFTSize();
+    }
+
+    size_t NumBins() const noexcept {
+        return GetFFTSize() / 2 + 1;
+    }
+
+    static constexpr size_t NumBins(size_t fft_size) noexcept {
         return fft_size / 2 + 1;
     }
 
-    size_t FFTSize() const {
-        return fft_size_;
+    size_t FFTSize() const noexcept {
+        return GetFFTSize();
     }
 
 private:
-    size_t fft_size_{};
-#ifndef QWQDSP_HAVE_IPP
-    std::vector<int> ip_;
-    std::vector<float> w_;
-    std::vector<float> buffer_;
+#if defined(QWQDSP_HAVE_IPP)
+    IppRealFFT backend_;
+#elif defined(QWQDSP_HAVE_ACCELERATE)
+    AccelerateRealFFT backend_;
 #else
-    std::unique_ptr<IppRealFFT> fft_;
-    std::vector<float> buffer_;
+    OourasRealFFT backend_;
 #endif
 };
-}
+
+} // namespace qwqdsp_spectral

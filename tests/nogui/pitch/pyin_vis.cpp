@@ -3,7 +3,7 @@
 #include "work_dir.hpp"
 #include <qwqdsp/pitch/pyin.hpp>
 #include <qwqdsp/pitch/pyin/pyin_core.hpp>
-#include <qwqdsp/spectral/real_fft.hpp>
+#include <qwqdsp/spectral/real_fft_adv.hpp>
 #include <qwqdsp/window/hann.hpp>
 
 #include <algorithm>
@@ -255,7 +255,7 @@ int main() {
     pyin.SetMaxPitch(900.0f);
 
     // ---- STFT 预备 ----
-    qwqdsp_spectral::RealFFT stft_fft;
+    qwqdsp_spectral::RealFftAdv stft_fft;
     stft_fft.Init(block_size);
     std::vector<float> window(block_size);
     std::vector<float> fft_frame(block_size);

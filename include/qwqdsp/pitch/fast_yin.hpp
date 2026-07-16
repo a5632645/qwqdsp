@@ -1,6 +1,6 @@
 #pragma once
 #include "qwqdsp/pitch/pitch.hpp"
-#include "qwqdsp/spectral/real_fft.hpp"
+#include "qwqdsp/spectral/real_fft_adv.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
@@ -147,7 +147,7 @@ private:
     std::vector<float> powers_;
     std::vector<float> temp_;
 
-    qwqdsp_spectral::RealFFT fft_;
+    qwqdsp_spectral::RealFftAdv fft_;
     std::vector<std::complex<float>> fft1_;
     std::vector<std::complex<float>> fft2_;
 

@@ -1,7 +1,7 @@
 #pragma once
 #include <algorithm>
 #include <cstddef>
-#include "qwqdsp/spectral/real_fft.hpp"
+#include "qwqdsp/spectral/real_fft_adv.hpp"
 #include "qwqdsp/segement/analyze_auto.hpp"
 #include "qwqdsp/segement/slice.hpp"
 #include "qwqdsp/window/helper.hpp"
@@ -133,7 +133,7 @@ private:
     std::vector<float> process_buffer_;
     std::vector<float> output_buffer_;
 
-    qwqdsp_spectral::RealFFT fft_;
+    qwqdsp_spectral::RealFftAdv fft_;
     std::vector<Frame> ir_frames_;
     std::vector<Frame> input_frames_;
     size_t input_frame_wpos_{};

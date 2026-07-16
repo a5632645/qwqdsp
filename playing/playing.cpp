@@ -1,14 +1,14 @@
 #include <qwqdsp/oscillator/vic_sine_osc.hpp>
-#include <qwqdsp/spectral/real_fft.hpp>
+#include <qwqdsp/spectral/real_fft_adv.hpp>
 #include <qwqdsp/window/blackman.hpp>
 
 
 int main() {
-    qwqdsp_spectral::RealFFT fft0;
+    qwqdsp_spectral::RealFftAdv fft0;
     fft0.Init(256);
-    qwqdsp_spectral::RealFFT fft1;
+    qwqdsp_spectral::RealFftAdv fft1;
     fft1.Init(512);
-    qwqdsp_spectral::RealFFT fft2;
+    qwqdsp_spectral::RealFftAdv fft2;
     fft2.Init(1024);
 
     float buffer[1024];

@@ -1,12 +1,12 @@
 #pragma once
+#include "qwqdsp/spectral/real_fft_adv.hpp"
+#include "qwqdsp/window/hamming.hpp"
+#include "qwqdsp/window/helper.hpp"
 #include <complex>
 #include <cstddef>
 #include <numbers>
 #include <numeric>
 #include <vector>
-#include "qwqdsp/window/hamming.hpp"
-#include "qwqdsp/window/helper.hpp"
-#include "qwqdsp/spectral/real_fft.hpp"
 
 namespace qwqdsp_spectral {
 /**
@@ -21,15 +21,13 @@ public:
         common_.resize(fft_.NumBins());
         time_.resize(fft_.NumBins());
         frequency_.resize(fft_.NumBins());
-        ChangeWindow([](auto win) {
-            qwqdsp_window::Hamming::Window(win, true);
-        });
+        ChangeWindow([](auto win) { qwqdsp_window::Hamming::Window(win, true); });
     }
 
     /**
      * @tparam func void(std::span<float> window)
      */
-    template<class Func>
+    template <class Func>
     void ChangeWindow(Func&& func) noexcept(noexcept(func(std::declval<std::span<float>>()))) {
         func(std::span<float>{window_});
         gain_scaleback_ = std::accumulate(window_.begin(), window_.end(), 0.0f) / 2.0f;
@@ -113,7 +111,7 @@ private:
     }
 
     float gain_scaleback_{};
-    RealFFT fft_;
+    RealFftAdv fft_;
     std::vector<float> buffer_;
     std::vector<float> window_;
     std::vector<std::complex<float>> common_;
@@ -141,8 +139,9 @@ public:
     /**
      * @tparam func void(std::span<float> window, std::span<float> dwindow)
      */
-    template<class Func>
-    void ChangeWindow(Func&& func) noexcept(noexcept(func(std::declval<std::span<float>>(), std::declval<std::span<float>>()))) {
+    template <class Func>
+    void ChangeWindow(Func&& func) noexcept(noexcept(func(std::declval<std::span<float>>(),
+                                                          std::declval<std::span<float>>()))) {
         func(std::span<float>{window_}, std::span<float>{dwindow_});
         qwqdsp_window::Helper::TWindow(twindow_, window_);
         window_scale_ = qwqdsp_window::Helper::NormalizeGain(window_);
@@ -215,7 +214,7 @@ public:
         return fft_.NumBins();
     }
 private:
-    RealFFT fft_;
+    RealFftAdv fft_;
     std::vector<float> buffer_;
     std::vector<float> window_;
     std::vector<float> dwindow_;
@@ -226,4 +225,4 @@ private:
     float window_scale_{};
     float dwindow_scale_{};
 };
-}
+} // namespace qwqdsp_spectral

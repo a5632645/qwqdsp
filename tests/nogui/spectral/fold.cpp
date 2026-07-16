@@ -1,7 +1,6 @@
 #include <qwqdsp/convert.hpp>
 #include <qwqdsp/oscillator/vic_sine_osc.hpp>
-#include <qwqdsp/spectral/ipp_real_fft.hpp>
-#include <qwqdsp/spectral/real_fft.hpp>
+#include <qwqdsp/spectral/real_fft_adv.hpp>
 #include <qwqdsp/window/window.hpp>
 #include <array>
 
@@ -23,7 +22,7 @@ int main() {
 
     {
         // ----- fold version -----
-        qwqdsp_spectral::RealFFT fft;
+        qwqdsp_spectral::RealFftAdv fft;
         fft.Init(256);
 
         float fold_vec[256];
