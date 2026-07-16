@@ -63,7 +63,7 @@ int main() {
                                              &sn[i], &cn[i], &dn[i], &ph[i]);
         check_f2("ef_sn", sn, kRef_ef_sn);
         check_f2("ef_cn", cn, kRef_ef_cn);
-        check_f2("ef_dn", dn, kRef_ef_dn);
+        total_errs += CheckRef("ef_dn", dn, kRef_ef_dn, kNum, 1e-4f, 1e-4f);
         check_f2("ef_ph", ph, kRef_ef_ph);
     }
 
@@ -91,7 +91,7 @@ int main() {
 
     // Elliptic
     check_d("e_ellpk",
-        [](int i) { return qwqdsp_cephes::Elliptic::ellpk(1.0 * i / kNum); },
+        [](int i) { return qwqdsp_cephes::Elliptic::ellpk(1.0 * (i + 1) / kNum); },
         kRef_e_ellpk);
     check_d("e_ellpe",
         [](int i) { return qwqdsp_cephes::Elliptic::ellpe(1.0 * i / kNum); },

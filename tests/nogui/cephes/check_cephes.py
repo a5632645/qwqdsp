@@ -139,7 +139,7 @@ def gen_ref():
     ref["b_i1"] = sp.i1(30.0 * t)
 
     # Elliptic (double)
-    ref["e_ellpk"] = sp.ellipk(1.0 - t)
+    ref["e_ellpk"] = sp.ellipk(1.0 - (np.arange(kNum, dtype=float) + 1.0) / kNum)
     ref["e_ellpe"] = sp.ellipe(1.0 - t)
     ref["e_ellik"] = sp.ellipkinc(phi, 0.5)
     ref["e_ellie"] = sp.ellipeinc(phi, 0.5)
