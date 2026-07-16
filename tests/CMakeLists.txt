@@ -93,6 +93,9 @@ if (QWQDSP_HAVE_RAYLIB)
     # ── General ──
     add_qwqdsp_gui_test(echo gui/audiofx/echo.cpp)
     add_qwqdsp_gui_test(reverb_rt gui/audiofx/reverb.cpp)
+
+    add_qwqdsp_gui_test(reverb_shimmer gui/audiofx/reverb.cpp)
+
     add_qwqdsp_gui_test(interpolations gui/interpolations.cpp)
     add_qwqdsp_gui_test(auto_notch_rt gui/auto_notch_rt.cpp)
     add_qwqdsp_gui_test(filters gui/audiofx/filters.cpp NO_MINIAUDIO)
