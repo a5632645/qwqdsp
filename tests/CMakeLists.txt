@@ -121,6 +121,9 @@ if (QWQDSP_HAVE_RAYLIB)
     add_qwqdsp_gui_test(spectrum4 gui/spectral/spectrum4.cpp)
     add_qwqdsp_gui_test(reassignment gui/spectral/reassignment.cpp)
 
+    # ── Waveform (GUI) ──
+    add_qwqdsp_gui_test(waveform2 gui/waveform2.cpp)
+
     # ── Synth (GUI) ──
     add_qwqdsp_gui_test(formant_filter gui/synth/formant_filter.cpp NO_MINIAUDIO)
     add_qwqdsp_gui_test(blit gui/synth/blit.cpp NO_MINIAUDIO)
