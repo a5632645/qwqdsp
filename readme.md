@@ -19,6 +19,7 @@
 |------|------|-------------|------|
 | **Eigen3** | `QWQDSP_USE_EIGEN=ON` | `target_link_libraries(qwqdsp PUBLIC eigen)` | 定义 `QWQDSP_HAVE_EIGEN`，启用 `rls_filter`、`swift_f0` 等 |
 | **Intel IPP** | `QWQDSP_USE_IPP=ON` | `target_link_libraries(qwqdsp PUBLIC IPP::ipps)` | 定义 `QWQDSP_HAVE_IPP`，替换 Ooura FFT 为 IPP 后端 |
+| **Apple Accelerate** | `QWQDSP_USE_ACCELERATE=ON` | `target_link_libraries(qwqdsp PUBLIC "-framework Accelerate")` | 定义 `QWQDSP_HAVE_ACCELERATE`，macOS 上替换 Ooura FFT 为 vDSP 后端 |
 | **SIMDe** | `QWQDSP_USE_SIMDE=ON` | `target_link_libraries(qwqdsp PUBLIC simde)` | 定义 `QWQDSP_HAVE_SIMDE`，非 x86 平台模拟 SIMD |
 | **raylib** | `QWQDSP_USE_RAYLIB=ON` | `add_subdirectory(raylib)` | 构建 GUI 测试和 `playing` 可执行程序 |
 
@@ -250,12 +251,16 @@
 
 | 文件 | 说明 |
 |------|------|
-| [`complex_fft.hpp`](include/qwqdsp/spectral/complex_fft.hpp) | `ComplexFFT` 复数 FFT 接口，自动选择 OOURA/IPP 后端 |
-| [`ipp_complex_fft.hpp`](include/qwqdsp/spectral/ipp_complex_fft.hpp) | `IppComplexFFT` Intel IPP 复数 FFT 封装 |
-| [`ipp_real_fft.hpp`](include/qwqdsp/spectral/ipp_real_fft.hpp) | `IppRealFFT` Intel IPP 实数 FFT 封装 |
-| [`oouras_complex_fft.hpp`](include/qwqdsp/spectral/oouras_complex_fft.hpp) | `OourasComplexFFT` OOURA 复数 FFT 裸封装 |
-| [`oouras_real_fft.hpp`](include/qwqdsp/spectral/oouras_real_fft.hpp) | `OourasRealFFT` OOURA 实数 FFT 裸封装 |
-| [`real_fft.hpp`](include/qwqdsp/spectral/real_fft.hpp) | `RealFFT` 实数 FFT 核心接口，自动选择 OOURA/IPP 后端 |
+| [`complex_fft.hpp`](include/qwqdsp/spectral/complex_fft.hpp) | `ComplexFFT` 复数 FFT 裸接口，自动选择后端（IPP > Accelerate > OOURA） |
+| [`complex_fft_adv.hpp`](include/qwqdsp/spectral/complex_fft_adv.hpp) | `ComplexFftAdv` 复数 FFT 高级 span 封装，依赖 `ComplexFFT` |
+| [`real_fft.hpp`](include/qwqdsp/spectral/real_fft.hpp) | `RealFFT` 实数 FFT 裸接口（CCS），自动选择后端（IPP > Accelerate > OOURA） |
+| [`real_fft_adv.hpp`](include/qwqdsp/spectral/real_fft_adv.hpp) | `RealFftAdv` 实数 FFT 高级 span 封装，依赖 `RealFFT` |
+| [`backend/ipp_real_fft.hpp`](include/qwqdsp/spectral/backend/ipp_real_fft.hpp) | `IppRealFFT` Intel IPP 实数 FFT 封装 |
+| [`backend/ipp_complex_fft.hpp`](include/qwqdsp/spectral/backend/ipp_complex_fft.hpp) | `IppComplexFFT` Intel IPP 复数 FFT 封装 |
+| [`backend/accelerate_real_fft.hpp`](include/qwqdsp/spectral/backend/accelerate_real_fft.hpp) | `AccelerateRealFFT` Apple Accelerate 实数 FFT 封装 |
+| [`backend/accelerate_complex_fft.hpp`](include/qwqdsp/spectral/backend/accelerate_complex_fft.hpp) | `AccelerateComplexFFT` Apple Accelerate 复数 FFT 封装 |
+| [`backend/oouras_real_fft.hpp`](include/qwqdsp/spectral/backend/oouras_real_fft.hpp) | `OourasRealFFT` OOURA 实数 FFT 裸封装 |
+| [`backend/oouras_complex_fft.hpp`](include/qwqdsp/spectral/backend/oouras_complex_fft.hpp) | `OourasComplexFFT` OOURA 复数 FFT 裸封装 |
 | [`reassignment.hpp`](include/qwqdsp/spectral/reassignment.hpp) | `Reassignment` 频谱重分配时频细化<br>`ReassignmentCorrect` 导数窗口精确频谱重分配 |
 
 ### 🎚️ 音频效果模块 (FX Modules)
