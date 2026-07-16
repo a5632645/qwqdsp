@@ -285,12 +285,12 @@ static float Arg(std::complex<float> z) noexcept {
 extern "C" void MaCaptureCallback(ma_device* pDevice, void* pOutput,
                                   const void* pInput, ma_uint32 frameCount) {
     (void)pDevice;
+    (void)pOutput;
 
-    // 全双工：pInput 来自麦克风，pOutput 送扬声器
+    // loopback：pInput 来自系统音频输出
     auto* input  = static_cast<const float*>(pInput);
-    auto* output = static_cast<float*>(pOutput);
 
-    if (pInput == nullptr || pOutput == nullptr) return;
+    if (pInput == nullptr) return;
 
     // ── 检查是否需要重初始化 (主线程设标志，音频线程执行) ──
     if (s_pending_reinit.exchange(false, std::memory_order_acquire)) {
@@ -305,13 +305,12 @@ extern "C" void MaCaptureCallback(ma_device* pDevice, void* pOutput,
         s_spec_col.store(0, std::memory_order_relaxed);
     }
 
-    // ── 每采样 Tick 所有谐振器 & 透传音频 ──
+    // ── 每采样 Tick 所有谐振器 ──
     int num_groups = s_cur_num_groups;
     for (ma_uint32 i = 0; i < frameCount; ++i) {
         float x = input[i];
         for (int g = 0; g < num_groups; ++g)
             s_resonator_groups[g].Tick(x);
-        output[i] = x;
     }
 
     s_samples_since_hop += frameCount;
@@ -460,12 +459,10 @@ int main(void) {
         texture = LoadTextureFromImage(img);
     }
 
-    // ── miniaudio 全双工 (捕获 + 播放) ──
-    ma_device_config config = ma_device_config_init(ma_device_type_duplex);
+    // ── miniaudio 回环捕获 (loopback) ──
+    ma_device_config config = ma_device_config_init(ma_device_type_loopback);
     config.capture.format   = ma_format_f32;
     config.capture.channels = 1;
-    config.playback.format  = ma_format_f32;
-    config.playback.channels = 1;
     config.sampleRate       = (ma_uint32)kSampleRate;
     config.dataCallback     = MaCaptureCallback;
     config.pUserData        = nullptr;

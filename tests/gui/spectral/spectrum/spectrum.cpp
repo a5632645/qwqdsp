@@ -22,8 +22,8 @@
 // 频谱驱动 (25 bin)
 #include "spectrum_driver.h"
 
-static constexpr int kWindowWidth = 1100;
-static constexpr int kWindowHeight = 640;
+static constexpr int kWindowWidth = 640;
+static constexpr int kWindowHeight = 320;
 static constexpr float kSampleRate = 44100;
 
 // ── 频谱分析全局状态 ──
@@ -95,15 +95,12 @@ static inline int16_t FloatToInt16(float v) {
 extern "C" void MaCaptureCallback(ma_device* pDevice, void* pOutput,
                                   const void* pInput, ma_uint32 frameCount) {
     (void)pDevice;
+    (void)pOutput;
 
-    // 全双工：pInput 来自麦克风，pOutput 送扬声器
+    // loopback：pInput 来自系统音频输出
     auto* input  = static_cast<const float*>(pInput);
-    auto* output = static_cast<float*>(pOutput);
 
-    if (pInput == nullptr || pOutput == nullptr) return;
-
-    // 直通：麦克风输入 → 扬声器输出 (监听)
-    std::memcpy(output, input, frameCount * sizeof(float));
+    if (pInput == nullptr) return;
 
     // 累积 float 采样，满一帧后执行频谱分析
     for (ma_uint32 i = 0; i < frameCount; ++i) {
@@ -207,12 +204,10 @@ int main(void) {
     InitWindow(kWindowWidth, kWindowHeight, "Spectrogram - miniaudio + qwqdsp + raylib");
     SetTargetFPS(60);
 
-    // ── miniaudio 全双工 (捕获 + 播放) ──
-    ma_device_config config = ma_device_config_init(ma_device_type_duplex);
+    // ── miniaudio 回环捕获 (loopback) ──
+    ma_device_config config = ma_device_config_init(ma_device_type_loopback);
     config.capture.format   = ma_format_f32;
     config.capture.channels = 1;
-    config.playback.format  = ma_format_f32;
-    config.playback.channels = 1;
     config.sampleRate       = static_cast<ma_uint32>(kSampleRate);
     config.dataCallback     = MaCaptureCallback;
     config.pUserData        = nullptr;

@@ -43,8 +43,8 @@ static constexpr float kAttackMs = 1.0f;
 static constexpr float kReleaseMs = 150.0f;
 
 // ── 窗口 & 画布 ──
-static constexpr int kWindowWidth = 1280;
-static constexpr int kWindowHeight = 720;
+static constexpr int kWindowWidth = 640;
+static constexpr int kWindowHeight = 320;
 static constexpr int kMarginLeft = 65;
 static constexpr int kMarginRight = 20;
 static constexpr int kMarginTop = 45;
@@ -224,13 +224,10 @@ static int s_frame_count = 0;
 //  miniaudio 回调 (audio 线程) — 采样累加 → 滤波器组 → 共享 dB
 // ════════════════════════════════════════════════════════════
 extern "C" void MaCaptureCallback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount) {
+    (void)pOutput;
     auto t0 = std::chrono::steady_clock::now();
 
     float const* src = static_cast<float const*>(pInput);
-    float* dst = static_cast<float*>(pOutput);
-
-    // 直通 (loopback)
-    std::copy_n(src, frameCount, dst);
 
     // 逐采样累加 → 满一帧后运行滤波器组
     for (ma_uint32 i = 0; i < frameCount; ++i) {
@@ -343,12 +340,10 @@ int main(void) {
     s_pfb.Init();
     s_db_latest.fill(kDbFloor);
 
-    // ── miniaudio 全双工 (loopback) ──
-    ma_device_config config = ma_device_config_init(ma_device_type_duplex);
+    // ── miniaudio 回环捕获 (loopback) ──
+    ma_device_config config = ma_device_config_init(ma_device_type_loopback);
     config.capture.format = ma_format_f32;
     config.capture.channels = 1;
-    config.playback.format = ma_format_f32;
-    config.playback.channels = 1;
     config.sampleRate = static_cast<ma_uint32>(kSampleRate);
     config.dataCallback = MaCaptureCallback;
     config.pUserData = nullptr;

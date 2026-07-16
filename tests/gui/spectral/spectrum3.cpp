@@ -162,10 +162,9 @@ static void Dsp_Process() {
 }
 
 extern "C" void MaCaptureCallback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount) {
+    (void)pOutput;
     float const* src = reinterpret_cast<float const*>(pInput);
-    float* dst = reinterpret_cast<float*>(pOutput);
     int num_frame = frameCount;
-    std::copy_n(src, num_frame, dst);
 
     while (num_frame != 0) {
         int need = kFftSize - in_count_;
@@ -406,12 +405,10 @@ int main(void) {
     InitWindow(kWindowWidth, kWindowHeight, "Spectrogram - miniaudio + qwqdsp + raylib");
     SetTargetFPS(60);
 
-    // ── miniaudio 全双工 (捕获 + 播放) ──
-    ma_device_config config = ma_device_config_init(ma_device_type_duplex);
+    // ── miniaudio 回环捕获 (loopback) ──
+    ma_device_config config = ma_device_config_init(ma_device_type_loopback);
     config.capture.format = ma_format_f32;
     config.capture.channels = 1;
-    config.playback.format = ma_format_f32;
-    config.playback.channels = 1;
     config.sampleRate = static_cast<ma_uint32>(kSampleRate);
     config.dataCallback = MaCaptureCallback;
     config.pUserData = nullptr;

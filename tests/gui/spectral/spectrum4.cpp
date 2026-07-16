@@ -18,8 +18,8 @@
 // ════════════════════════════════════════════════════════════
 
 // ── 窗口 & 画布 ──
-static constexpr int kWindowWidth = 1280;
-static constexpr int kWindowHeight = 720;
+static constexpr int kWindowWidth = 640;
+static constexpr int kWindowHeight = 320;
 static constexpr int kCanvasX = 50;
 static constexpr int kCanvasY = 30;
 static constexpr int kCanvasW = kWindowWidth - kCanvasX - 20;
@@ -313,17 +313,11 @@ static void Dsp_Process(float const* src) {
 
 extern "C" void MaCaptureCallback(ma_device* pDevice, void* pOutput,
                                   const void* pInput, ma_uint32 frameCount) {
+    (void)pOutput;
     float const* src = reinterpret_cast<float const*>(pInput);
-    float* dst = reinterpret_cast<float*>(pOutput);
     int remaining = static_cast<int>(frameCount);
     if (src == nullptr) {
-        if (dst != nullptr) {
-            std::fill_n(dst, remaining, 0.0f);
-        }
         return;
-    }
-    if (dst != nullptr) {
-        std::copy_n(src, remaining, dst);
     }
 
     while (remaining > 0) {
@@ -420,12 +414,10 @@ int main(void) {
                "Multi-Resolution Spectrum - miniaudio + qwqdsp + raylib");
     SetTargetFPS(60);
 
-    // ── miniaudio 全双工 ──
-    ma_device_config config = ma_device_config_init(ma_device_type_duplex);
+    // ── miniaudio 回环捕获 (loopback) ──
+    ma_device_config config = ma_device_config_init(ma_device_type_loopback);
     config.capture.format = ma_format_f32;
     config.capture.channels = 1;
-    config.playback.format = ma_format_f32;
-    config.playback.channels = 1;
     config.sampleRate = static_cast<ma_uint32>(kSampleRate);
     config.dataCallback = MaCaptureCallback;
     config.pUserData = nullptr;
