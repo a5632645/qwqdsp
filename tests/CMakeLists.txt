@@ -87,6 +87,8 @@ add_qwqdsp_dsp_test(fft_fold nogui/spectral/fold.cpp)
 
 # ── Pitch ──
 add_qwqdsp_dsp_test(pyin nogui/pitch/pyin.cpp)
+add_qwqdsp_dsp_test(pmpm nogui/pitch/pmpm.cpp)
+add_qwqdsp_dsp_test(pmpm-vs-pyin nogui/pitch/pmpm_vs_pyin.cpp)
 add_qwqdsp_dsp_test(pitch_algorithms nogui/pitch/pitch_algorithms.cpp)
 if(QWQDSP_USE_EIGEN)
     add_qwqdsp_dsp_test(swift_f0 nogui/pitch/swift_f0.cpp)
