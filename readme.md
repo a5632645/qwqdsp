@@ -22,8 +22,6 @@
 | **SIMDe** | `QWQDSP_USE_SIMDE=ON` | `target_link_libraries(qwqdsp PUBLIC simde)` | 定义 `QWQDSP_HAVE_SIMDE`，非 x86 平台模拟 SIMD |
 | **raylib** | `QWQDSP_USE_RAYLIB=ON` | `add_subdirectory(raylib)` | 构建 GUI 测试和 `playing` 可执行程序 |
 
-> **依赖管理约定**：`qwqdsp/CMakeLists.txt` 只读取外部传入的 `QWQDSP_USE_*` 变量并定义对应的 `QWQDSP_HAVE_*` 编译宏，**不负责** `target_link_libraries` 和 `find_package`。外部 CMake 在 `add_subdirectory(qwqdsp)` 之后手动链接依赖。参见根 `CMakeLists.txt` 示例。
-
 ---
 
 ## 🎮 demos
