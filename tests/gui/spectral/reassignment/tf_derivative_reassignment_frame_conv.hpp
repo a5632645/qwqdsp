@@ -166,29 +166,35 @@ struct TfDerivativeReassignmentFrameConv {
             }
             else if (y_last) {
                 float c_frac = c_pos - static_cast<float>(c_idx);
-                col_buf_[c_idx * outputHeight_ + y_idx] += mag_lin * (1.0f - c_frac);
+                float w1 = 1.0f - c_frac;
+                col_buf_[c_idx * outputHeight_ + y_idx] += mag_lin * w1;
                 col_buf_[(c_idx + 1) * outputHeight_ + y_idx] += mag_lin * c_frac;
-                weight_buf_[c_idx * outputHeight_ + y_idx] += 1.0f;
-                weight_buf_[(c_idx + 1) * outputHeight_ + y_idx] += 1.0f;
+                weight_buf_[c_idx * outputHeight_ + y_idx] += w1;
+                weight_buf_[(c_idx + 1) * outputHeight_ + y_idx] += c_frac;
             }
             else if (c_last) {
                 float y_frac = y_pos - static_cast<float>(y_idx);
-                col_buf_[c_idx * outputHeight_ + y_idx] += mag_lin * (1.0f - y_frac);
+                float w1 = 1.0f - y_frac;
+                col_buf_[c_idx * outputHeight_ + y_idx] += mag_lin * w1;
                 col_buf_[c_idx * outputHeight_ + y_idx + 1] += mag_lin * y_frac;
-                weight_buf_[c_idx * outputHeight_ + y_idx] += (1.0f - y_frac);
+                weight_buf_[c_idx * outputHeight_ + y_idx] += w1;
                 weight_buf_[c_idx * outputHeight_ + y_idx + 1] += y_frac;
             }
             else {
                 float c_frac = c_pos - static_cast<float>(c_idx);
                 float y_frac = y_pos - static_cast<float>(y_idx);
-                col_buf_[c_idx * outputHeight_ + y_idx] += mag_lin * (1.0f - c_frac) * (1.0f - y_frac);
-                col_buf_[(c_idx + 1) * outputHeight_ + y_idx] += mag_lin * c_frac * (1.0f - y_frac);
-                col_buf_[c_idx * outputHeight_ + y_idx + 1] += mag_lin * (1.0f - c_frac) * y_frac;
-                col_buf_[(c_idx + 1) * outputHeight_ + y_idx + 1] += mag_lin * c_frac * y_frac;
-                weight_buf_[c_idx * outputHeight_ + y_idx] += (1.0f - y_frac);
-                weight_buf_[(c_idx + 1) * outputHeight_ + y_idx] += (1.0f - y_frac);
-                weight_buf_[c_idx * outputHeight_ + y_idx + 1] += y_frac;
-                weight_buf_[(c_idx + 1) * outputHeight_ + y_idx + 1] += y_frac;
+                float w00 = (1.0f - c_frac) * (1.0f - y_frac);
+                float w10 = c_frac * (1.0f - y_frac);
+                float w01 = (1.0f - c_frac) * y_frac;
+                float w11 = c_frac * y_frac;
+                col_buf_[c_idx * outputHeight_ + y_idx] += mag_lin * w00;
+                col_buf_[(c_idx + 1) * outputHeight_ + y_idx] += mag_lin * w10;
+                col_buf_[c_idx * outputHeight_ + y_idx + 1] += mag_lin * w01;
+                col_buf_[(c_idx + 1) * outputHeight_ + y_idx + 1] += mag_lin * w11;
+                weight_buf_[c_idx * outputHeight_ + y_idx] += w00;
+                weight_buf_[(c_idx + 1) * outputHeight_ + y_idx] += w10;
+                weight_buf_[c_idx * outputHeight_ + y_idx + 1] += w01;
+                weight_buf_[(c_idx + 1) * outputHeight_ + y_idx + 1] += w11;
             }
         }
 

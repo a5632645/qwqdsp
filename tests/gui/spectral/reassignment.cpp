@@ -28,13 +28,13 @@ static constexpr int kHopSize = kFftSize / 16;
 // 简单类（标准谱图/时间重分配）：较大 zeroPad 提升频率分辨率
 static constexpr int kZeroPadSimple = 4;
 // 全 TF 类（子列缓冲已提供时间精度）
-static constexpr int kZeroPadFull = 2;
+static constexpr int kZeroPadFull = 1;
 
 // ── 频谱图显示 ──
 static constexpr float kDbFloor = -72.0f;
 static constexpr float kFreqMin = 20.0f;
 static constexpr float kFreqMax = 20000.0f;
-static constexpr float kMinWeight = 0.5f;
+static constexpr float kMinWeight = 0.3f;
 
 // ── 滚动图像 ──
 static constexpr float kScrollSeconds = 3.0f;
