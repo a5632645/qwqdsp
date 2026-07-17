@@ -26,12 +26,33 @@ struct Helper {
     }
 
     static void ZeroPhasePad(std::span<float> output, std::span<const float> input) noexcept {
-        assert(input.size() % 2 == 1);
         assert(output.size() >= input.size());
-        auto k = (input.size() - 1) / 2;
+
         std::fill(output.begin(), output.end(), 0.0f);
-        std::copy_n(input.begin(), k, output.begin() + (output.size() - k));
-        std::copy(input.begin() + k, input.end(), output.begin());
+        size_t La = input.size();
+        for (size_t j = 0; j < La / 2; ++j) {
+            output[j] = input[j + La / 2];
+        }
+        const size_t pad = output.size() - La / 2;
+        for (size_t j = 0; j < La / 2; ++j) {
+            output[pad + j] = input[j];
+        }
+    }
+
+    static void ZeroPhaseApply(std::span<const float> input, std::span<const float> window,
+                               std::span<float> output) noexcept {
+        assert(input.size() == window.size());
+        assert(output.size() >= window.size());
+
+        std::fill(output.begin(), output.end(), 0.0f);
+        size_t La = window.size();
+        for (size_t j = 0; j < La / 2; ++j) {
+            output[j] = input[j + La / 2] * window[j + La / 2];
+        }
+        const size_t pad = output.size() - La / 2;
+        for (size_t j = 0; j < La / 2; ++j) {
+            output[pad + j] = input[j] * window[j];
+        }
     }
 
     static void ZeroPad(std::span<float> output, std::span<const float> input) noexcept {
