@@ -112,9 +112,6 @@ struct NcTimeReassignmentFrame {
 
             int y0_idx = static_cast<int>(std::floor(y_top));
             int y1_idx = static_cast<int>(std::floor(y_bot));
-            float y_range = y_bot - y_top;
-            if (y_range < 1.0f)
-                y_range = 1.0f;
 
             // ── 水平位置 ──
             float c_pos = (group_delay + 0.5f) * subColScale_;
@@ -129,7 +126,7 @@ struct NcTimeReassignmentFrame {
                     continue;
                 float row_y0 = std::max(static_cast<float>(y), y_top);
                 float row_y1 = std::min(static_cast<float>(y + 1), y_bot);
-                float y_weight = (row_y1 - row_y0) / y_range;
+                float y_weight = row_y1 - row_y0;
 
                 float energy = gain * y_weight;
 
