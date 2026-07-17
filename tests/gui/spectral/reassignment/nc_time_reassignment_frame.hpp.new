@@ -107,7 +107,8 @@ struct NcTimeReassignmentFrame {
                 continue;
             float gain = std::sqrt(ncSum + kEps);
 
-            auto cross_f = X_[k] * std::conj(X_pf_[k]);
+            int mid = k + zeroPad_ / 2;
+            auto cross_f = X_[mid] * std::conj(X_pf_[mid]);
             float arg_f = std::arg(cross_f) / (2.0f * std::numbers::pi_v<float>);
             while (arg_f < 0.0f)
                 arg_f += 1.0f;
@@ -127,7 +128,8 @@ struct NcTimeReassignmentFrame {
                 continue;
             float gain = std::sqrt(ncSum + kEps);
 
-            auto cross_f = X_[k] * std::conj(X_pf_[k]);
+            int mid = k + zeroPad_ / 2;
+            auto cross_f = X_[mid] * std::conj(X_pf_[mid]);
             float arg_f = std::arg(cross_f) / (2.0f * std::numbers::pi_v<float>);
             while (arg_f < 0.0f)
                 arg_f += 1.0f;

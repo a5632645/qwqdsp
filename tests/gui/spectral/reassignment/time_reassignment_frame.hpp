@@ -135,8 +135,7 @@ struct TimeReassignmentFrame {
             column_[y] = Colormap::kTable[idx];
         }
 
-        std::memmove(col_buf_.data(), col_buf_.data() + outputHeight_,
-                     (subColumns_ - 1) * outputHeight_ * sizeof(float));
+        std::move(col_buf_.begin() + outputHeight_, col_buf_.end(), col_buf_.begin());
         std::fill(col_buf_.begin() + (subColumns_ - 1) * outputHeight_, col_buf_.end(), 0.0f);
     }
 

@@ -15,7 +15,7 @@
 /**
  * @brief NC 方法 + 时间重分配（roll 法）
  *
- * 矩形窗 FFT，NC 值计算相邻 bin 负相关，群延迟取自下 bin 做时间重分配。
+ * 矩形窗 FFT，NC 值计算相邻 bin 负相关，群延迟取中间 bin (k + zeroPad_/2) 做时间重分配。
  *
  * X   = FFT(x)                          (矩形窗)
  * X_pf = roll(X, 1), X_pf[0] = 0        (时间重分配 → 群延迟)
@@ -86,8 +86,9 @@ struct NcTimeReassignmentFrame {
                 continue;
             float gain = std::sqrt(ncSum + kEps);
 
-            // ── 时间重分配: 下 bin (k) 的群延迟 ──
-            auto cross_f = X_[k] * std::conj(X_pf_[k]);
+            // ── 时间重分配: 中间 bin (k + zeroPad_/2) 的群延迟 ──
+            int mid = k + zeroPad_ / 2;
+            auto cross_f = X_[mid] * std::conj(X_pf_[mid]);
             float arg_f = std::arg(cross_f) / (2.0f * std::numbers::pi_v<float>);
             while (arg_f < 0.0f)
                 arg_f += 1.0f;
@@ -152,8 +153,7 @@ struct NcTimeReassignmentFrame {
             column_[y] = Colormap::kTable[idx];
         }
 
-        std::memmove(col_buf_.data(), col_buf_.data() + outputHeight_,
-                     (subColumns_ - 1) * outputHeight_ * sizeof(float));
+        std::move(col_buf_.begin() + outputHeight_, col_buf_.end(), col_buf_.begin());
         std::fill(col_buf_.begin() + (subColumns_ - 1) * outputHeight_, col_buf_.end(), 0.0f);
     }
 

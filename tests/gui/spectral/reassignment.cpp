@@ -112,7 +112,6 @@ static NcReassignmentFrame<ColorMap> f_nc;
 static NcTimeReassignmentFrame<ColorMap> f_nc_time;
 
 static SpectrogramColumn column_;
-static SpectrogramColumn nc_column_;
 static ScrollingImage image_;
 
 // ----------------------------------------
@@ -157,7 +156,7 @@ extern "C" void MaCaptureCallback(ma_device* pDevice, void* pOutput, const void*
             column_.ProcessAudio({src, frameCount}, f_deriv_conv, push);
             break;
         case FrameType::kNcMethod:
-            nc_column_.ProcessAudio({src, frameCount}, f_nc, push);
+            column_.ProcessAudio({src, frameCount}, f_nc, push);
             break;
         case FrameType::kNcTimeMethod:
             column_.ProcessAudio({src, frameCount}, f_nc_time, push);
@@ -236,7 +235,6 @@ int main(void) {
     f_deriv_pk.Init(kSampleRate, kFftSize, kHopSize, kZeroPadFull, kCanvasH, kFreqMin, kFreqMax, kDbFloor);
     f_pv_conv.Init(kSampleRate, kFftSize, kHopSize, kZeroPadFull, kCanvasH, kFreqMin, kFreqMax, kDbFloor);
     f_deriv_conv.Init(kSampleRate, kFftSize, kHopSize, kZeroPadFull, kCanvasH, kFreqMin, kFreqMax, kDbFloor);
-    nc_column_.Init(kCanvasH, kSampleRate, kFftSize, kHopSize);
     f_nc.Init(kSampleRate, kFftSize, kNcZeroPad, kCanvasH, kFreqMin, kFreqMax, kDbFloor);
     f_nc_time.Init(kSampleRate, kFftSize, kHopSize, kNcZeroPad, kCanvasH, kFreqMin, kFreqMax, kDbFloor);
     image_.Init(kImageWidth, kCanvasH);
