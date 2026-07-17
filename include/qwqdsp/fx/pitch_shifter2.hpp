@@ -1,15 +1,13 @@
 #pragma once
-#include <span>
 #include <array>
-#include <numbers>
 #include <cmath>
 #include <complex>
+#include <numbers>
 #include <qwqdsp/segement/analyze_synthsis_online.hpp>
-#include <qwqdsp/window/hann.hpp>
-#include <qwqdsp/window/blackman.hpp>
-
-#ifdef QWQDSP_HAVE_IPP
 #include <qwqdsp/spectral/real_fft.hpp>
+#include <qwqdsp/window/blackman.hpp>
+#include <qwqdsp/window/hann.hpp>
+#include <span>
 
 namespace qwqdsp_fx {
 class PhaseVocoder {
@@ -55,7 +53,7 @@ public:
             std::complex freq{reim2[i][0], reim2[i][1]};
             freq = common * std::conj(freq);
             float omega = std::arg(freq);
-            
+
             detail_freq[i] = omega;
             detail_gain[i] = std::abs(common);
         }
@@ -97,8 +95,10 @@ public:
 private:
     static float WrapPi(float x) {
         constexpr float pi = std::numbers::pi_v<float>;
-        while (x > pi) x -= pi * 2;
-        while (x < -pi) x += pi * 2;
+        while (x > pi)
+            x -= pi * 2;
+        while (x < -pi)
+            x += pi * 2;
         return x;
     }
 
@@ -109,4 +109,3 @@ private:
     qwqdsp_spectral::RealFFT fft_;
 };
 } // namespace qwqdsp_fx
-#endif // QWQDSP_HAVE_IPP

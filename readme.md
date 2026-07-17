@@ -17,10 +17,10 @@
 
 | 依赖 | 开关 | 外部链接方式 | 作用 |
 |------|------|-------------|------|
-| **Eigen3** | `QWQDSP_USE_EIGEN=ON` | `target_link_libraries(qwqdsp PUBLIC eigen)` | 定义 `QWQDSP_HAVE_EIGEN`，启用 `rls_filter`、`swift_f0` 等 |
-| **Intel IPP** | `QWQDSP_USE_IPP=ON` | `target_link_libraries(qwqdsp PUBLIC IPP::ipps)` | 定义 `QWQDSP_HAVE_IPP`，替换 Ooura FFT 为 IPP 后端 |
-| **Apple Accelerate** | `QWQDSP_USE_ACCELERATE=ON` | `target_link_libraries(qwqdsp PUBLIC "-framework Accelerate")` | 定义 `QWQDSP_HAVE_ACCELERATE`，macOS 上替换 Ooura FFT 为 vDSP 后端 |
-| **SIMDe** | `QWQDSP_USE_SIMDE=ON` | `target_link_libraries(qwqdsp PUBLIC simde)` | 定义 `QWQDSP_HAVE_SIMDE`，非 x86 平台模拟 SIMD |
+| **Eigen3** | `QWQDSP_USE_EIGEN=ON` | `target_link_libraries(qwqdsp INTERFACE eigen)` | 定义 `QWQDSP_HAVE_EIGEN`，启用 `rls_filter`、`swift_f0` 等 |
+| **Intel IPP** | `QWQDSP_USE_IPP=ON` | `target_link_libraries(qwqdsp INTERFACE IPP::ipps)` | 定义 `QWQDSP_HAVE_IPP`，替换 Ooura FFT 为 IPP 后端 |
+| **Apple Accelerate** | `QWQDSP_USE_ACCELERATE=ON` | `target_link_libraries(qwqdsp INTERFACE "-framework Accelerate")` | 定义 `QWQDSP_HAVE_ACCELERATE`，macOS 上替换 Ooura FFT 为 vDSP 后端 |
+| **SIMDe** | `QWQDSP_USE_SIMDE=ON` | `target_link_libraries(qwqdsp INTERFACE simde)` | 定义 `QWQDSP_HAVE_SIMDE`，非 x86 平台模拟 SIMD |
 | **raylib** | `QWQDSP_USE_RAYLIB=ON` | `add_subdirectory(raylib)` | 构建 GUI 测试和 `playing` 可执行程序 |
 
 ---

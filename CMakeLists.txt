@@ -10,20 +10,17 @@ option(QWQDSP_BUILD_TESTS "building tests" ON)
 # QWQDSP_USE_RAYLIB — 构建 playing 和 GUI 测试 (需外部提供 raylib)
 
 # main library
-add_library(qwqdsp
-    STATIC
-    "source/oouras.cpp"
-)
-target_include_directories(qwqdsp PUBLIC "./include")
+add_library(qwqdsp INTERFACE)
+target_include_directories(qwqdsp INTERFACE "./include")
 set_target_properties(qwqdsp PROPERTIES CXX_STANDARD 20)
 
 # 仅定义编译宏 — 链接由外部 CMake 负责
 if(QWQDSP_USE_EIGEN)
-    target_compile_definitions(qwqdsp PUBLIC QWQDSP_HAVE_EIGEN)
+    target_compile_definitions(qwqdsp INTERFACE QWQDSP_HAVE_EIGEN)
 endif()
 
 if(QWQDSP_USE_IPP)
-    target_compile_definitions(qwqdsp PUBLIC QWQDSP_HAVE_IPP)
+    target_compile_definitions(qwqdsp INTERFACE QWQDSP_HAVE_IPP)
     message(STATUS "[qwqdsp] using intel ipp")
 elseif(QWQDSP_USE_ACCELERATE)
     target_compile_definitions(qwqdsp PUBLIC QWQDSP_HAVE_ACCELERATE)
