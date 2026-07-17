@@ -38,7 +38,7 @@ public:
         write_add_end_ = 0;
     }
 
-    void SetIR(std::span<float> ir) noexcept {
+    void SetIR(std::span<float> ir) {
         qwqdsp_segement::AnalyzeAuto<true> analyze;
         analyze.SetSize(block_size_);
         analyze.SetHop(block_size_);

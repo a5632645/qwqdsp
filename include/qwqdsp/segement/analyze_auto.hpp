@@ -49,7 +49,7 @@ public:
         return std::ceil(static_cast<float>(input_size) / hop_);
     }
 
-    void SetSize(size_t size) noexcept {
+    void SetSize(size_t size) {
         size_ = size;
         if (input_buffer_.size() < size) {
             input_buffer_.resize(size);

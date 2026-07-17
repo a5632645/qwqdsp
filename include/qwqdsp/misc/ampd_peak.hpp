@@ -15,7 +15,7 @@ public:
 
     template <class T>
     [[nodiscard]]
-    std::vector<size_t> const& Process(std::span<T> data) noexcept {
+    std::vector<size_t> const& Process(std::span<T> data) {
         int min_row_sum = 0;
         size_t max_window_len = 0;
         for (size_t k = 1; k < data.size() / 2 + 1; ++k) {

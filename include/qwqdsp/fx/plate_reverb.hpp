@@ -55,7 +55,7 @@ private:
 // ------------------------------------------------------------
 class DelayLine {
 public:
-    void Init(size_t size) noexcept {
+    void Init(size_t size) {
         size_ = size;
         // For speed, create a bigger buffer than we really need.
         size_t buffer_size = CeilPowerOfTwo(size_);

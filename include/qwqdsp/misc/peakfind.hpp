@@ -10,7 +10,7 @@ public:
         max_peaks_.resize(data_len);
     }
 
-    void Process(std::span<float const> data, bool max_first, float delta) noexcept {
+    void Process(std::span<float const> data, bool max_first, float delta) {
         min_peaks_.clear();
         max_peaks_.clear();
 

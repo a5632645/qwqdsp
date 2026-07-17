@@ -23,7 +23,7 @@ public:
         estimates_.resize(block_size);
     }
 
-    void Process(std::span<const float> block) noexcept {
+    void Process(std::span<const float> block) {
         std::copy_n(block.begin(), block.size(), fft_in_buffer_.begin());
         std::fill_n(fft_in_buffer_.begin() + block.size(), block.size(), 0);
         fft_.FFT(fft_in_buffer_.data(), fft_out_buffer_.data());

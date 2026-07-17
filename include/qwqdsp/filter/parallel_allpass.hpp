@@ -13,7 +13,7 @@ class ParallelAllpass {
 public:
     void Reset() noexcept {}
 
-    void BuildButterworth(size_t order, float w) noexcept {
+    void BuildButterworth(size_t order, float w) {
         assert(order % 2 == 1);
         order_ = order;
         size_t const n2 = (order - 1) / 2;

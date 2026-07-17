@@ -17,8 +17,7 @@ public:
      */
     template <class Func>
     void Process(std::span<const float> in_span, std::vector<float>& output,
-                 Func&& func) noexcept(noexcept(func(std::declval<std::span<const float>>(),
-                                                     std::declval<std::span<float>>()))) {
+                 Func&& func) {
         // 处理音频
         {
             Slice1D input{in_span};
@@ -119,7 +118,7 @@ public:
         return (num_frame - 1) * output_hop_ + output_size_;
     }
 
-    void SetInputSize(size_t size) noexcept {
+    void SetInputSize(size_t size) {
         input_size_ = size;
         if (input_buffer_.size() < size) {
             input_buffer_.resize(size);
@@ -128,7 +127,7 @@ public:
         process_buffer_.resize(process_size);
     }
 
-    void SetOutputSize(size_t size) noexcept {
+    void SetOutputSize(size_t size) {
         output_size_ = size;
         if (output_buffer_.size() < (size + output_hop_) * 2) {
             output_buffer_.resize((size + output_hop_) * 2);

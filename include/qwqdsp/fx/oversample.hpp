@@ -29,7 +29,7 @@ public:
         std::fill(down_state_.begin(), down_state_.end(), 0.0f);
     }
 
-    void Upsample(std::span<float> x_vec, std::span<float> up_vec) noexcept {
+    void Upsample(std::span<float> x_vec, std::span<float> up_vec) {
         int const n_in = static_cast<int>(x_vec.size());
         if (num_stages_ == 0) {
             std::copy_n(x_vec.data(), n_in, up_vec.data());
@@ -69,7 +69,7 @@ public:
         }
     }
 
-    void Downsample(std::span<float> up_vec, std::span<float> y_vec) noexcept {
+    void Downsample(std::span<float> up_vec, std::span<float> y_vec) {
         int const n_in = static_cast<int>(up_vec.size());
         if (num_stages_ == 0) {
             std::copy_n(up_vec.data(), n_in, y_vec.data());

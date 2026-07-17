@@ -48,7 +48,7 @@ public:
     // --------------------------------------------------------
     // 处理一帧音频，提取基频候选概率分布并存储。
     // 需在所有帧处理完毕后调用 GetPitchTrack()。
-    void Process(std::span<const float> block) noexcept {
+    void Process(std::span<const float> block) {
         auto candidates = core_.Process(block, 10, 0.001f);
 
         // 将 Hz → MIDI pitch 并存储
@@ -68,7 +68,7 @@ public:
     // --------------------------------------------------------
     // 对所有已处理的帧运行 HMM 维特比解码，返回平滑后的基频轨迹。
     // 返回的 vector 长度为 frame_count_，元素为 Hz，无声帧为 0。
-    std::vector<float> GetPitchTrack() noexcept {
+    std::vector<float> GetPitchTrack() {
         if (pitch_probs_.empty())
             return {};
 

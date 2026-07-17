@@ -26,7 +26,7 @@ public:
     // 维特比解码
     // obs_prob: [nFrame][nState] 观测概率
     // 返回最优状态路径
-    std::vector<int> DecodeViterbi(std::span<const std::vector<double>> obs_prob) const noexcept {
+    std::vector<int> DecodeViterbi(std::span<const std::vector<double>> obs_prob) const {
         if (obs_prob.empty())
             return {};
 
