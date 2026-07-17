@@ -553,7 +553,6 @@ public:
         left_tank_.Reset();
         right_tank_.Reset();
     }
-
 private:
     float sample_rate_ = 1.0f;
 

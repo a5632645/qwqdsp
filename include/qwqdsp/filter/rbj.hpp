@@ -1,7 +1,7 @@
 #pragma once
+#include "qwqdsp/filter/biquad_coeff.hpp"
 #include <cmath>
 #include <numbers>
-#include "qwqdsp/filter/biquad_coeff.hpp"
 
 namespace qwqdsp_filter {
 /**
@@ -209,4 +209,4 @@ struct RBJ {
         a2 *= inva0;
     }
 };
-}
+} // namespace qwqdsp_filter

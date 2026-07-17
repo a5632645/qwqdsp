@@ -1,16 +1,17 @@
-#pragma  once
-#include <cstddef>
+#pragma once
 #include <array>
-#include <complex>
 #include <cmath>
+#include <complex>
+#include <cstddef>
 #include <numbers>
 
 namespace qwqdsp_filter {
 /**
  * @brief full iir hilbert
- * @ref https://dsp.stackexchange.com/questions/8692/hilbert-transform-filter-for-audio-applications-using-iir-half-band-parallel-al/24732#24732
+ * @ref
+ * https://dsp.stackexchange.com/questions/8692/hilbert-transform-filter-for-audio-applications-using-iir-half-band-parallel-al/24732#24732
  */
-template<size_t kNumFilter>
+template <size_t kNumFilter>
 class IIRHilbertFull {
 public:
     void Reset() noexcept {
@@ -67,4 +68,4 @@ private:
     std::array<APF, kNumFilter> real_;
     std::array<APF, kNumFilter> imag_;
 };
-}
+} // namespace qwqdsp_filter

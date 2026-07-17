@@ -3,11 +3,11 @@
 
 namespace qwqdsp_simd_element {
 
-template<size_t N>
+template <size_t N>
 class AlgebraicWaveshaper {
 public:
     static inline PackFloat<N> Naive(PackFloatCRef<N> x) noexcept {
-        return x / PackOps::Sqrt(1 + x*x);
+        return x / PackOps::Sqrt(1 + x * x);
     }
 
     /**
@@ -15,7 +15,7 @@ public:
      */
     PackFloat<N> ADAA(PackFloatCRef<N> x) noexcept {
         auto up = x + xn1_;
-        auto F_x = PackOps::Sqrt(1.0f + x*x);
+        auto F_x = PackOps::Sqrt(1.0f + x * x);
         auto down = F_x + F_xn1_;
         xn1_ = x;
         F_xn1_ = F_x;

@@ -1,13 +1,13 @@
 #pragma once
-#include <vector>
-#include <span>
 #include "qwqdsp/fx/elliptic_blep.hpp"
+#include <span>
+#include <vector>
 
 namespace qwqdsp_fx {
 /**
  * @brief holters-parker IIR重采样器，使用Elliptic-blep库实现，移除了高通滤波器系数
  */
-template<class TCoeff, size_t kPartialStep>
+template <class TCoeff, size_t kPartialStep>
 class ResampleIIR {
 public:
     using T = typename TCoeff::TSample;
@@ -17,7 +17,7 @@ public:
         phase_inc_ = source_fs / target_fs;
     }
 
-    template<std::floating_point IOSample>
+    template <std::floating_point IOSample>
     std::vector<IOSample> Process(std::span<IOSample> x) {
         std::vector<IOSample> ret;
 
@@ -49,4 +49,4 @@ private:
     T phase_inc_{};
     signalsmith::blep::EllipticBlep<TCoeff, T, kPartialStep> blep_;
 };
-}
+} // namespace qwqdsp_fx

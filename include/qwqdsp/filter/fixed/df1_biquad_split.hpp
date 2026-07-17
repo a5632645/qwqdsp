@@ -1,12 +1,12 @@
 #pragma once
-#include <algorithm>
-#include <cstddef>
-#include <cmath>
-#include <limits>
 #include "acc_traits.hpp"
+#include <algorithm>
+#include <cmath>
+#include <cstddef>
+#include <limits>
 
 namespace qwqdsp_filter::fixed {
-template<class QTYPE, size_t FRAC_LEN>
+template <class QTYPE, size_t FRAC_LEN>
 class DF1_BiquadSplit {
 public:
     using ACCType = AccType<QTYPE>;
@@ -81,4 +81,4 @@ private:
     ACCType quantization_{};
     ACCType mask_{};
 };
-}
+} // namespace qwqdsp_filter::fixed

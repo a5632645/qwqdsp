@@ -1,6 +1,6 @@
 #pragma once
-#include <cmath>
 #include <array>
+#include <cmath>
 
 namespace qwqdsp_filter {
 class SvfTPTShelf {
@@ -33,17 +33,17 @@ public:
     }
 
     float TickLowshelf(float x) noexcept {
-        auto[hp,bp,lp] = TickMultiMode(x);
+        auto [hp, bp, lp] = TickMultiMode(x);
         return lp * invm2_ * invm2_ + R2_ * bp * invm2_ + hp;
     }
 
     float TickHighshelf(float x) noexcept {
-        auto[hp,bp,lp] = TickMultiMode(x);
+        auto [hp, bp, lp] = TickMultiMode(x);
         return lp + R2_ * bp * m2_ + hp * m2_ * m2_;
     }
 
     float TickTiltshelf(float x) noexcept {
-        auto[hp,bp,lp] = TickMultiMode(x);
+        auto [hp, bp, lp] = TickMultiMode(x);
         return lp * invm2_ + R2_ * bp + hp * m2_;
     }
 
@@ -70,4 +70,4 @@ private:
     float s1_{};
     float s2_{};
 };
-}
+} // namespace qwqdsp_filter

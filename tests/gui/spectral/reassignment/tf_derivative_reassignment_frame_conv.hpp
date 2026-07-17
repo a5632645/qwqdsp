@@ -11,8 +11,8 @@
 #include <qwqdsp/spectral/real_fft_adv.hpp>
 #include <qwqdsp/window/blackman_harris.hpp>
 #include <qwqdsp/window/blackman_harris_3term.hpp>
-#include <qwqdsp/window/window.hpp>
 #include <qwqdsp/window/helper.hpp>
+#include <qwqdsp/window/window.hpp>
 
 #include "raylib.h"
 
@@ -126,7 +126,8 @@ struct TfDerivativeReassignmentFrameConv {
             if (mag_lin < 1e-8f)
                 continue;
 
-            if (conv_[k] > 0.3f && conv_[k] < 0.7f) continue;
+            if (conv_[k] > 0.3f && conv_[k] < 0.7f)
+                continue;
 
             const float mag_sq = std::max(std::norm(X_h_[k]), kEps);
 
@@ -204,7 +205,8 @@ struct TfDerivativeReassignmentFrameConv {
             float dB;
             if (weight_buf_[y] < kMinWeight) {
                 dB = dbFloor_;
-            } else {
+            }
+            else {
                 float avg = col_buf_[y] / weight_buf_[y];
                 dB = 20.0f * std::log10(avg + kDbEps);
             }

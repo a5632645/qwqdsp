@@ -1,7 +1,7 @@
 #pragma once
-#include <complex>
-#include "table_sine_v3.hpp"
 #include "qwqdsp/misc/integrator.hpp"
+#include "table_sine_v3.hpp"
+#include <complex>
 
 namespace qwqdsp_oscillator {
 class BlitPWM {
@@ -54,7 +54,7 @@ private:
     float TickOdd() noexcept {
         v_phase_ += v_inc_;
         auto const up = cp_a0_ * table_.Sine(v_phase_)
-                        + cp_a_ * (cp_a0_ * table_.Sine( n_ * v_phase_) - table_.Sine((n_ + 1) * v_phase_));
+                      + cp_a_ * (cp_a0_ * table_.Sine(n_ * v_phase_) - table_.Sine((n_ + 1) * v_phase_));
         auto const down = 1.0f + cp_a0_ * cp_a0_ - 2.0f * cp_a0_ * table_.Cosine(v_phase_);
         return std::imag(up / down);
     }
@@ -75,4 +75,4 @@ private:
     qwqdsp_misc::IntegratorTrapezoidalLeak<float> pwm_inte_;
     float pwm_g_{};
 };
-}
+} // namespace qwqdsp_oscillator

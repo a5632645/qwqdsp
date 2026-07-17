@@ -49,7 +49,7 @@ public:
                     }
                 }
             }
-            
+
             for (size_t i = 0; i < p_data_.size(); ++i) {
                 if (p_data_[i] == max_window_len) {
                     results_.push_back(i);
@@ -63,4 +63,4 @@ private:
     std::vector<size_t> results_;
     std::vector<size_t> p_data_;
 };
-}
+} // namespace qwqdsp_misc

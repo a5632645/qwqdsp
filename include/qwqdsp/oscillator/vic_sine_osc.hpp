@@ -1,7 +1,7 @@
 #pragma once
 #include <cmath>
-#include <numbers>
 #include <complex>
+#include <numbers>
 
 namespace qwqdsp_oscillator {
 
@@ -76,4 +76,4 @@ private:
     float v_{};
 };
 
-}
+} // namespace qwqdsp_oscillator

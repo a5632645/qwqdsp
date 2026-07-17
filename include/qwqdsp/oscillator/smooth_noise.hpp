@@ -1,6 +1,6 @@
 #pragma once
-#include "qwqdsp/oscillator/noise.hpp"
 #include "qwqdsp/interpolation.hpp"
+#include "qwqdsp/oscillator/noise.hpp"
 
 namespace qwqdsp_oscillator {
 class SmoothNoise {
@@ -45,4 +45,4 @@ private:
     float d_{};
     WhiteNoise noise_;
 };
-}
+} // namespace qwqdsp_oscillator

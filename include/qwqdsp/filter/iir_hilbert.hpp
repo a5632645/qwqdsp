@@ -2,7 +2,7 @@
 #include <complex>
 
 namespace qwqdsp_filter {
-template<class T = float>
+template <class T = float>
 class IIRHilbert {
 public:
     void Reset() noexcept {
@@ -32,7 +32,7 @@ public:
         return {real, imag};
     }
 private:
-    template<T alpha>
+    template <T alpha>
     struct APF {
         T z0_{};
         T z1_{};
@@ -62,7 +62,7 @@ private:
     T latch_{};
 };
 
-template<class T = float>
+template <class T = float>
 class IIRHilbertDeeper {
 public:
     void Reset() noexcept {
@@ -108,7 +108,7 @@ public:
         return {real, imag};
     }
 private:
-    template<T alpha>
+    template <T alpha>
     struct APF {
         T z0_{};
         T z1_{};
@@ -145,4 +145,4 @@ private:
     APF<T(0.9980623781456869)> imag7_;
     T latch_{};
 };
-}
+} // namespace qwqdsp_filter

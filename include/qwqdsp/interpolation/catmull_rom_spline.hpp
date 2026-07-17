@@ -1,8 +1,8 @@
 #pragma once
+#include <cassert>
+#include <cmath>
 #include <cstddef>
 #include <span>
-#include <cmath>
-#include <cassert>
 
 namespace qwqdsp_interpolation {
 class CatmullRomSpline {
@@ -33,15 +33,11 @@ public:
                     StepNextPoint();
                 }
                 auto s = (x - x0_) / (x1_ - x0_);
-                return d_ + s * (
-                    c_ + s * (b_
-                        + s * a_
-                    )
-                );
+                return d_ + s * (c_ + s * (b_ + s * a_));
             }
         }
     }
-    
+
     void StepNextPoint() noexcept {
         // 起点超出插值范围
         assert(rpos_ < xs_.size() - 1);
@@ -122,4 +118,4 @@ private:
     std::span<const float> xs_;
     std::span<const float> ys_;
 };
-}
+} // namespace qwqdsp_interpolation

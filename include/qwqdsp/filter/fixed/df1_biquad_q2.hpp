@@ -1,11 +1,11 @@
 #pragma once
-#include <cstddef>
-#include <cmath>
-#include <limits>
 #include "acc_traits.hpp"
+#include <cmath>
+#include <cstddef>
+#include <limits>
 
 namespace qwqdsp_filter::fixed {
-template<class QTYPE, size_t FRAC_LEN>
+template <class QTYPE, size_t FRAC_LEN>
 class DF1_Biquad2 {
 public:
     using ACCType = AccType<QTYPE>;
@@ -30,8 +30,10 @@ public:
         acc -= (ACCType)(a2_ * y2_);
 
         ACCType temp = acc >> shift_;
-        if (temp > kMax) temp = kMax;
-        else if (temp < kMin) temp = kMin;
+        if (temp > kMax)
+            temp = kMax;
+        else if (temp < kMin)
+            temp = kMin;
 
         quantization2_ = quantization_;
         quantization_ = acc & mask_;
@@ -89,4 +91,4 @@ private:
     AccType<QTYPE> mask_;
     QTYPE shift_;
 };
-}
+} // namespace qwqdsp_filter::fixed

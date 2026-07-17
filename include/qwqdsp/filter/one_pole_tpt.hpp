@@ -7,7 +7,7 @@ public:
     void Reset() noexcept {
         s_ = 0;
     }
-    
+
     void MakeLowpass(float w) noexcept {
         auto k = std::tan(w / 2);
         g_ = k / (1 + k);
@@ -54,4 +54,4 @@ private:
     float G_{};
     float s_{};
 };
-}
+} // namespace qwqdsp_filter

@@ -10,7 +10,7 @@ namespace qwqdsp_simd_element {
  *        Tiltshelf = Highshelf/M
  *        Low shelf = Tiltshelf/M
  */
-template<size_t N>
+template <size_t N>
 class OnepoleTPTShelf {
 public:
     void Reset() noexcept {

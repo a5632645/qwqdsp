@@ -40,7 +40,6 @@ public:
     size_t FFTSize() const noexcept {
         return fft_size_;
     }
-
 private:
     size_t fft_size_{};
 #if defined(QWQDSP_HAVE_IPP)

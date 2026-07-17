@@ -58,4 +58,4 @@ private:
     float invm_{};
     float lag_{};
 };
-}
+} // namespace qwqdsp_filter

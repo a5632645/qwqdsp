@@ -1,13 +1,13 @@
 #pragma once
-#include <numbers>
-#include <array>
+#include "qwqdsp/convert.hpp"
 #include "qwqdsp/simd_element/delay_allpass.hpp"
 #include "qwqdsp/simd_element/delay_line_single.hpp"
 #include "qwqdsp/simd_element/one_pole_tpt.hpp"
-#include "qwqdsp/convert.hpp"
+#include <array>
+#include <numbers>
 
 namespace qwqdsp_simd_element {
-template<size_t N>
+template <size_t N>
 class PlateReverb {
 public:
     static constexpr float kMaxPredelayMs = 300.0f;
@@ -82,7 +82,8 @@ public:
         input = diffuser3_.Tick(input, diffuser_delays_[2], 0.625f);
         input = diffuser4_.Tick(input, diffuser_delays_[3], 0.625f);
 
-        PackFloat<N> tank_val = PackOps::Shuffle<0, 0, 1, 1>(input) + PackOps::Shuffle<1, 0, 3, 2>(tank_out_) * tank_decay_;
+        PackFloat<N> tank_val =
+            PackOps::Shuffle<0, 0, 1, 1>(input) + PackOps::Shuffle<1, 0, 3, 2>(tank_out_) * tank_decay_;
         tank_val = tank_apf1_.Tick(tank_val, apf1_delay_ + tank_lfo_.Tick() * mod_depth_, -0.7f);
         tank_delay1_.Push(tank_val);
         tank_val = tank_delay1_.GetAfterPush(delay1_delay_);
@@ -111,7 +112,7 @@ public:
 
         predelay_.Push(output);
         output = predelay_.GetAfterPush(predelay_samples_);
-        
+
         return x + PackFloat<N>::FromSingle(mix_) * (output - x);
     }
 
@@ -143,7 +144,7 @@ public:
         damp_coeff_ = tank_damping_.ComputeCoeff(qwqdsp::convert::Freq2W(freq, fs_));
     }
 private:
-    template<size_t N2>
+    template <size_t N2>
     class LFO {
     public:
         void Reset() noexcept {
@@ -212,4 +213,4 @@ private:
     DelayAllpass<N> diffuser3_;
     DelayAllpass<N> diffuser4_;
 };
-}
+} // namespace qwqdsp_simd_element

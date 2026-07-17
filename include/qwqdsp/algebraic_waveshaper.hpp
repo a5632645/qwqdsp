@@ -12,7 +12,7 @@ namespace qwqdsp {
 class AlgebraicWaveshaper {
 public:
     static inline float Naive(float x) noexcept {
-        return x / std::sqrt(1 + x*x);
+        return x / std::sqrt(1 + x * x);
     }
 
     /**
@@ -20,7 +20,7 @@ public:
      */
     float ADAA(float x) noexcept {
         auto up = x + xn1_;
-        auto F_x = std::sqrt(1 + x*x);
+        auto F_x = std::sqrt(1 + x * x);
         auto down = F_x + F_xn1_;
         xn1_ = x;
         F_xn1_ = F_x;
@@ -69,4 +69,4 @@ private:
     float F_xn2_{1};
     float y_{};
 };
-}
+} // namespace qwqdsp

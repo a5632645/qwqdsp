@@ -187,7 +187,6 @@ public:
     void SetMaxPitch(float hz) noexcept {
         core_.SetMaxPitch(hz);
     }
-
 private:
     float fs_{};
     int block_size_{};

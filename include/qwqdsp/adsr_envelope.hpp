@@ -1,7 +1,7 @@
 #pragma once
 #include <algorithm>
-#include <span>
 #include <cmath>
+#include <span>
 
 namespace qwqdsp {
 class AdsrEnvelope {
@@ -253,4 +253,4 @@ private:
     float sustain_level_{};
     float last_out_{};
 };
-}
+} // namespace qwqdsp

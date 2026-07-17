@@ -19,12 +19,12 @@ public:
         if (bias > 0) {
             // u > 0
             float t = -1 - g - s_ + x;
-            u = t + std::sqrt(4*(x-s_)+t*t);
+            u = t + std::sqrt(4 * (x - s_) + t * t);
         }
         else {
             // u < 0
             float t = 1 + g - s_ + x;
-            u = t - std::sqrt(4*(s_-x)+t*t);
+            u = t - std::sqrt(4 * (s_ - x) + t * t);
         }
         u /= 2;
 
@@ -33,11 +33,11 @@ public:
         s_ += u;
         float y = s_;
         s_ += u;
-        
+
         return y;
     }
 private:
     float s_{};
     float g_{};
 };
-}
+} // namespace qwqdsp_filter

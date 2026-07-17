@@ -70,10 +70,18 @@ struct PeakMeter {
     // --------------------------------------------------------
     //  归一化 dB 值获取 [0, 1]（-60dB ~ 0dB）
     // --------------------------------------------------------
-    float NormInL()  const noexcept { return ToNorm(disp_in_l_); }
-    float NormInR()  const noexcept { return ToNorm(disp_in_r_); }
-    float NormOutL() const noexcept { return ToNorm(disp_out_l_); }
-    float NormOutR() const noexcept { return ToNorm(disp_out_r_); }
+    float NormInL() const noexcept {
+        return ToNorm(disp_in_l_);
+    }
+    float NormInR() const noexcept {
+        return ToNorm(disp_in_r_);
+    }
+    float NormOutL() const noexcept {
+        return ToNorm(disp_out_l_);
+    }
+    float NormOutR() const noexcept {
+        return ToNorm(disp_out_r_);
+    }
 
     // --------------------------------------------------------
     //  Draw — 绘制 4 条电平条
@@ -88,7 +96,8 @@ struct PeakMeter {
             if (norm < 0.667f) {
                 float t = norm / 0.667f;
                 return Color{(unsigned char)(t * 255.0f), 255, 0, 255};
-            } else {
+            }
+            else {
                 float t = (norm - 0.667f) / 0.333f;
                 return Color{255, (unsigned char)((1.0f - t) * 255.0f), 0, 255};
             }
@@ -96,29 +105,23 @@ struct PeakMeter {
 
         // ── 绘制单条 ──
         auto draw_one = [&](float bx, float norm, const char* label) {
-            DrawRectangle(static_cast<int>(bx), static_cast<int>(y),
-                          static_cast<int>(bar_w), static_cast<int>(total_h),
+            DrawRectangle(static_cast<int>(bx), static_cast<int>(y), static_cast<int>(bar_w), static_cast<int>(total_h),
                           Color{25, 25, 30, 255});
-            DrawRectangleLines(static_cast<int>(bx), static_cast<int>(y),
-                               static_cast<int>(bar_w), static_cast<int>(total_h),
-                               Color{60, 60, 70, 255});
+            DrawRectangleLines(static_cast<int>(bx), static_cast<int>(y), static_cast<int>(bar_w),
+                               static_cast<int>(total_h), Color{60, 60, 70, 255});
             if (norm > 0.001f) {
                 int fill_h = static_cast<int>(norm * total_h);
-                DrawRectangle(static_cast<int>(bx) + 1,
-                              static_cast<int>(y + total_h - fill_h),
-                              static_cast<int>(bar_w) - 2, fill_h,
-                              bar_color(norm));
+                DrawRectangle(static_cast<int>(bx) + 1, static_cast<int>(y + total_h - fill_h),
+                              static_cast<int>(bar_w) - 2, fill_h, bar_color(norm));
             }
-            DrawText(label, static_cast<int>(bx),
-                     static_cast<int>(y + total_h + 4), 9,
-                     Color{140, 140, 150, 255});
+            DrawText(label, static_cast<int>(bx), static_cast<int>(y + total_h + 4), 9, Color{140, 140, 150, 255});
         };
 
-        float norms[4] = { NormInL(), NormInR(), NormOutL(), NormOutR() };
-        const char* labels[4] = { "L in", "R in", "L out", "R out" };
+        float norms[4] = {NormInL(), NormInR(), NormOutL(), NormOutR()};
+        const char* labels[4] = {"L in", "R in", "L out", "R out"};
 
         // 组内间距序列
-        float gaps[3] = { gap, group_gap, gap };
+        float gaps[3] = {gap, group_gap, gap};
         float bx = x;
         for (int i = 0; i < 4; ++i) {
             draw_one(bx, norms[i], labels[i]);
@@ -126,7 +129,6 @@ struct PeakMeter {
                 bx += bar_w + gaps[i];
         }
     }
-
 private:
     float disp_in_l_ = 0.0f;
     float disp_in_r_ = 0.0f;

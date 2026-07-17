@@ -3,7 +3,7 @@
 
 namespace qwqdsp_simd_element {
 
-template<size_t N>
+template <size_t N>
 class DelayAllpass {
 public:
     void Init(float fs, float max_ms) {

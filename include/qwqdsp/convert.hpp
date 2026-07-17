@@ -1,6 +1,6 @@
 #pragma once
-#include <numbers>
 #include <cmath>
+#include <numbers>
 #include <utility>
 
 namespace qwqdsp::convert {
@@ -92,7 +92,7 @@ static inline std::pair<float, float> Octave2Frequency(float f0, float octave) n
     auto a = std::exp2(octave * 0.5f);
     return {f0 * a, f0 / a};
 }
-} // analog
+} // namespace analog
 
 /**
  * @return 模拟频率(hz)
@@ -123,7 +123,7 @@ static inline float Db2Gain(float db) noexcept {
     return std::pow(10.0f, db / 20.0f);
 }
 
-template<float kMinDb>
+template <float kMinDb>
 static inline float Gain2Db(float gain) noexcept {
     static float const min_g = Db2Gain(kMinDb);
     if (gain > min_g) {
@@ -134,4 +134,4 @@ static inline float Gain2Db(float gain) noexcept {
     }
 }
 
-} // qwqdsp::convert
+} // namespace qwqdsp::convert

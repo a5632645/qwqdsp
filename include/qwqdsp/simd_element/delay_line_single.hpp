@@ -1,14 +1,14 @@
 #pragma once
-#include <vector>
 #include "simd_pack.hpp"
+#include <vector>
 
 namespace qwqdsp_simd_element {
 /**
  * @brief 多通道存储，单变量延迟
- * 
- * @tparam N 
+ *
+ * @tparam N
  */
-template<size_t N>
+template <size_t N>
 class DelayLineSingle {
 public:
     void Init(float max_ms, float fs) {
@@ -46,7 +46,7 @@ public:
         uint32_t inext1 = (irpos + 1u) & (mask_);
         uint32_t inext2 = (irpos + 2u) & (mask_);
         float t = rpos - std::floor(rpos);
-        
+
         auto yn1 = buffer_[iprev1];
         auto y0 = buffer_[irpos];
         auto y1 = buffer_[inext1];
@@ -57,11 +57,7 @@ public:
         auto d = y1 - y0;
         auto m0 = 3.0f * d - 2.0f * d0 - d1;
         auto m1 = d0 - 2.0f * d + d1;
-        return y0 + t * (
-            d0 + t * (
-                m0 + t * m1
-            )
-        );
+        return y0 + t * (d0 + t * (m0 + t * m1));
     }
 
     /**
@@ -86,11 +82,7 @@ public:
         auto d = y1 - y0;
         auto m0 = 3.0f * d - 2.0f * d0 - d1;
         auto m1 = d0 - 2.0f * d + d1;
-        return y0 + t * (
-            d0 + t * (
-                m0 + t * m1
-            )
-        );
+        return y0 + t * (d0 + t * (m0 + t * m1));
     }
 private:
     std::vector<PackFloat<N>> buffer_;

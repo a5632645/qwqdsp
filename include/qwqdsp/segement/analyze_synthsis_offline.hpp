@@ -1,9 +1,9 @@
 #pragma once
+#include "slice.hpp"
+#include <cmath>
 #include <cstddef>
 #include <span>
 #include <vector>
-#include <cmath>
-#include "slice.hpp"
 
 namespace qwqdsp_segement {
 /**
@@ -14,12 +14,10 @@ public:
     /**
      * @tparam Func void(std::span<const float> input, std::span<float> output)
      */
-    template<class Func>
-    void Process(
-        std::span<const float> in_span,
-        std::vector<float>& output,
-        Func&& func
-    ) noexcept(noexcept(func(std::declval<std::span<const float>>(), std::declval<std::span<float>>()))) {
+    template <class Func>
+    void Process(std::span<const float> in_span, std::vector<float>& output,
+                 Func&& func) noexcept(noexcept(func(std::declval<std::span<const float>>(),
+                                                     std::declval<std::span<float>>()))) {
         // 处理音频
         {
             Slice1D input{in_span};
@@ -30,7 +28,8 @@ public:
                 input_wpos_ += in.size();
                 if (input_wpos_ >= size_) {
                     std::copy(input_buffer_.begin(), input_buffer_.end(), process_buffer_.begin());
-                    func(std::span<const float>{input_buffer_.data(), size_}, std::span<float>{process_buffer_.data(), size_});
+                    func(std::span<const float>{input_buffer_.data(), size_},
+                         std::span<float>{process_buffer_.data(), size_});
                     input_wpos_ -= input_hop_;
                     for (int i = 0; i < input_wpos_; i++) {
                         input_buffer_[i] = input_buffer_[i + input_hop_];
@@ -41,14 +40,14 @@ public:
                     write_end_ = write_add_end_ + size_;
                     write_add_end_ += output_hop_;
                 }
-    
+
                 if (write_add_end_ >= 0) {
                     // extract output
                     int extractSize = write_add_end_;
                     for (int i = 0; i < extractSize; ++i) {
                         output.emplace_back(output_buffer_[i] / ((float)size_ / output_hop_));
                     }
-                    
+
                     // shift output buffer
                     int shiftSize = write_end_ - extractSize;
                     for (int i = 0; i < shiftSize; i++) {
@@ -74,20 +73,21 @@ public:
                 for (int i = 0; i < input_wpos_; i++) {
                     input_buffer_[i] = input_buffer_[i + input_hop_];
                 }
-                func(std::span<const float>{input_buffer_.data(), size_}, std::span<float>{process_buffer_.data(), size_});
+                func(std::span<const float>{input_buffer_.data(), size_},
+                     std::span<float>{process_buffer_.data(), size_});
                 for (int i = 0; i < size_; i++) {
                     output_buffer_[i + write_add_end_] += process_buffer_[i];
                 }
                 write_end_ = write_add_end_ + size_;
                 write_add_end_ += output_hop_;
-    
+
                 if (write_add_end_ >= 0) {
                     // extract output
                     int extractSize = write_add_end_;
                     for (int i = 0; i < extractSize; ++i) {
                         output.emplace_back(output_buffer_[i] / ((float)size_ / output_hop_));
                     }
-                    
+
                     // shift output buffer
                     int shiftSize = write_end_ - extractSize;
                     for (int i = 0; i < shiftSize; i++) {
@@ -152,4 +152,4 @@ private:
     size_t write_end_{};
     size_t write_add_end_{};
 };
-}
+} // namespace qwqdsp_segement

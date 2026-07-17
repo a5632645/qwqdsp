@@ -1,10 +1,10 @@
 #pragma once
-#include "qwqdsp/simd_element/simd_pack.hpp"
 #include "qwqdsp/filter/biquad_coeff.hpp"
+#include "qwqdsp/simd_element/simd_pack.hpp"
 
 namespace qwqdsp_simd_element {
 
-template<size_t N>
+template <size_t N>
 class Biquads {
 public:
     void Reset() noexcept {
@@ -22,7 +22,7 @@ public:
     float TickCascade(float x) noexcept {
         PackFloat<N> vx;
         PackFloat<N> vy;
-        #pragma clang loop unroll(full)
+#pragma clang loop unroll(full)
         for (size_t i = 0; i < N; ++i) {
             vx[i] = x;
             x = x * b0_[i] + s1_[i];

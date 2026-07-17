@@ -7,7 +7,7 @@ public:
     void Reset() noexcept {
         latch1_ = 0;
     }
-    
+
     void SetLPF(float w) noexcept {
         auto k = std::tan(w / 2);
         b0_ = k / (1 + k);
@@ -53,4 +53,4 @@ private:
     float a1_ = 0;
     float latch1_ = 0;
 };
-}
+} // namespace qwqdsp_filter

@@ -2,7 +2,7 @@
 #include <complex>
 
 namespace qwqdsp_filter {
-template<class T = float>
+template <class T = float>
 class IIRHilbertCpx {
 public:
     void Reset() noexcept {
@@ -33,7 +33,7 @@ public:
         return {real.real() - imag.imag(), real.imag() + imag.real()};
     }
 private:
-    template<T alpha>
+    template <T alpha>
     struct APF {
         TCpx z0_{};
         TCpx z1_{};
@@ -63,7 +63,7 @@ private:
     TCpx latch_{};
 };
 
-template<class T = float>
+template <class T = float>
 class IIRHilbertDeeperCpx {
 public:
     using TCpx = std::complex<T>;
@@ -111,7 +111,7 @@ public:
         return {real.real() - imag.imag(), real.imag() + imag.real()};
     }
 private:
-    template<T alpha>
+    template <T alpha>
     struct APF {
         TCpx z0_{};
         TCpx z1_{};
@@ -148,4 +148,4 @@ private:
     APF<T(0.9980623781456869)> imag7_;
     TCpx latch_{};
 };
-}
+} // namespace qwqdsp_filter

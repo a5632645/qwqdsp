@@ -23,7 +23,7 @@ private:
     float latch_{};
 };
 
-template<class T, T kLeak = T(0.997)>
+template <class T, T kLeak = T(0.997)>
 class IntegratorNaiveLeak {
 public:
     void Reset() noexcept {
@@ -44,7 +44,7 @@ private:
     T sum_{};
 };
 
-template<class T>
+template <class T>
 class IntegratorTrapezoidal {
 public:
     void Reset() noexcept {
@@ -69,10 +69,10 @@ public:
     }
 
     T Tick(T x) noexcept {
-        T const x_prime = x * T(0.5); 
-        lag_ *= kLeak; 
+        T const x_prime = x * T(0.5);
+        lag_ *= kLeak;
         T const y = x_prime + lag_;
-        lag_ += x_prime; 
+        lag_ += x_prime;
         return y;
     }
 
@@ -84,4 +84,4 @@ public:
 private:
     T lag_{};
 };
-}
+} // namespace qwqdsp_misc

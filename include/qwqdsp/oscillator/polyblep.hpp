@@ -1,9 +1,9 @@
 #pragma once
-#include <algorithm>
 #include "blep_coeff.hpp"
+#include <algorithm>
 
 namespace qwqdsp_oscillator {
-template<qwqdsp_oscillator::blep_coeff::CBlepCoeff TCoeff>
+template <qwqdsp_oscillator::blep_coeff::CBlepCoeff TCoeff>
 class PolyBlep {
 public:
     static constexpr float kRangeMultiply = TCoeff::kHalfLen;
@@ -49,8 +49,8 @@ public:
         // -------------------- high quality --------------------
         // float dt = phase_inc_;
         // float const blep = Blep(phase_, phase_inc_)
-        //     - BlepOffset(phase_, dt, 0.5f) 
-        //     - BlepOffset(phase_, dt, 1.5f) 
+        //     - BlepOffset(phase_, dt, 0.5f)
+        //     - BlepOffset(phase_, dt, 1.5f)
         //     - BlepOffset(phase_, dt, -0.5f);
         // -------------------- fast --------------------
         float dt = std::min(phase_inc, 0.5f / TCoeff::kHalfLen);
@@ -98,9 +98,9 @@ public:
         float const blep = Blep(phase, phase_inc) - BlepOffset(phase, dt, pwm);
         // -------------------- high quality --------------------
         // float const t = phase_ < static_cast<float>(pwm_) ? 1 - pwm : pwm;
-        // float const blep = Blep(phase_, phase_inc_) 
-        //     - BlepOffset(phase_, phase_inc_, pwm_) 
-        //     - BlepOffset(phase_, phase_inc_, pwm_ + 1) 
+        // float const blep = Blep(phase_, phase_inc_)
+        //     - BlepOffset(phase_, phase_inc_, pwm_)
+        //     - BlepOffset(phase_, phase_inc_, pwm_ + 1)
         //     - BlepOffset(phase_, phase_inc_, pwm_ - 1);
         auto v = t + blep;
         return v * 2;
@@ -156,4 +156,4 @@ private:
     float phase_inc_{0.00001f};
     float pwm_{};
 };
-}
+} // namespace qwqdsp_oscillator

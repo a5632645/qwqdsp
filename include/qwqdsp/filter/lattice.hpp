@@ -1,8 +1,8 @@
 #pragma once
+#include "int_delay.hpp"
 #include <cassert>
 #include <cstddef>
 #include <utility>
-#include "int_delay.hpp"
 
 namespace qwqdsp_filter {
 class LatticeZero {
@@ -119,4 +119,4 @@ private:
     size_t n_latch_{1};
     IntDelay delay_;
 };
-}
+} // namespace qwqdsp_filter

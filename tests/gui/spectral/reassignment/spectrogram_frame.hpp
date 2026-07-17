@@ -50,11 +50,10 @@ struct SpectrogramFrame {
         }
 
         // ── 自适应 crossover ──
-        const float pixelSlope =
-            std::log(10.0f) * (log_max_ - log_min_) / static_cast<float>(height_ - 1);
+        const float pixelSlope = std::log(10.0f) * (log_max_ - log_min_) / static_cast<float>(height_ - 1);
         const float crossoverHz = bin_spacing / pixelSlope;
-        crossoverY_ = static_cast<int>((1.0f - (std::log10(crossoverHz) - log_min_) / (log_max_ - log_min_)) *
-                                       static_cast<float>(height_ - 1));
+        crossoverY_ = static_cast<int>((1.0f - (std::log10(crossoverHz) - log_min_) / (log_max_ - log_min_))
+                                       * static_cast<float>(height_ - 1));
         crossoverY_ = std::clamp(crossoverY_, 0, height_ - 1);
     }
 
@@ -87,7 +86,8 @@ struct SpectrogramFrame {
             float maxDb = -1e12f;
             for (int b = bin_top; b <= bin_bot; ++b) {
                 float dB = 20.0f * std::log10(gain_[b] + 1e-12f);
-                if (dB > maxDb) maxDb = dB;
+                if (dB > maxDb)
+                    maxDb = dB;
             }
             colMax_[y] = maxDb;
         }

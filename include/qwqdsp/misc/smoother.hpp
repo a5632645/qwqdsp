@@ -82,7 +82,8 @@ public:
     }
 
     float Tick() noexcept {
-        if (IsEnd()) return target_;
+        if (IsEnd())
+            return target_;
         now_ += delta_;
         --nsamples_;
         return now_;
@@ -122,9 +123,11 @@ public:
     }
 
     float Tick() noexcept {
-        if (IsEnd()) return target_;
+        if (IsEnd())
+            return target_;
         now_ += target_;
-        if (std::abs(target_ - now_) < delta_) end_ = true;
+        if (std::abs(target_ - now_) < delta_)
+            end_ = true;
         return now_;
     }
 private:
@@ -134,4 +137,4 @@ private:
     float delta_{};
     bool end_{};
 };
-}
+} // namespace qwqdsp_misc

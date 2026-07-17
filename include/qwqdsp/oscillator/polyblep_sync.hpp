@@ -1,7 +1,7 @@
 #pragma once
-#include <algorithm>
 #include "qwqdsp/oscillator/blep_coeff.hpp"
 #include "qwqdsp/polymath.hpp"
+#include <algorithm>
 
 namespace qwqdsp_oscillator {
 /**
@@ -9,7 +9,7 @@ namespace qwqdsp_oscillator {
  * 一个省脑子的编写Hardsync的方法是先写出无嵌套分支的blep代码，然后假设所有跳跃都会发生
  *       屏蔽发生在sync之后的跳跃,最后再检测一次重置之后的跳跃
  */
-template<qwqdsp_oscillator::blep_coeff::CBlepCoeff TCoeff>
+template <qwqdsp_oscillator::blep_coeff::CBlepCoeff TCoeff>
 class PolyBlepSync {
 public:
     static constexpr size_t kDelay = static_cast<size_t>(TCoeff::kHalfLen);
@@ -320,4 +320,4 @@ private:
     size_t wpos_{kDelay};
     size_t rpos_{};
 };
-}
+} // namespace qwqdsp_oscillator

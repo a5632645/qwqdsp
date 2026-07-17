@@ -11,10 +11,10 @@ struct BiquadCoeff {
 
     std::complex<float> DigitalResonpoce(std::complex<float> z) const noexcept {
         auto z2 = z * z;
-        return (b0*z2+b1*z+b2)/(z2+a1*z+a2);
+        return (b0 * z2 + b1 * z + b2) / (z2 + a1 * z + a2);
     }
 };
-inline static constexpr BiquadCoeff kBiquadPassthrough{1,0,0,0,0};
+inline static constexpr BiquadCoeff kBiquadPassthrough{1, 0, 0, 0, 0};
 
 struct DoubleBiquadCoeff {
     double b0{};
@@ -24,13 +24,8 @@ struct DoubleBiquadCoeff {
     double a2{};
 
     BiquadCoeff ToFloat() const noexcept {
-        return BiquadCoeff{
-            static_cast<float>(b0),
-            static_cast<float>(b1),
-            static_cast<float>(b2),
-            static_cast<float>(a1),
-            static_cast<float>(a2)
-        };
+        return BiquadCoeff{static_cast<float>(b0), static_cast<float>(b1), static_cast<float>(b2),
+                           static_cast<float>(a1), static_cast<float>(a2)};
     }
 };
-}
+} // namespace qwqdsp_filter

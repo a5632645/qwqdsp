@@ -3,7 +3,7 @@
 
 namespace qwqdsp_simd_element {
 
-template<size_t N>
+template <size_t N>
 class StereoIIRHilbertCpx {
 public:
     void Reset() noexcept {
@@ -47,7 +47,7 @@ public:
         return real + mulj;
     }
 private:
-    template<float alpha>
+    template <float alpha>
     struct APF {
         PackFloat<N> z0_{};
         PackFloat<N> z1_{};
@@ -60,7 +60,7 @@ private:
         /**
          * @param x => [L_re, L_im, R_re, R_im]
          * @return  => [L_re, L_im, R_re, R_im]
-        */
+         */
         PackFloat<N> Tick(PackFloat<N> const& x) noexcept {
             auto in = x + alpha * z1_;
             auto out = z1_ - alpha * in;
@@ -81,7 +81,7 @@ private:
     qwqdsp_simd_element::PackFloat<N> lag_{};
 };
 
-template<size_t N>
+template <size_t N>
 class StereoIIRHilbertDeeperCpx {
 public:
     void Reset() noexcept {
@@ -141,7 +141,7 @@ public:
         return real + mulj;
     }
 private:
-    template<float alpha>
+    template <float alpha>
     struct APF {
         PackFloat<N> z0_{};
         PackFloat<N> z1_{};
@@ -154,7 +154,7 @@ private:
         /**
          * @param x => [L_re, L_im, R_re, R_im]
          * @return  => [L_re, L_im, R_re, R_im]
-        */
+         */
         PackFloat<N> Tick(PackFloat<N> const& x) noexcept {
             auto in = x + alpha * z1_;
             auto out = z1_ - alpha * in;

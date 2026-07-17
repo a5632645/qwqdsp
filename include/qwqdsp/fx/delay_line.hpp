@@ -1,11 +1,11 @@
 #pragma once
-#include <cassert>
-#include <concepts>
-#include <vector>
-#include <cmath>
-#include <array>
 #include "qwqdsp/interpolation.hpp"
 #include "qwqdsp/window/kaiser.hpp"
+#include <array>
+#include <cassert>
+#include <cmath>
+#include <concepts>
+#include <vector>
 
 namespace qwqdsp_fx {
 enum class DelayLineInterp {
@@ -18,7 +18,7 @@ enum class DelayLineInterp {
     Kaiser21
 };
 
-template<DelayLineInterp INTERPOLATION_TYPE = DelayLineInterp::Lagrange3rd>
+template <DelayLineInterp INTERPOLATION_TYPE = DelayLineInterp::Lagrange3rd>
 class DelayLine {
 public:
     void Init(float max_ms, float fs) {
@@ -63,14 +63,14 @@ public:
     /**
      * @param delay_samples 此处不能小于1，否则为非因果滤波器（或者被绕回读取max_samples处）
      */
-    template<std::integral T>
+    template <std::integral T>
     float GetBeforePush(T delay_samples) noexcept {
         int rpos = wpos_ + buffer_.size() - delay_samples;
         int irpos = static_cast<int>(rpos) & mask_;
         return buffer_[irpos];
     }
 
-    template<class T, size_t N, size_t NSubSpan, double kSideLobe, double kWidthDiv>
+    template <class T, size_t N, size_t NSubSpan, double kSideLobe, double kWidthDiv>
     struct KaiserInterpolator {
         static constexpr size_t kN = N;
         static constexpr size_t kNSubSpan = NSubSpan;
@@ -90,7 +90,8 @@ public:
                     coeffs[i] = cutoff / std::numbers::pi_v<float>;
                 }
                 else {
-                    coeffs[i] = std::sin(omega * t) * static_cast<float>(NSubSpan + 1) / (std::numbers::pi_v<float> * t);
+                    coeffs[i] =
+                        std::sin(omega * t) * static_cast<float>(NSubSpan + 1) / (std::numbers::pi_v<float> * t);
                 }
             }
 
@@ -125,13 +126,15 @@ private:
             [[maybe_unused]] int iprev1 = (irpos - 1) & mask_;
             [[maybe_unused]] float t = rpos - static_cast<int>(rpos);
             if constexpr (INTERPOLATION_TYPE == DelayLineInterp::Lagrange3rd) {
-                return qwqdsp::Interpolation::Lagrange3rd(buffer_[irpos], buffer_[inext1], buffer_[inext2], buffer_[inext3], t);
+                return qwqdsp::Interpolation::Lagrange3rd(buffer_[irpos], buffer_[inext1], buffer_[inext2],
+                                                          buffer_[inext3], t);
             }
             else if constexpr (INTERPOLATION_TYPE == DelayLineInterp::Linear) {
                 return qwqdsp::Interpolation::Linear(buffer_[irpos], buffer_[inext1], t);
             }
             else if constexpr (INTERPOLATION_TYPE == DelayLineInterp::PCHIP) {
-                return qwqdsp::Interpolation::PCHIP(buffer_[iprev1], buffer_[irpos], buffer_[inext1], buffer_[inext2], t);
+                return qwqdsp::Interpolation::PCHIP(buffer_[iprev1], buffer_[irpos], buffer_[inext1], buffer_[inext2],
+                                                    t);
             }
             else if constexpr (INTERPOLATION_TYPE == DelayLineInterp::Kaiser5) {
                 static KaiserInterpolator<float, 5, 127, 70.0, 1.8> table;
@@ -203,4 +206,4 @@ private:
     size_t wpos_{};
     size_t mask_{};
 };
-}
+} // namespace qwqdsp_fx

@@ -1,8 +1,8 @@
 #pragma once
 #include <cassert>
+#include <cmath>
 #include <cstddef>
 #include <span>
-#include <cmath>
 
 namespace qwqdsp_interpolation {
 class Makima {
@@ -49,7 +49,7 @@ public:
             }
         }
     }
-    
+
     void StepNextPoint() noexcept {
         // 起点超出插值范围
         assert(rpos_ < xs_.size() - 1);
@@ -120,4 +120,4 @@ private:
     std::span<const float> xs_;
     std::span<const float> ys_;
 };
-}
+} // namespace qwqdsp_interpolation

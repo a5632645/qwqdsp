@@ -1,10 +1,10 @@
 #pragma once
-#include <vector>
-#include <array>
 #include "simd_pack.hpp"
+#include <array>
+#include <vector>
 
 namespace qwqdsp_simd_element {
-template<size_t N, bool kFastTrick>
+template <size_t N, bool kFastTrick>
 class DelayLineStereo {
 public:
     static_assert(N == 4 || N == 8, "unsupport channels");
@@ -63,35 +63,23 @@ public:
         }
     }
 
-    std::pair<PackFloat<N>, PackFloat<N>> GetAfterPush(
-        PackFloat<N> const& left_delay_samples,
-        PackFloat<N> const& right_delay_samples
-    ) noexcept {
-        return {
-            GetRpos(ptrs_[0], static_cast<float>(wpos_ + size_) - left_delay_samples),
-            GetRpos(ptrs_[1], static_cast<float>(wpos_ + size_) - right_delay_samples)
-        };
+    std::pair<PackFloat<N>, PackFloat<N>> GetAfterPush(PackFloat<N> const& left_delay_samples,
+                                                       PackFloat<N> const& right_delay_samples) noexcept {
+        return {GetRpos(ptrs_[0], static_cast<float>(wpos_ + size_) - left_delay_samples),
+                GetRpos(ptrs_[1], static_cast<float>(wpos_ + size_) - right_delay_samples)};
     }
 
-    PackFloat<N> GetAfterPush(
-        PackFloat<N> const& left_right_delay_samples
-    ) noexcept {
+    PackFloat<N> GetAfterPush(PackFloat<N> const& left_right_delay_samples) noexcept {
         return GetRpos2(static_cast<float>(wpos_ + size_) - left_right_delay_samples);
     }
 
-    std::pair<PackFloat<N>, PackFloat<N>> GetBeforePush(
-        PackFloat<N> const& left_delay_samples,
-        PackFloat<N> const& right_delay_samples
-    ) noexcept {
-        return {
-            GetRpos(ptrs_[0], static_cast<float>(wpos_ + mask_) - left_delay_samples),
-            GetRpos(ptrs_[1], static_cast<float>(wpos_ + mask_) - right_delay_samples)
-        };
+    std::pair<PackFloat<N>, PackFloat<N>> GetBeforePush(PackFloat<N> const& left_delay_samples,
+                                                        PackFloat<N> const& right_delay_samples) noexcept {
+        return {GetRpos(ptrs_[0], static_cast<float>(wpos_ + mask_) - left_delay_samples),
+                GetRpos(ptrs_[1], static_cast<float>(wpos_ + mask_) - right_delay_samples)};
     }
 
-    PackFloat<N> GetBeforePush(
-        PackFloat<N> const& left_right_delay_samples
-    ) noexcept {
+    PackFloat<N> GetBeforePush(PackFloat<N> const& left_right_delay_samples) noexcept {
         return GetRpos(static_cast<float>(wpos_ + mask_) - left_right_delay_samples);
     }
 private:
@@ -200,11 +188,7 @@ private:
         PackFloat<N> d = y1 - y0;
         PackFloat<N> m0 = 3.0f * d - 2.0f * d0 - d1;
         PackFloat<N> m1 = d0 - 2.0f * d + d1;
-        return y0 + t * (
-            d0 + t * (
-                m0 + t * m1
-            )
-        );
+        return y0 + t * (d0 + t * (m0 + t * m1));
     }
 
     QWQDSP_FORCE_INLINE
@@ -312,11 +296,7 @@ private:
         PackFloat<N> d = y1 - y0;
         PackFloat<N> m0 = 3.0f * d - 2.0f * d0 - d1;
         PackFloat<N> m1 = d0 - 2.0f * d + d1;
-        return y0 + t * (
-            d0 + t * (
-                m0 + t * m1
-            )
-        );
+        return y0 + t * (d0 + t * (m0 + t * m1));
     }
 
     std::vector<float> buffer_;

@@ -3,14 +3,11 @@
 
 namespace qwqdsp {
 /**
-* @brief Interpolation Full
-*/
+ * @brief Interpolation Full
+ */
 struct Interpolation4 {
-    static float Lagrange3rd(
-        float y0, float y1, float y2, float y3,
-        float x0, float x1, float x2, float x3,
-        float x
-    ) noexcept {
+    static float Lagrange3rd(float y0, float y1, float y2, float y3, float x0, float x1, float x2, float x3,
+                             float x) noexcept {
         auto f1 = (x - x1) * (x - x2) * (x - x3) / (x0 - x1) / (x0 - x2) / (x0 - x3);
         auto f2 = (x - x0) * (x - x2) * (x - x3) / (x1 - x0) / (x1 - x2) / (x1 - x3);
         auto f3 = (x - x0) * (x - x1) * (x - x3) / (x2 - x0) / (x2 - x1) / (x2 - x3);
@@ -21,11 +18,8 @@ struct Interpolation4 {
     /**
      * @ref https://blog.csdn.net/qq_33552519/article/details/102742715
      */
-    static float SPPCHIP(
-        float y0, float y1, float y2, float y3,
-        float x0, float x1, float x2, float x3,
-        float x
-    ) noexcept {
+    static float SPPCHIP(float y0, float y1, float y2, float y3, float x0, float x1, float x2, float x3,
+                         float x) noexcept {
         auto e0 = (y1 - y0) / (x1 - x0);
         auto e1 = (y2 - y1) / (x2 - x1);
         auto e2 = (y3 - y2) / (x3 - x2);
@@ -90,16 +84,15 @@ struct Interpolation4 {
         }
     }
 
-    static float Spline(
-        float y0, float y1, float y2, float y3,
-        float x0, float x1, float x2, float x3,
-        float x
-    ) noexcept {
+    static float Spline(float y0, float y1, float y2, float y3, float x0, float x1, float x2, float x3,
+                        float x) noexcept {
         auto m0 = (y1 - y0) / (x1 - x0);
         auto m1 = (y2 - y1) / (x2 - x1);
         auto m2 = (y3 - y2) / (x3 - x2);
-        auto z2 = (m2 * x1 + m1 * x2 - m2 * x2 + 2 * m1 * x3 + 2 * m0 * x1 - 2 * m0 * x3 - 3 * m1 * x1) / (4 * (x0 * x1 + x2 * x3 - x0 * x3) - (x1 + x2) * (x1 + x2));
-        auto z3 = (m1 * x1 + m0 * x2 - m0 * x1 + 2 * m1 * x0 + 2 * m2 * x2 - 2 * m2 * x0 - 3 * m1 * x2) / (4 * (x0 * x1 + x2 * x3 - x0 * x3) - (x1 + x2) * (x1 + x2));
+        auto z2 = (m2 * x1 + m1 * x2 - m2 * x2 + 2 * m1 * x3 + 2 * m0 * x1 - 2 * m0 * x3 - 3 * m1 * x1)
+                / (4 * (x0 * x1 + x2 * x3 - x0 * x3) - (x1 + x2) * (x1 + x2));
+        auto z3 = (m1 * x1 + m0 * x2 - m0 * x1 + 2 * m1 * x0 + 2 * m2 * x2 - 2 * m2 * x0 - 3 * m1 * x2)
+                / (4 * (x0 * x1 + x2 * x3 - x0 * x3) - (x1 + x2) * (x1 + x2));
         auto a1 = z2 / (x0 - x1);
         auto b1 = 2 * z2 / (x1 - x0);
         auto a2 = (2 * z2 + z3) / (x1 - x2);
@@ -129,11 +122,8 @@ struct Interpolation4 {
         }
     }
 
-    static float CatmullRomSpline(
-        float y0, float y1, float y2, float y3,
-        float x0, float x1, float x2, float x3,
-        float x, float tension
-    ) noexcept {
+    static float CatmullRomSpline(float y0, float y1, float y2, float y3, float x0, float x1, float x2, float x3,
+                                  float x, float tension) noexcept {
         tension = 1.0f - tension;
         float t01 = std::sqrt(x1 - x0);
         float t12 = std::sqrt(x2 - x1);
@@ -148,11 +138,7 @@ struct Interpolation4 {
             auto c = m0;
             auto d = y0;
             auto s = (x - x0) / (x1 - x0);
-            return d + s * (
-                c + s * (b
-                    + s * a
-                )
-            );
+            return d + s * (c + s * (b + s * a));
         }
         else if (x > x2) {
             // float m3 = m2;
@@ -162,11 +148,7 @@ struct Interpolation4 {
             auto c = m2;
             auto d = y2;
             auto s = (x - x2) / (x3 - x2);
-            return d + s * (
-                c + s * (b
-                    + s * a
-                )
-            );
+            return d + s * (c + s * (b + s * a));
         }
         else {
             auto a = 2.0f * (y1 - y2) + m1 + m2;
@@ -174,22 +156,15 @@ struct Interpolation4 {
             auto c = m1;
             auto d = y1;
             auto s = (x - x1) / (x2 - x1);
-            return d + s * (
-                c + s * (b
-                    + s * a
-                )
-            );
+            return d + s * (c + s * (b + s * a));
         }
     }
 
     /**
      * @ref https://blogs.mathworks.com/cleve/2019/04/29/makima-piecewise-cubic-interpolation/?from=cn
      */
-    static float Makima(
-        float yn2, float yn1, float y0, float y1, float y2, float y3,
-        float xn2, float xn1, float x0, float x1, float x2, float x3,
-        float x
-    ) noexcept {
+    static float Makima(float yn2, float yn1, float y0, float y1, float y2, float y3, float xn2, float xn1, float x0,
+                        float x1, float x2, float x3, float x) noexcept {
         float en2 = (yn1 - yn2) / (xn2 - xn1);
         float en1 = (y0 - yn1) / (x0 - xn1);
         float e0 = (y1 - y0) / (x1 - x0);
@@ -216,4 +191,4 @@ struct Interpolation4 {
         return y0 + s * d0 + s * s * c0 + s * s * s * b0;
     }
 };
-}
+} // namespace qwqdsp

@@ -2,7 +2,7 @@
 #include "lag_buffer.hpp"
 
 namespace qwqdsp_adaptive {
-template<size_t kSize, float kStep = 0.1f>
+template <size_t kSize, float kStep = 0.1f>
 class NLMS {
 public:
     void Reset() noexcept {
@@ -33,4 +33,4 @@ private:
     LagBufferStatic<kSize> x_;
     std::array<float, kSize> w_{};
 };
-}
+} // namespace qwqdsp_adaptive

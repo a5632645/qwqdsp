@@ -141,7 +141,8 @@ struct TfPhaseVocoderReassignmentFrame {
             float bin_dev;
             if constexpr (EnablePeakFilter) {
                 bin_dev = freq_c_arr_[k];
-            } else {
+            }
+            else {
                 float phase = std::arg(X_h_[k]);
                 float dphi = phase - lastPhase_[k];
                 lastPhase_[k] = phase;
@@ -221,7 +222,8 @@ struct TfPhaseVocoderReassignmentFrame {
             float dB;
             if (weight_buf_[y] < kMinWeight) {
                 dB = dbFloor_;
-            } else {
+            }
+            else {
                 float avg = col_buf_[y] / weight_buf_[y];
                 dB = 20.0f * std::log10(avg + kDbEps);
             }

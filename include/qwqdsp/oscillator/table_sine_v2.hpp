@@ -1,16 +1,16 @@
 #pragma once
 #include <array>
 #include <cmath>
-#include <cstddef>
-#include <numbers>
-#include <cstdint>
 #include <complex>
+#include <cstddef>
+#include <cstdint>
+#include <numbers>
 
 namespace qwqdsp_oscillator {
 /**
  * @brief 线性插值正弦查找表
  */
-template<class T, size_t kTableBits = 12>
+template <class T, size_t kTableBits = 12>
 class TableSineV2 {
 public:
     static_assert(kTableBits <= 16, "too large lookup table");
@@ -26,7 +26,8 @@ public:
         std::array<T, kTableSize + 1> r;
         r[kTableSize] = 0;
         for (uint32_t i = 0; i < kTableSize; ++i) {
-            r[i] = static_cast<float>(std::sin(std::numbers::pi_v<double> * 2 * static_cast<double>(i) / static_cast<double>(kTableSize)));
+            r[i] = static_cast<float>(
+                std::sin(std::numbers::pi_v<double> * 2 * static_cast<double>(i) / static_cast<double>(kTableSize)));
         }
         return r;
     }();
@@ -43,7 +44,8 @@ public:
 
     static T Cosine(uint32_t phase) noexcept {
         uint32_t const t = phase + kQuadPhase;
-        return Sine(t);;
+        return Sine(t);
+        ;
     }
 
     static std::complex<T> GetCpx(uint32_t phase) noexcept {
@@ -82,7 +84,7 @@ public:
 //         r[kTableSize + 1] = r[1];
 //         return r;
 //     }();
-    
+
 //     // --- 二次抛物线插值 Sine 函数 ---
 //     static T Sine(uint32_t phase) noexcept {
 //         uint32_t const idx = phase >> kShift;
@@ -96,7 +98,7 @@ public:
 //         auto A = (y1 + yn1) / 2 - y0;
 //         return A * t * (1 - t) + B * t + C;
 //     }
-    
+
 //     static T Cosine(uint32_t phase) noexcept {
 //         uint32_t const t = phase + static_cast<uint32_t>(kScale / 4);
 //         return Sine(t);
@@ -111,4 +113,4 @@ public:
 //         return static_cast<uint32_t>(f * static_cast<T>(kScale) / fs);
 //     }
 // };
-}
+} // namespace qwqdsp_oscillator

@@ -5,7 +5,7 @@ namespace qwqdsp_fx {
 /**
  * @brief holters-parker IIR重采样器，使用Elliptic-blep库实现，移除了高通滤波器系数
  */
-template<class TCoeff, size_t kPartialSteps, size_t kBufferSize = 512>
+template <class TCoeff, size_t kPartialSteps, size_t kBufferSize = 512>
 class ResampleIIRDynamic {
 public:
     using T = typename TCoeff::TSample;
@@ -14,7 +14,7 @@ public:
         source_fs_ = source_fs;
         Reset();
     }
-    
+
     void Reset() noexcept {
         first_init_ = true;
         need_ = 1;
@@ -99,4 +99,4 @@ private:
     bool first_init_{};
     T source_fs_{};
 };
-}
+} // namespace qwqdsp_fx

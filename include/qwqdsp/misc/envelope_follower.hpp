@@ -1,6 +1,6 @@
 #pragma once
-#include <algorithm>
 #include "smoother.hpp"
+#include <algorithm>
 
 namespace qwqdsp_misc {
 class EnevelopeFollower {
@@ -29,8 +29,8 @@ public:
     }
 private:
     /**
-    * @brief a wrong peak hold but it works too.
-    */
+     * @brief a wrong peak hold but it works too.
+     */
     class SimplePeakHold {
     public:
         void Reset() noexcept {
@@ -89,4 +89,4 @@ private:
     SimplePeakHold peakhold_;
     SimpleARFollower smoother_;
 };
-}
+} // namespace qwqdsp_misc

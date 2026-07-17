@@ -1,12 +1,13 @@
 // qwqfixme: 可能有错误
 
 #pragma once
-#include <vector>
-#include <cassert>
 #include <array>
+#include <cassert>
+#include <vector>
 
 namespace qwqdsp_filter {
-template<class T> requires std::is_trivial_v<T>
+template <class T>
+    requires std::is_trivial_v<T>
 class MedianDynamic {
 public:
     void Init(size_t window_size) {
@@ -18,7 +19,7 @@ public:
 
     void Reset() noexcept {
         size_t const window_size = buffer_.size();
-        for(size_t i = 0; i < window_size; i++) {
+        for (size_t i = 0; i < window_size; i++) {
             buffer_[i].value = T{};
             buffer_[i].next_age = &buffer_[(i + 1) % window_size];
             buffer_[i].next_value = &buffer_[(i + 1) % window_size];
@@ -41,11 +42,11 @@ public:
             return x;
         }
 
-        if(age_head_ == value_head_) {
+        if (age_head_ == value_head_) {
             age_head_ = value_head_->next_value;
         }
 
-        if((age_head_ == median_head_) || (age_head_->value > median_head_->value)) {
+        if ((age_head_ == median_head_) || (age_head_->value > median_head_->value)) {
             median_head_ = median_head_->prev_value;
         }
 
@@ -58,11 +59,9 @@ public:
 
         auto* it = value_head_;
         size_t i = 0;
-        for(;i < buffer_.size() - 1; i++) {
-            if(x < it->value)
-            {
-                if(i == 0)
-                {
+        for (; i < buffer_.size() - 1; i++) {
+            if (x < it->value) {
+                if (i == 0) {
                     value_head_ = new_node;
                 }
                 break;
@@ -75,20 +74,20 @@ public:
         it->prev_value = new_node;
         new_node->next_value = it;
 
-        if(i >= (buffer_.size() / 2)) {
+        if (i >= (buffer_.size() / 2)) {
             median_head_ = median_head_->next_value;
         }
 
         return median_head_->value;
     }
 
-
     /**
      * @tparam Func std::partial_ordering compare(T const& a, T const & b)
      */
-    template<class Func> requires requires (T const& a, T const& b, Func comparator) {
-        {comparator(a, b)} -> std::same_as<std::partial_ordering>;
-    }
+    template <class Func>
+        requires requires(T const& a, T const& b, Func comparator) {
+            { comparator(a, b) } -> std::same_as<std::partial_ordering>;
+        }
     T Tick(T x, Func&& compare) noexcept(noexcept(compare(std::declval<T>(), std::declval<T>()))) {
         [[unlikely]]
         if (first_init_) {
@@ -99,11 +98,12 @@ public:
             return x;
         }
 
-        if(age_head_ == value_head_) {
+        if (age_head_ == value_head_) {
             age_head_ = value_head_->next_value;
         }
 
-        if((age_head_ == median_head_) || (compare(age_head_->value, median_head_->value) == std::partial_ordering::greater)) {
+        if ((age_head_ == median_head_)
+            || (compare(age_head_->value, median_head_->value) == std::partial_ordering::greater)) {
             median_head_ = median_head_->prev_value;
         }
 
@@ -116,11 +116,9 @@ public:
 
         auto* it = value_head_;
         size_t i = 0;
-        for(;i < buffer_.size() - 1; i++) {
-            if(compare(x, it->value) == std::partial_ordering::less)
-            {
-                if(i == 0)
-                {
+        for (; i < buffer_.size() - 1; i++) {
+            if (compare(x, it->value) == std::partial_ordering::less) {
+                if (i == 0) {
                     value_head_ = new_node;
                 }
                 break;
@@ -133,7 +131,7 @@ public:
         it->prev_value = new_node;
         new_node->next_value = it;
 
-        if(i >= (buffer_.size() / 2)) {
+        if (i >= (buffer_.size() / 2)) {
             median_head_ = median_head_->next_value;
         }
 
@@ -142,19 +140,19 @@ public:
 private:
     struct MedianNode {
         T value;
-        struct MedianNode *next_age;
-        struct MedianNode *next_value;
-        struct MedianNode *prev_value;
+        struct MedianNode* next_age;
+        struct MedianNode* next_value;
+        struct MedianNode* prev_value;
     };
 
     std::vector<MedianNode> buffer_;
-    MedianNode *age_head_{};
-    MedianNode *value_head_{};
-    MedianNode *median_head_{};
+    MedianNode* age_head_{};
+    MedianNode* value_head_{};
+    MedianNode* median_head_{};
     bool first_init_{};
 };
 
-template<class T, size_t kWindowSize>
+template <class T, size_t kWindowSize>
 class Median {
 public:
     static_assert(kWindowSize > 2 && kWindowSize % 2 == 1);
@@ -166,7 +164,7 @@ public:
 
     void Reset() noexcept {
         size_t const window_size = buffer_.size();
-        for(size_t i = 0; i < window_size; i++) {
+        for (size_t i = 0; i < window_size; i++) {
             buffer_[i].value = T{};
             buffer_[i].next_age = &buffer_[(i + 1) % window_size];
             buffer_[i].next_value = &buffer_[(i + 1) % window_size];
@@ -182,9 +180,10 @@ public:
     /**
      * @tparam Func std::partial_ordering compare(T const& a, T const & b)
      */
-    template<class Func> requires requires (T const& a, T const& b, Func comparator) {
-        {comparator(a, b)} -> std::same_as<std::partial_ordering>;
-    }
+    template <class Func>
+        requires requires(T const& a, T const& b, Func comparator) {
+            { comparator(a, b) } -> std::same_as<std::partial_ordering>;
+        }
     T Tick(T x, Func&& compare) noexcept(noexcept(compare(std::declval<T>(), std::declval<T>()))) {
         [[unlikely]]
         if (first_init_) {
@@ -195,11 +194,12 @@ public:
             return x;
         }
 
-        if(age_head_ == value_head_) {
+        if (age_head_ == value_head_) {
             age_head_ = value_head_->next_value;
         }
 
-        if((age_head_ == median_head_) || (compare(age_head_->value, median_head_->value) == std::partial_ordering::greater)) {
+        if ((age_head_ == median_head_)
+            || (compare(age_head_->value, median_head_->value) == std::partial_ordering::greater)) {
             median_head_ = median_head_->prev_value;
         }
 
@@ -212,11 +212,9 @@ public:
 
         auto* it = value_head_;
         size_t i = 0;
-        for(;i < buffer_.size() - 1; i++) {
-            if(compare(x, it->value) == std::partial_ordering::less)
-            {
-                if(i == 0)
-                {
+        for (; i < buffer_.size() - 1; i++) {
+            if (compare(x, it->value) == std::partial_ordering::less) {
+                if (i == 0) {
                     value_head_ = new_node;
                 }
                 break;
@@ -229,7 +227,7 @@ public:
         it->prev_value = new_node;
         new_node->next_value = it;
 
-        if(i >= (buffer_.size() / 2)) {
+        if (i >= (buffer_.size() / 2)) {
             median_head_ = median_head_->next_value;
         }
 
@@ -246,11 +244,11 @@ public:
             return x;
         }
 
-        if(age_head_ == value_head_) {
+        if (age_head_ == value_head_) {
             age_head_ = value_head_->next_value;
         }
 
-        if((age_head_ == median_head_) || (age_head_->value > median_head_->value)) {
+        if ((age_head_ == median_head_) || (age_head_->value > median_head_->value)) {
             median_head_ = median_head_->prev_value;
         }
 
@@ -263,11 +261,9 @@ public:
 
         auto* it = value_head_;
         size_t i = 0;
-        for(;i < buffer_.size() - 1; i++) {
-            if(x < it->value)
-            {
-                if(i == 0)
-                {
+        for (; i < buffer_.size() - 1; i++) {
+            if (x < it->value) {
+                if (i == 0) {
                     value_head_ = new_node;
                 }
                 break;
@@ -280,7 +276,7 @@ public:
         it->prev_value = new_node;
         new_node->next_value = it;
 
-        if(i >= (buffer_.size() / 2)) {
+        if (i >= (buffer_.size() / 2)) {
             median_head_ = median_head_->next_value;
         }
 
@@ -289,15 +285,15 @@ public:
 private:
     struct MedianNode {
         T value;
-        struct MedianNode *next_age;
-        struct MedianNode *next_value;
-        struct MedianNode *prev_value;
+        struct MedianNode* next_age;
+        struct MedianNode* next_value;
+        struct MedianNode* prev_value;
     };
 
     std::array<MedianNode, kWindowSize> buffer_;
-    MedianNode *age_head_{};
-    MedianNode *value_head_{};
-    MedianNode *median_head_{};
+    MedianNode* age_head_{};
+    MedianNode* value_head_{};
+    MedianNode* median_head_{};
     bool first_init_{};
 };
-}
+} // namespace qwqdsp_filter

@@ -16,14 +16,14 @@ struct V8f {
     simde__m256 m128;
 
     // -------------------- constructor --------------------
-    V8f(simde__m256 m128) : m128(m128) {
-    }
+    V8f(simde__m256 m128)
+        : m128(m128) {}
 
-    V8f(float a, float b, float c, float d, float e, float f, float g, float h) : m128(simde_mm256_set_ps(h, g, f, e, d, c, b, a)) {
-    }
+    V8f(float a, float b, float c, float d, float e, float f, float g, float h)
+        : m128(simde_mm256_set_ps(h, g, f, e, d, c, b, a)) {}
 
-    V8f(float v) : m128(simde_mm256_set1_ps(v)) {
-    }
+    V8f(float v)
+        : m128(simde_mm256_set1_ps(v)) {}
 
     // -------------------- load/store --------------------
     void Broadcast(float v) noexcept {
@@ -80,14 +80,14 @@ struct V8i {
     simde__m256i m128i;
 
     // -------------------- constructor --------------------
-    V8i(simde__m256i m128i) : m128i(m128i) {
-    }
+    V8i(simde__m256i m128i)
+        : m128i(m128i) {}
 
-    V8i(int32_t a, int32_t b, int32_t c, int32_t d, int32_t e, int32_t f, int32_t g, int32_t h) : m128i(simde_mm256_set_epi32(h, g, f, e, d, c, b, a)) {
-    }
+    V8i(int32_t a, int32_t b, int32_t c, int32_t d, int32_t e, int32_t f, int32_t g, int32_t h)
+        : m128i(simde_mm256_set_epi32(h, g, f, e, d, c, b, a)) {}
 
-    V8i(int32_t v) : m128i(simde_mm256_set1_epi32(v)) {
-    }
+    V8i(int32_t v)
+        : m128i(simde_mm256_set1_epi32(v)) {}
 
     // -------------------- load/store --------------------
     void Broadcast(int32_t v) noexcept {
@@ -148,4 +148,4 @@ inline V8i V8f::ToInt() const noexcept {
     return simde_mm256_cvttps_epi32(m128);
 }
 
-}  // namespace qwqdsp_simd_element
+} // namespace qwqdsp_simd_element

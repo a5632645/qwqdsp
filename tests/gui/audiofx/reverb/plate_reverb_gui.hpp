@@ -22,7 +22,7 @@ struct PlateReverbGui {
     std::atomic<float> lowpass_{20000.0f}; // Hz
     std::atomic<float> decay_{2000.0f};    // ms
     std::atomic<float> size_{1.0f};
-    std::atomic<float> damping_{5000.0f};  // Hz
+    std::atomic<float> damping_{5000.0f}; // Hz
     std::atomic<bool> params_dirty_{true};
 
     static constexpr const char* kWindowTitle = "Plate Reverb — PlateReverb";
@@ -43,15 +43,15 @@ struct PlateReverbGui {
     // --------------------------------------------------------
     void Process(const float* input, float* output_l, float* output_r, size_t frame_count) noexcept {
         if (params_dirty_.exchange(false, std::memory_order_relaxed)) {
-            float m   = mix_.load(std::memory_order_relaxed);
-            float pd  = predelay_.load(std::memory_order_relaxed);
-            float lp  = lowpass_.load(std::memory_order_relaxed);
-            float d   = decay_.load(std::memory_order_relaxed);
-            float sz  = size_.load(std::memory_order_relaxed);
+            float m = mix_.load(std::memory_order_relaxed);
+            float pd = predelay_.load(std::memory_order_relaxed);
+            float lp = lowpass_.load(std::memory_order_relaxed);
+            float d = decay_.load(std::memory_order_relaxed);
+            float sz = size_.load(std::memory_order_relaxed);
             float damp = damping_.load(std::memory_order_relaxed);
 
             reverb_.SetMix(m);
-            reverb_.SetPredelay(pd / 1000.0f);   // ms -> s
+            reverb_.SetPredelay(pd / 1000.0f); // ms -> s
             reverb_.SetLowpass(lp);
             reverb_.SetDecay(d);
             reverb_.SetSize(sz);
@@ -80,21 +80,19 @@ struct PlateReverbGui {
         kx = (kWindowWidth - (6 * kKnobW + 5 * kGap4)) / 2;
         ky = 42;
 
-        knobs_[0] = MakeKnob(kx, ky, kKnobW, kKnobH, "Mix",      0.0f,    1.0f,     0.01f, 0.5f);
-        knobs_[1] = MakeKnob(kx, ky, kKnobW, kKnobH, "Predelay", 0.0f,  100.0f,     1.0f,  20.0f);
-        knobs_[2] = MakeKnob(kx, ky, kKnobW, kKnobH, "Decay",  100.0f, 10000.0f, 50.0f, 2000.0f);
-        knobs_[3] = MakeKnob(kx, ky, kKnobW, kKnobH, "Size",     0.5f,    2.0f,     0.01f, 1.0f);
-        knobs_[4] = MakeKnob(kx, ky, kKnobW, kKnobH, "Lowpass", 16.0f, 20000.0f, 100.0f,  20000.0f);
-        knobs_[5] = MakeKnob(kx, ky, kKnobW, kKnobH, "Damping", 16.0f, 20000.0f, 100.0f,  5000.0f);
+        knobs_[0] = MakeKnob(kx, ky, kKnobW, kKnobH, "Mix", 0.0f, 1.0f, 0.01f, 0.5f);
+        knobs_[1] = MakeKnob(kx, ky, kKnobW, kKnobH, "Predelay", 0.0f, 100.0f, 1.0f, 20.0f);
+        knobs_[2] = MakeKnob(kx, ky, kKnobW, kKnobH, "Decay", 100.0f, 10000.0f, 50.0f, 2000.0f);
+        knobs_[3] = MakeKnob(kx, ky, kKnobW, kKnobH, "Size", 0.5f, 2.0f, 0.01f, 1.0f);
+        knobs_[4] = MakeKnob(kx, ky, kKnobW, kKnobH, "Lowpass", 16.0f, 20000.0f, 100.0f, 20000.0f);
+        knobs_[5] = MakeKnob(kx, ky, kKnobW, kKnobH, "Damping", 16.0f, 20000.0f, 100.0f, 5000.0f);
 
         // ── 旋钮回调绑定 ──
-        std::atomic<float>* param_ptrs[kNumKnobs] = {
-            &mix_, &predelay_, &decay_, &size_, &lowpass_, &damping_
-        };
+        std::atomic<float>* param_ptrs[kNumKnobs] = {&mix_, &predelay_, &decay_, &size_, &lowpass_, &damping_};
 
         for (size_t i = 0; i < kNumKnobs; ++i) {
             auto* target = param_ptrs[i];
-            auto* dirty  = &params_dirty_;
+            auto* dirty = &params_dirty_;
             knobs_[i].on_value_change = [target, dirty](float v) {
                 target->store(v, std::memory_order_relaxed);
                 dirty->store(true, std::memory_order_relaxed);
@@ -131,7 +129,6 @@ struct PlateReverbGui {
 
     static constexpr size_t kNumKnobs = 6;
     Knob knobs_[kNumKnobs];
-
 private:
     // --------------------------------------------------------
     //  工具：创建旋钮

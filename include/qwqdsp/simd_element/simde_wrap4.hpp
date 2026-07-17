@@ -16,14 +16,14 @@ struct V4f {
     simde__m128 m128;
 
     // -------------------- constructor --------------------
-    V4f(simde__m128 m128) : m128(m128) {
-    }
+    V4f(simde__m128 m128)
+        : m128(m128) {}
 
-    V4f(float a, float b, float c, float d) : m128(simde_mm_set_ps(d, c, b, a)) {
-    }
+    V4f(float a, float b, float c, float d)
+        : m128(simde_mm_set_ps(d, c, b, a)) {}
 
-    V4f(float v) : m128(simde_mm_set1_ps(v)) {
-    }
+    V4f(float v)
+        : m128(simde_mm_set1_ps(v)) {}
 
     // -------------------- load/store --------------------
     void Broadcast(float v) noexcept {
@@ -90,14 +90,14 @@ struct V4i {
     simde__m128i m128i;
 
     // -------------------- constructor --------------------
-    V4i(simde__m128i m128i) : m128i(m128i) {
-    }
+    V4i(simde__m128i m128i)
+        : m128i(m128i) {}
 
-    V4i(int32_t a, int32_t b, int32_t c, int32_t d) : m128i(simde_mm_set_epi32(d, c, b, a)) {
-    }
+    V4i(int32_t a, int32_t b, int32_t c, int32_t d)
+        : m128i(simde_mm_set_epi32(d, c, b, a)) {}
 
-    V4i(int32_t v) : m128i(simde_mm_set1_epi32(v)) {
-    }
+    V4i(int32_t v)
+        : m128i(simde_mm_set1_epi32(v)) {}
 
     // -------------------- load/store --------------------
     void Broadcast(int32_t v) noexcept {
@@ -158,4 +158,4 @@ inline V4i V4f::ToInt() const noexcept {
     return simde_mm_cvtepi32_ps(m128);
 }
 
-}  // namespace qwqdsp_simd_element
+} // namespace qwqdsp_simd_element

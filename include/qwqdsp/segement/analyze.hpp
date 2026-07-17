@@ -8,7 +8,7 @@ namespace qwqdsp_segement {
 /**
  * @brief 仅支持分析的分块处理
  */
-template<size_t kMaxBufferSize>
+template <size_t kMaxBufferSize>
 class Analyze {
 public:
     void SetSize(size_t new_size) noexcept {
@@ -56,4 +56,4 @@ private:
     size_t num_input_{};
     std::array<float, kMaxBufferSize> buffer_{};
 };
-}
+} // namespace qwqdsp_segement

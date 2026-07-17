@@ -6,14 +6,13 @@
 namespace qwqdsp_segement {
 class MonoReader {
 public:
-    MonoReader(std::span<float> source) noexcept 
+    MonoReader(std::span<float> source) noexcept
         : source_(source)
-        , rpos_(0)
-    {}
+        , rpos_(0) {}
 
     std::span<float> GetSome(size_t size) noexcept {
         size_t can_read = std::min(source_.size() - rpos_, size);
-        std::span ret {source_.data() + rpos_, can_read};
+        std::span ret{source_.data() + rpos_, can_read};
         return ret;
     }
 
@@ -49,4 +48,4 @@ private:
     std::span<float> source_;
     size_t rpos_{};
 };
-}
+} // namespace qwqdsp_segement

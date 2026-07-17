@@ -54,4 +54,4 @@ private:
     float y1_{};
     float y2_{};
 };
-}
+} // namespace qwqdsp_filter

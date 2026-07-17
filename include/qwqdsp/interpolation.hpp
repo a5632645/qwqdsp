@@ -17,10 +17,7 @@ struct Interpolation {
      * @param frac 0<x<1
      *
      */
-    static float Lagrange3rd(
-        float y0, float y1, float y2, float y3,
-        float frac
-    ) noexcept {
+    static float Lagrange3rd(float y0, float y1, float y2, float y3, float frac) noexcept {
         auto d1 = frac - 1.0f;
         auto d2 = frac - 2.0f;
         auto d3 = frac - 3.0f;
@@ -34,29 +31,20 @@ struct Interpolation {
     }
 
     /**
-    * @brief 分段三次 Hermite 插值
-    * @note  无单调性保证，越接近0.5高频损失越多
-    * @param yn1  y[x=-1]
-    * @param y0   y[x=0]
-    * @param y1   y[x=1]
-    * @param y2   y[x=2]
-    * @param frac 0<x<1
-    * @note  这和CatmullRomSpline(tension=0), VitalCatmullRom是完全一致的
-    */
-    static float PCHIP(
-        float yn1, float y0, float y1, float y2,
-        float frac
-    ) noexcept {
+     * @brief 分段三次 Hermite 插值
+     * @note  无单调性保证，越接近0.5高频损失越多
+     * @param yn1  y[x=-1]
+     * @param y0   y[x=0]
+     * @param y1   y[x=1]
+     * @param y2   y[x=2]
+     * @param frac 0<x<1
+     * @note  这和CatmullRomSpline(tension=0), VitalCatmullRom是完全一致的
+     */
+    static float PCHIP(float yn1, float y0, float y1, float y2, float frac) noexcept {
         auto d0 = (y1 - yn1) / 2.0f;
         auto d1 = (y2 - y0) / 2.0f;
         auto d = y1 - y0;
-        return y0 + frac * (
-            d0 + frac * (
-                3.0f * d - 2.0f * d0 - d1 + frac * (
-                    d0 - 2.0f * d + d1
-                )
-            )
-        );
+        return y0 + frac * (d0 + frac * (3.0f * d - 2.0f * d0 - d1 + frac * (d0 - 2.0f * d + d1)));
     }
 
     /**
@@ -70,10 +58,7 @@ struct Interpolation {
      * @param y2   y[x=2]
      * @param frac 0<x<1
      */
-    static float Spline(
-        float yn1, float y0, float y1, float y2,
-        float frac
-    ) noexcept {
+    static float Spline(float yn1, float y0, float y1, float y2, float frac) noexcept {
         auto m1 = y0 - yn1;
         auto m2 = y1 - y0;
         auto m3 = y2 - y1;
@@ -99,11 +84,8 @@ struct Interpolation {
      * @param frac 0<x<1
      * @tparam tension 0<=x<=1
      */
-    template<float tension = 0.0f>
-    static float CatmullRomSpline(
-        float yn1, float y0, float y1, float y2,
-        float frac
-    ) noexcept {
+    template <float tension = 0.0f>
+    static float CatmullRomSpline(float yn1, float y0, float y1, float y2, float frac) noexcept {
         auto m0 = (1.0f - tension) * 0.5f * (y1 - yn1);
         auto m1 = (1.0f - tension) * 0.5f * (y2 - y0);
 
@@ -112,24 +94,14 @@ struct Interpolation {
         auto c = m0;
         auto d = y0;
 
-        return d + frac * (
-            c + frac * (
-                b + a * frac
-            )
-        );
+        return d + frac * (c + frac * (b + a * frac));
     }
 
-    static float Linear(
-        float y0, float y1,
-        float frac
-    ) noexcept {
+    static float Linear(float y0, float y1, float frac) noexcept {
         return y0 + frac * (y1 - y0);
     }
 
-    static float Parabola(
-        float yn1, float y0, float y1,
-        float frac
-    ) noexcept {
+    static float Parabola(float yn1, float y0, float y1, float frac) noexcept {
         auto C = y0;
         auto B = y1 - y0;
         auto A = (y1 + yn1) * 0.5f - y0;
@@ -139,10 +111,7 @@ struct Interpolation {
     /**
      * @ref https://blogs.mathworks.com/cleve/2019/04/29/makima-piecewise-cubic-interpolation/?from=cn
      */
-    static float Makima(
-        float yn2, float yn1, float y0, float y1, float y2, float y3,
-        float frac
-    ) noexcept {
+    static float Makima(float yn2, float yn1, float y0, float y1, float y2, float y3, float frac) noexcept {
         float en2 = yn1 - yn2;
         float en1 = y0 - yn1;
         float e0 = y1 - y0;
@@ -163,14 +132,8 @@ struct Interpolation {
             d1 = 0.0f;
         }
         float d = y1 - y0;
-        return y0 + frac * (
-            d0 + frac * (
-                3.0f * d - 2.0f * d0 - d1 + frac * (
-                    d0 - 2.0f * d + d1
-                )
-            )
-        );
+        return y0 + frac * (d0 + frac * (3.0f * d - 2.0f * d0 - d1 + frac * (d0 - 2.0f * d + d1)));
     }
 };
 
-}
+} // namespace qwqdsp

@@ -1,14 +1,14 @@
 #pragma once
-#include <vector>
 #include "simd_pack.hpp"
+#include <vector>
 
 namespace qwqdsp_simd_element {
 /**
  * @brief muliple channel, single delay time per channel
- * 
- * @tparam N 
+ *
+ * @tparam N
  */
-template<size_t N, bool kFastTrick>
+template <size_t N, bool kFastTrick>
 class DelayLineMultiple {
 public:
     static_assert(N == 4 || N == 8, "unsupport channels");
@@ -184,11 +184,7 @@ private:
         PackFloat<N> d = y1 - y0;
         PackFloat<N> m0 = 3.0f * d - 2.0f * d0 - d1;
         PackFloat<N> m1 = d0 - 2.0f * d + d1;
-        return y0 + t * (
-            d0 + t * (
-                m0 + t * m1
-            )
-        );
+        return y0 + t * (d0 + t * (m0 + t * m1));
     }
 
     std::vector<float> buffer_;

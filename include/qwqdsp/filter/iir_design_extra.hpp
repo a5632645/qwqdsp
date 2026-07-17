@@ -34,7 +34,8 @@ public:
      * @param ripple (>0)dB
      * @param atten (>0)dB
      */
-    static double Chebyshev1(std::span<ZPK> ret, size_t num_filter, double ripple, double atten, bool even_pole_modify) {
+    static double Chebyshev1(std::span<ZPK> ret, size_t num_filter, double ripple, double atten,
+                             bool even_pole_modify) {
         assert(ret.size() >= num_filter);
         assert(atten >= ripple);
 
@@ -45,18 +46,28 @@ public:
         double scale = 0.0;
         if (!even_pole_modify) {
             if (atten >= ripple) {
-                scale = 1.0 / std::cosh(std::acosh(std::sqrt((std::pow(10.0, atten / 10.0) - 1.0) / (std::pow(10.0, ripple / 10.0) - 1.0))) / static_cast<double>(n));
+                scale = 1.0
+                      / std::cosh(std::acosh(std::sqrt((std::pow(10.0, atten / 10.0) - 1.0)
+                                                       / (std::pow(10.0, ripple / 10.0) - 1.0)))
+                                  / static_cast<double>(n));
             }
             else {
-                scale = 1.0 / std::cos(std::acos(std::sqrt((std::pow(10.0, atten / 10.0) - 1.0) / (std::pow(10.0, ripple / 10.0) - 1.0))) / static_cast<double>(n));
+                scale = 1.0
+                      / std::cos(std::acos(std::sqrt((std::pow(10.0, atten / 10.0) - 1.0)
+                                                     / (std::pow(10.0, ripple / 10.0) - 1.0)))
+                                 / static_cast<double>(n));
             }
         }
         else {
             if (atten >= ripple) {
-                scale = std::cosh(std::acosh(std::sqrt((std::pow(10.0, atten / 10.0) - 1.0) / (std::pow(10.0, ripple / 10.0) - 1.0))) / static_cast<double>(n));
+                scale = std::cosh(
+                    std::acosh(std::sqrt((std::pow(10.0, atten / 10.0) - 1.0) / (std::pow(10.0, ripple / 10.0) - 1.0)))
+                    / static_cast<double>(n));
             }
             else {
-                scale = std::cos(std::acos(std::sqrt((std::pow(10.0, atten / 10.0) - 1.0) / (std::pow(10.0, ripple / 10.0) - 1.0))) / static_cast<double>(n));
+                scale = std::cos(
+                    std::acos(std::sqrt((std::pow(10.0, atten / 10.0) - 1.0) / (std::pow(10.0, ripple / 10.0) - 1.0)))
+                    / static_cast<double>(n));
             }
             scale *= scale;
             scale = std::sqrt((1.0 - first_pole) / (scale - first_pole));
@@ -66,7 +77,7 @@ public:
         double const A = 1.0 / n * std::asinh(1.0 / eps);
         double const k_re = std::sinh(A);
         double const k_im = std::cosh(A);
-        
+
         double gain = 1.0;
         size_t i = 0;
         for (size_t k = 1; k <= num_filter; ++k) {
@@ -90,7 +101,8 @@ public:
      * @param ripple (>0)dB
      * @param atten (>0)dB
      */
-    static double Chebyshev2(std::span<ZPK> ret, size_t num_filter, double ripple, double atten, bool even_order_modify) {
+    static double Chebyshev2(std::span<ZPK> ret, size_t num_filter, double ripple, double atten,
+                             bool even_order_modify) {
         assert(ret.size() >= num_filter);
 
         size_t n = 2 * num_filter;
@@ -100,18 +112,26 @@ public:
         double scale = 0.0;
         if (!even_order_modify) {
             if (atten < ripple) {
-                scale = std::cosh(std::acosh(std::sqrt((std::pow(10.0, ripple / 10.0) - 1.0) / (std::pow(10.0, atten / 10.0) - 1.0))) / static_cast<double>(n));
+                scale = std::cosh(
+                    std::acosh(std::sqrt((std::pow(10.0, ripple / 10.0) - 1.0) / (std::pow(10.0, atten / 10.0) - 1.0)))
+                    / static_cast<double>(n));
             }
             else {
-                scale = std::cos(std::acos(std::sqrt((std::pow(10.0, ripple / 10.0) - 1.0) / (std::pow(10.0, atten / 10.0) - 1.0))) / static_cast<double>(n));
+                scale = std::cos(
+                    std::acos(std::sqrt((std::pow(10.0, ripple / 10.0) - 1.0) / (std::pow(10.0, atten / 10.0) - 1.0)))
+                    / static_cast<double>(n));
             }
         }
         else {
             if (atten < ripple) {
-                scale = std::cosh(std::acosh(std::sqrt((std::pow(10.0, ripple / 10.0) - 1.0) / (std::pow(10.0, atten / 10.0) - 1.0))) / static_cast<double>(n));
+                scale = std::cosh(
+                    std::acosh(std::sqrt((std::pow(10.0, ripple / 10.0) - 1.0) / (std::pow(10.0, atten / 10.0) - 1.0)))
+                    / static_cast<double>(n));
             }
             else {
-                scale = std::cos(std::acos(std::sqrt((std::pow(10.0, ripple / 10.0) - 1.0) / (std::pow(10.0, atten / 10.0) - 1.0))) / static_cast<double>(n));
+                scale = std::cos(
+                    std::acos(std::sqrt((std::pow(10.0, ripple / 10.0) - 1.0) / (std::pow(10.0, atten / 10.0) - 1.0)))
+                    / static_cast<double>(n));
             }
             scale *= scale;
             scale = std::sqrt((scale - first_pole) / (1.0 - first_pole));
@@ -138,7 +158,8 @@ public:
                 if (k != num_filter) {
                     // 最靠近0的切比雪夫多项式的零点被映射到0，所以零点在无穷远处不赋值
                     double const zero = std::cos(phi);
-                    double const tt = std::sqrt(std::max(0.0, (zero * zero - first_zero * first_zero) / (1.0 - first_zero * first_zero)));
+                    double const tt = std::sqrt(
+                        std::max(0.0, (zero * zero - first_zero * first_zero) / (1.0 - first_zero * first_zero)));
                     ret[i].z = scale / std::complex{0.0, tt};
                 }
             }
@@ -168,4 +189,4 @@ private:
         ret[0].k = 1.0 / std::sqrt(square_epsi);
     }
 };
-}
+} // namespace qwqdsp_filter

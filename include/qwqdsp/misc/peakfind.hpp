@@ -1,6 +1,6 @@
 #pragma once
-#include <vector>
 #include <span>
+#include <vector>
 
 namespace qwqdsp_misc {
 class PeakFinding {
@@ -20,24 +20,24 @@ public:
         float max = data[0];
         float min = data[0];
 
-        for(size_t i = 1; i < data.size(); ++i) {
-            if(data[i] > max) {
+        for (size_t i = 1; i < data.size(); ++i) {
+            if (data[i] > max) {
                 max_pos = i;
                 max = data[i];
             }
-            if(data[i] < min) {
+            if (data[i] < min) {
                 min_pos = i;
                 min = data[i];
             }
 
-            if(look_for_max && data[i] < max - delta) {
+            if (look_for_max && data[i] < max - delta) {
                 max_peaks_.push_back(max_pos);
                 look_for_max = false;
                 i = max_pos - 1;
                 min = data[max_pos];
                 min_pos = max_pos;
             }
-            else if((!look_for_max) && data[i] > min + delta) {
+            else if ((!look_for_max) && data[i] > min + delta) {
                 min_peaks_.push_back(min_pos);
                 look_for_max = true;
                 i = min_pos - 1;
@@ -51,11 +51,11 @@ public:
         return max_peaks_;
     }
 
-    std::vector<size_t> const& GetMinIndexs() const noexcept {   
+    std::vector<size_t> const& GetMinIndexs() const noexcept {
         return min_peaks_;
     }
 private:
     std::vector<size_t> min_peaks_;
     std::vector<size_t> max_peaks_;
 };
-}
+} // namespace qwqdsp_misc

@@ -61,8 +61,7 @@ struct NcReassignmentFrame {
         }
 
         // ── 自适应 crossover: 像素宽度 == NC bin 宽度的频率 ──
-        const float pixelSlope =
-            std::log(10.0f) * (logMax_ - logMin_) / static_cast<float>(outputHeight_ - 1);
+        const float pixelSlope = std::log(10.0f) * (logMax_ - logMin_) / static_cast<float>(outputHeight_ - 1);
         const float binWidth = static_cast<float>(zeroPad_) * bin_hz;
         const float crossoverHz = binWidth / pixelSlope;
         crossoverBin_ = static_cast<int>(std::round(crossoverHz / bin_hz - 0.5f * static_cast<float>(zeroPad_)));
@@ -91,7 +90,8 @@ struct NcReassignmentFrame {
             float ncSum = -(X_[k].real() * X_[k + zeroPad_].real() + X_[k].imag() * X_[k + zeroPad_].imag());
             if (ncSum < 0.0f) {
                 nc_[k] = dbFloor_;
-            } else {
+            }
+            else {
                 float gain = std::sqrt(ncSum + kEps);
                 nc_[k] = 20.0f * std::log10(gain);
             }
@@ -145,7 +145,6 @@ struct NcReassignmentFrame {
     int ColumnHeight() const noexcept {
         return outputHeight_;
     }
-
 private:
     int sampleRate_{}, fftSize_{}, zeroPad_{}, fftLen_{}, binSize_{}, ncSize_{}, crossoverBin_{}, crossoverY_{};
     int outputHeight_{};

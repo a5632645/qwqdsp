@@ -71,11 +71,11 @@ public:
      */
     static void Lattice2Tf(std::span<float> k, std::span<float> b) noexcept {
         for (size_t i = 0; i < k.size(); ++i) {
-            for(size_t j = 0; j+1 <= i; j++) {
+            for (size_t j = 0; j + 1 <= i; j++) {
                 k[j] = b[j] + k[i] * b[i - j - 1];
             }
 
-            for(size_t j = 0; j <= i; j++) {
+            for (size_t j = 0; j <= i; j++) {
                 b[j] = k[j];
             }
         }
@@ -86,7 +86,8 @@ public:
      * @param upgoing sum upgoing[i] * z^-i, i from 0 to k.size, 最小相位
      * @param downgoing sum downgoing[i] * z^-i, i from 0 to k.size, 最大相位
      */
-    static void Lattice2Tf_KeepK(std::span<const float> k, std::span<float> upgoing, std::span<float> downgoing) noexcept {
+    static void Lattice2Tf_KeepK(std::span<const float> k, std::span<float> upgoing,
+                                 std::span<float> downgoing) noexcept {
         for (size_t kidx = 0; kidx < k.size(); ++kidx) {
             for (size_t i = kidx + 1; i != 0; --i) {
                 downgoing[i] = downgoing[i - 1];
@@ -104,4 +105,4 @@ public:
 private:
     std::vector<float> eb_;
 };
-}
+} // namespace qwqdsp_adaptive

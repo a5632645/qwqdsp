@@ -1,6 +1,6 @@
 #pragma once
-#include "qwqdsp/oscillator/table_sine_v3.hpp"
 #include "qwqdsp/misc/integrator.hpp"
+#include "qwqdsp/oscillator/table_sine_v3.hpp"
 
 namespace qwqdsp_oscillator {
 class Blit {
@@ -71,7 +71,7 @@ private:
     void UpdateA() noexcept {
         saw_a0_ = std::pow(amp_, 1.0 / (saw_n_ + 1.0));
         saw_blit_g_ = (1.0 - saw_a0_) / (saw_a0_ * (1.0 - amp_));
-        
+
         odd_a0_ = std::pow(amp_, 1.0 / (odd_n_ + 1.0));
         odd_blit_g_ = (1.0 - odd_a0_) / (odd_a0_ * (1.0 - amp_));
     }
@@ -85,9 +85,8 @@ private:
     float TickRaw() noexcept {
         phase_ += phase_inc_;
 
-        float const up = -saw_a0_ * table_.Cosine(phase_)
-                        + 1.0
-                        + amp_ * (saw_a0_ * table_.Cosine(phase_ * saw_n_) - table_.Cosine(phase_ * (saw_n_ + 1)));
+        float const up = -saw_a0_ * table_.Cosine(phase_) + 1.0
+                       + amp_ * (saw_a0_ * table_.Cosine(phase_ * saw_n_) - table_.Cosine(phase_ * (saw_n_ + 1)));
         float const down = 1.0 + saw_a0_ * saw_a0_ - 2.0 * saw_a0_ * table_.Cosine(phase_);
         return up / down - 1.0;
     }
@@ -95,9 +94,10 @@ private:
     // sum a0^k * cos(w + 2kw), k from 0 to n
     float TickRawOdd() noexcept {
         phase_ += phase_inc_;
-        float const up = -odd_a0_ * table_.Cosine(phase_)
-                        + table_.Cosine(phase_)
-                        + amp_ * (odd_a0_ * table_.Cosine(phase_ + phase_ * 2 * odd_n_) - table_.Cosine(phase_ + 2 * phase_ * (odd_n_ + 1)));
+        float const up = -odd_a0_ * table_.Cosine(phase_) + table_.Cosine(phase_)
+                       + amp_
+                             * (odd_a0_ * table_.Cosine(phase_ + phase_ * 2 * odd_n_)
+                                - table_.Cosine(phase_ + 2 * phase_ * (odd_n_ + 1)));
         float const down = 1.0 + odd_a0_ * odd_a0_ - 2.0 * odd_a0_ * table_.Cosine(phase_ * 2);
         return up / down;
     }
@@ -109,7 +109,7 @@ private:
     uint32_t phase_{};
     float amp_{};
     uint32_t n_limit_{1};
-    
+
     // saw
     float saw_blit_g_{};
     float saw_a0_{};
@@ -129,4 +129,4 @@ private:
     // triangle
     qwqdsp_misc::IntegratorTrapezoidalLeak<float> triangle_inte_;
 };
-}
+} // namespace qwqdsp_oscillator

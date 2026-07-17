@@ -1,8 +1,8 @@
 #pragma once
-#include <complex>
-#include <cassert>
-#include <cstddef>
 #include "int_delay.hpp"
+#include <cassert>
+#include <complex>
+#include <cstddef>
 
 namespace qwqdsp_filter {
 /**
@@ -246,7 +246,7 @@ public:
     std::complex<float> GetResponce(std::complex<float> z) noexcept {
         auto const powz = std::pow(z, static_cast<float>(n_latch_));
         auto const z2 = powz * powz;
-        auto const up = a2_ * z2 +a1_ * powz + 1.0f;
+        auto const up = a2_ * z2 + a1_ * powz + 1.0f;
         auto const down = z2 + a1_ * powz + a2_;
         return up / down;
     }
@@ -257,4 +257,4 @@ private:
     float a1_{};
     float a2_{};
 };
-}
+} // namespace qwqdsp_filter

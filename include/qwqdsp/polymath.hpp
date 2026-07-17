@@ -1,8 +1,8 @@
 #pragma once
 #include <algorithm>
 #include <cmath>
-#include <numbers>
 #include <complex>
+#include <numbers>
 
 namespace qwqdsp::polymath {
 /**
@@ -90,7 +90,7 @@ static inline constexpr std::complex<float> PolarPi(float x) noexcept {
  * @param x [-pi, pi]
  * @ref https://www.cnblogs.com/sun11086/archive/2009/03/20/1417944.html
  */
-template<class T>
+template <class T>
 static inline constexpr T SinParabola(T x) noexcept {
     constexpr T pi = std::numbers::pi_v<T>;
     constexpr T B = 4 / pi;
@@ -106,10 +106,10 @@ static inline constexpr T SinParabola(T x) noexcept {
  * @brief 最慢，最精确
  * @param x [-pi/2, pi/2]
  */
-template<class T>
+template <class T>
 static inline constexpr T SinRemez(T x) noexcept {
     T t = x * x;
-    T p =       static_cast<T>(-2.38889015e-8); // -0x1.9a6880p-26
+    T p = static_cast<T>(-2.38889015e-8);      // -0x1.9a6880p-26
     p = p * t + static_cast<T>(2.75253933e-6); //  0x1.717088p-19
     p = p * t - static_cast<T>(1.98408685e-4); // -0x1.a017dap-13
     p = p * t + static_cast<T>(8.33333377e-3); //  0x1.111112p-7
@@ -123,7 +123,7 @@ static inline constexpr T SinRemez(T x) noexcept {
  * @brief 第二快，第二精确
  * @param x [-pi/2, pi/2]
  */
-template<class T>
+template <class T>
 static constexpr inline T SinRemezRat(T x) noexcept {
     T s = x * x;
     T q = static_cast<T>(-2.91886134e-3); // -0x1.7e94bcp-9
@@ -145,7 +145,7 @@ static inline constexpr float SinReaktor(float x) noexcept {
     x = 2 * std::abs(x - 0.5f) - 0.5f;
     float const x2 = x * x;
     float u = -0.540347434104161f * x2 + 2.535656174488765f;
-    u = u * x2 -5.166512943349853f;
+    u = u * x2 - 5.166512943349853f;
     u = u * x2 + 3.141592653589793f;
     return u * x;
 }
@@ -205,9 +205,9 @@ static inline constexpr float TanhFast(float x) noexcept {
  * @param x a peak -40dB erro at 3.1
  */
 static inline float ArctanFast(float x) noexcept {
-    constexpr float m = 16/std::numbers::pi_v<float>;
+    constexpr float m = 16 / std::numbers::pi_v<float>;
     constexpr float m2 = m * m;
-    return 8*x/(3+std::sqrt(25+m2*x*x));
+    return 8 * x / (3 + std::sqrt(25 + m2 * x * x));
 }
 
 /**
@@ -221,7 +221,7 @@ static inline constexpr float ArctanPade(float x) noexcept {
     float x2 = x * x;
     float x3 = x2 * x;
     float x4 = x2 * x2;
-    return (55*x3+105*x)/(9*x4+90*x2+105);
+    return (55 * x3 + 105 * x) / (9 * x4 + 90 * x2 + 105);
 }
 
 static inline float ParabolaWaveshape(float x) noexcept {
@@ -242,6 +242,6 @@ static inline float UnknowWaveshape(float x) noexcept {
 }
 
 static inline float AlgebraicWaveshaper(float x) noexcept {
-    return x / std::sqrt(1 + x*x);
+    return x / std::sqrt(1 + x * x);
 }
-}
+} // namespace qwqdsp::polymath

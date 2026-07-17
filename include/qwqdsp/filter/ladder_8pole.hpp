@@ -1,7 +1,7 @@
 #pragma once
 #include <algorithm>
-#include <numbers>
 #include <cmath>
+#include <numbers>
 
 namespace qwqdsp_filter {
 class Ladder8Pole {
@@ -60,4 +60,4 @@ private:
     float g_{};
     float k_{};
 };
-}
+} // namespace qwqdsp_filter

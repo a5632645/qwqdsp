@@ -1,8 +1,8 @@
 #pragma once
+#include "qwqdsp/oscillator/table_sine_v3.hpp"
 #include <complex>
 #include <cstddef>
 #include <numbers>
-#include "qwqdsp/oscillator/table_sine_v3.hpp"
 
 namespace qwqdsp_oscillator {
 /**
@@ -11,7 +11,7 @@ namespace qwqdsp_oscillator {
  *      = --------------------------------------
  *               1 - a * exp(jwt)
  */
-template<size_t kLookupTableFrac = 13>
+template <size_t kLookupTableFrac = 13>
 class DSFClassic {
 public:
     void Reset() noexcept {
@@ -111,7 +111,7 @@ private:
  *      = --------------------------------------
  *               1 - a * exp(jwt)
  */
-template<size_t kLookupTableFrac = 13>
+template <size_t kLookupTableFrac = 13>
 class DSFComplexFactor {
 public:
     void Reset() noexcept {
@@ -203,4 +203,4 @@ private:
     uint32_t n_{};
     uint32_t set_n_{};
 };
-}
+} // namespace qwqdsp_oscillator

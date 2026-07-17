@@ -1,25 +1,23 @@
 #pragma once
+#include "slice.hpp"
+#include <cmath>
 #include <cstddef>
 #include <span>
-#include <cmath>
-#include "slice.hpp"
 
 namespace qwqdsp_segement {
 /**
  * @brief 仅支持分析的自动分块
  * @tparam kOffline true: 会将不足的部分也处理. false:适合实时音频流
  */
-template<bool kOffline>
+template <bool kOffline>
 class AnalyzeAuto {
 public:
     /**
      * @tparam Func void(std::span<const float> block)
      */
-    template<class Func>
-    void Process(
-        std::span<const float> block,
-        Func&& func
-    ) noexcept(noexcept(func(std::declval<std::span<const float>>()))) {
+    template <class Func>
+    void Process(std::span<const float> block,
+                 Func&& func) noexcept(noexcept(func(std::declval<std::span<const float>>()))) {
         Slice1D input{block};
         while (!input.IsEnd()) {
             size_t need = size_ - input_wpos_;
@@ -71,4 +69,4 @@ private:
     size_t hop_{};
     size_t input_wpos_{};
 };
-}
+} // namespace qwqdsp_segement

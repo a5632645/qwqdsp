@@ -42,4 +42,4 @@ private:
     float inc_{};
     float phase_{};
 };
-}
+} // namespace qwqdsp_oscillator

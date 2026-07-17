@@ -1,8 +1,8 @@
 #pragma once
-#include <utility>
+#include "qwqdsp/convert.hpp"
 #include "qwqdsp/filter/biquad.hpp"
 #include "qwqdsp/filter/rbj.hpp"
-#include "qwqdsp/convert.hpp"
+#include <utility>
 
 namespace qwqdsp_filter {
 class LinkwitzRiley2 {
@@ -75,10 +75,7 @@ public:
      * @return [lp, hp]
      */
     std::pair<float, float> Tick(float x) noexcept {
-        return {
-            lp_.Tick(lp2_.Tick(lp3_.Tick(x))),
-            -hp_.Tick(hp2_.Tick(hp3_.Tick(x)))
-        };
+        return {lp_.Tick(lp2_.Tick(lp3_.Tick(x))), -hp_.Tick(hp2_.Tick(hp3_.Tick(x)))};
     }
 
     void SetCutoff(float f, float fs) noexcept {
@@ -120,10 +117,7 @@ public:
      * @return [lp, hp]
      */
     std::pair<float, float> Tick(float x) noexcept {
-        return {
-            lp_.Tick(lp2_.Tick(lp3_.Tick(lp4_.Tick(x)))),
-            hp_.Tick(hp2_.Tick(hp3_.Tick(hp4_.Tick(x))))
-        };
+        return {lp_.Tick(lp2_.Tick(lp3_.Tick(lp4_.Tick(x)))), hp_.Tick(hp2_.Tick(hp3_.Tick(hp4_.Tick(x))))};
     }
 
     void SetCutoff(float f, float fs) noexcept {
@@ -151,4 +145,4 @@ private:
     Biquad hp3_;
     Biquad hp4_;
 };
-}
+} // namespace qwqdsp_filter

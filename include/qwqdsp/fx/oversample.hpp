@@ -120,7 +120,8 @@ public:
      * num_stages=3 → 1.75*half_len, 随级数增加趋近 2*half_len。
      */
     float Latency() const noexcept {
-        if (num_stages_ == 0) return 0.0f;
+        if (num_stages_ == 0)
+            return 0.0f;
         float const sum = 1.0f - 1.0f / static_cast<float>(1 << num_stages_);
         return 2.0f * static_cast<float>(half_len_) * sum;
     }

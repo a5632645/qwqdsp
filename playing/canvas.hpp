@@ -1,7 +1,7 @@
 #pragma once
-#include <vector>
 #include "OLEDDisplayRGB.h"
 #include "stb_image_write.h"
+#include <vector>
 
 struct Canvas {
     int width;
@@ -12,16 +12,16 @@ struct Canvas {
         : width{width}
         , height{height}
         , pixels_(width * height)
-        , g(width, height)
-    {
+        , g(width, height) {
         g.SetDisplayBuffer(pixels_.data());
     }
 
-    const auto& GetPixels() const { return pixels_; }
+    const auto& GetPixels() const {
+        return pixels_;
+    }
 
     void SaveImage(std::string_view path) {
-        stbi_write_png(path.data(), width, height, 4,
-                   pixels_.data(), width * bpp);
+        stbi_write_png(path.data(), width, height, 4, pixels_.data(), width * bpp);
     }
 
     OLEDDisplay g;

@@ -1,9 +1,9 @@
 #pragma once
 
 #include "raylib.h"
-#include <string_view>
 #include <functional>
 #include <string>
+#include <string_view>
 
 class Knob {
 public:
@@ -24,11 +24,11 @@ public:
     float get_value() const;
 
     void SetEnable(bool enable);
-    
+
     std::function<std::string(float)> value_to_text_function = EmptyV2Tcaller;
-    std::function<void(float)> on_value_change = [](float){};
+    std::function<void(float)> on_value_change = [](float) {};
 protected:
-    std::string_view m_name{ "unkown" };
+    std::string_view m_name{"unkown"};
     float m_default_value{};
     float m_value{};
     float m_min{};
@@ -48,5 +48,7 @@ protected:
     Rectangle m_bounds{};
 private:
     static void empty_callback(float) {}
-    static std::string EmptyV2Tcaller(float e) { return std::to_string(e); }
+    static std::string EmptyV2Tcaller(float e) {
+        return std::to_string(e);
+    }
 };

@@ -1,7 +1,7 @@
 #pragma once
-#include <vector>
-#include <span>
 #include <cassert>
+#include <span>
+#include <vector>
 
 namespace qwqdsp_fx {
 // ------------------------------------------------------------
@@ -17,7 +17,7 @@ public:
         if (len_coeff % downsample != 0) {
             ++each_phase_len_;
         }
-        
+
         phase_coeffs_.resize(downsample * each_phase_len_);
         for (int i = 0; i < downsample; ++i) {
             // 反转子滤波器的求值顺序
@@ -186,4 +186,4 @@ private:
     std::vector<float> phase_coeffs_;
     std::vector<float> phase_state_;
 };
-}
+} // namespace qwqdsp_fx

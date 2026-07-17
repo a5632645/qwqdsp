@@ -1,11 +1,11 @@
 #pragma once
+#include "qwqdsp/filter/analog_responce.hpp"
+#include "qwqdsp/filter/biquad_coeff.hpp"
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <numbers>
-#include <array>
 #include <numeric>
-#include "qwqdsp/filter/biquad_coeff.hpp"
-#include "qwqdsp/filter/analog_responce.hpp"
 /**
  * @ref 全通 https://apulsoft.ch/blog/matched-allpass/
  * @ref 复极点shelf https://vicanek.de/articles/2poleShelvingFits.pdf
@@ -25,7 +25,7 @@ public:
         auto b = -beta / (1.0 + beta + ClampSqrt(1.0 + 2.0 * beta));
         auto b0 = (1.0 + a1) / (1.0 + b);
         auto b1 = b * b0;
-        return DoubleBiquadCoeff{b0,b1,0,a1,0}.ToFloat();
+        return DoubleBiquadCoeff{b0, b1, 0, a1, 0}.ToFloat();
     }
 
     BiquadCoeff TiltshelfOnepole(float wc, float db) noexcept {
@@ -49,13 +49,13 @@ public:
     /**
      * @note match pi/2和双线性变换一样
      */
-    template<double kMatchPhase = std::numbers::pi/4>
+    template <double kMatchPhase = std::numbers::pi / 4>
     BiquadCoeff AllpassOnepole(float wc) noexcept {
         static auto const cos_a = std::cos(kMatchPhase);
         static auto const f_a = std::sqrt((1 - cos_a) / (1 + cos_a));
         auto w_a = f_a * wc;
         auto c_0 = (std::cos(w_a) - cos_a) / (std::cos(kMatchPhase + w_a) - 1);
-        return DoubleBiquadCoeff{c_0,1,0,c_0,0}.ToFloat();
+        return DoubleBiquadCoeff{c_0, 1, 0, c_0, 0}.ToFloat();
     }
 
     // -------------------- twopole --------------------
@@ -95,8 +95,8 @@ public:
         auto R2 = -A[0] + A[1] + 4 * (phi[0] - phi[1]) * A[2];
         auto B2 = (R1 - R2 * phi[1]) / (4 * phi[1] * phi[1]);
         auto B1 = R2 + 4 * (phi[1] - phi[0]) * B2;
-        r.b1 = -std::sqrt(std::max(B1,0.0)) / 2;
-        r.b0 = (std::sqrt(std::max(0.0,B2 + B1 / 4)) - r.b1) / 2;
+        r.b1 = -std::sqrt(std::max(B1, 0.0)) / 2;
+        r.b0 = (std::sqrt(std::max(0.0, B2 + B1 / 4)) - r.b1) / 2;
         r.b2 = -r.b0 - r.b1;
         return r.ToFloat();
     }
@@ -109,8 +109,8 @@ public:
         auto R2 = Q * Q * (-A[0] + A[1] + 4 * (phi[0] - phi[1]) * A[2]);
         auto B2 = (R1 - R2 * phi[1]) / (4 * phi[1] * phi[1]);
         auto B1 = R2 + 4 * (phi[1] - phi[0]) * B2;
-        r.b1 = -std::sqrt(std::max(B1,0.0)) / 2;
-        r.b0 = (std::sqrt(std::max(0.0,B2 + B1 / 4)) - r.b1) / 2;
+        r.b1 = -std::sqrt(std::max(B1, 0.0)) / 2;
+        r.b0 = (std::sqrt(std::max(0.0, B2 + B1 / 4)) - r.b1) / 2;
         r.b2 = -r.b0 - r.b1;
         return r.ToFloat();
     }
@@ -120,8 +120,8 @@ public:
         auto phi = GetPhi(wc);
         auto A = GetA(r);
         auto B0 = A[0];
-        auto B2 = (-B0) / (4 * phi[1]*phi[1]);
-        auto B1 = B0 + 4 * (phi[1]-phi[0])*B2;
+        auto B2 = (-B0) / (4 * phi[1] * phi[1]);
+        auto B1 = B0 + 4 * (phi[1] - phi[0]) * B2;
         Solveb(r, B0, B1, B2);
         return r.ToFloat();
     }
@@ -134,8 +134,8 @@ public:
         auto R1 = G * G * std::inner_product(phi.begin(), phi.end(), A.begin(), double{});
         auto R2 = G * G * (-A[0] + A[1] + 4 * (phi[0] - phi[1]) * A[2]);
         auto B0 = A[0];
-        auto B2 = (R1 - R2 * phi[1] - B0) / (4 * phi[1]*phi[1]);
-        auto B1 = R2 + B0 + 4 * (phi[1]-phi[0])*B2;
+        auto B2 = (R1 - R2 * phi[1] - B0) / (4 * phi[1] * phi[1]);
+        auto B1 = R2 + B0 + 4 * (phi[1] - phi[0]) * B2;
         Solveb(r, B0, B1, B2);
         return r.ToFloat();
     }
@@ -151,7 +151,7 @@ public:
         auto phi = GetPhi(wc);
         auto h_pow2_wc = std::norm(analog_.Highshelf(wc, wc, Q, sqrt_G));
         auto R1 = h_pow2_wc * std::inner_product(phi.begin(), phi.end(), A.begin(), double{});
-        auto B2 = (R1-B0*phi[0]-B1*phi[1])/phi[2];
+        auto B2 = (R1 - B0 * phi[0] - B1 * phi[1]) / phi[2];
         Solveb(r, B0, B1, B2);
         return r.ToFloat();
     }
@@ -159,7 +159,7 @@ public:
     BiquadCoeff Lowshelf(float wc, float Q, float db) noexcept {
         AnalogResponce analog_;
         auto sqrt_G = std::pow(10.0f, db / 80.0f);
-        auto r = ImpluseInvarant(wc/sqrt_G, Q);
+        auto r = ImpluseInvarant(wc / sqrt_G, Q);
         auto A = GetA(r);
         auto B0 = A[0] * std::norm(analog_.Lowshelf(0, wc, Q, sqrt_G));
         auto h_pow2_pi = std::norm(analog_.Lowshelf(kPi, wc, Q, sqrt_G));
@@ -167,7 +167,7 @@ public:
         auto phi = GetPhi(wc);
         auto h_pow2_wc = std::norm(analog_.Lowshelf(wc, wc, Q, sqrt_G));
         auto R1 = h_pow2_wc * std::inner_product(phi.begin(), phi.end(), A.begin(), double{});
-        auto B2 = (R1-B0*phi[0]-B1*phi[1])/phi[2];
+        auto B2 = (R1 - B0 * phi[0] - B1 * phi[1]) / phi[2];
         Solveb(r, B0, B1, B2);
         return r.ToFloat();
     }
@@ -183,7 +183,7 @@ public:
         auto phi = GetPhi(wc);
         auto h_pow2_wc = std::norm(analog_.Tiltshelf(wc, wc, Q, sqrt_G));
         auto R1 = h_pow2_wc * std::inner_product(phi.begin(), phi.end(), A.begin(), double{});
-        auto B2 = (R1-B0*phi[0]-B1*phi[1])/phi[2];
+        auto B2 = (R1 - B0 * phi[0] - B1 * phi[1]) / phi[2];
         Solveb(r, B0, B1, B2);
         return r.ToFloat();
     }
@@ -192,7 +192,7 @@ public:
         auto f_c = wc / (kPi * 2);
         auto w_c = wc;
         // zeta damping factor
-        auto zeta = 1 / (2 * Q); 
+        auto zeta = 1 / (2 * Q);
         auto zetasq = zeta * zeta;
 
         // match phases at f_c and the point where the phase is -a.
@@ -218,7 +218,7 @@ public:
         auto bot = -1 / (C + D);
         auto c_0 = (C - D) * bot;
         auto c_1 = 2 * cos_w_c * D * bot;
-        return DoubleBiquadCoeff{c_0,c_1,1,c_1,c_0}.ToFloat();
+        return DoubleBiquadCoeff{c_0, c_1, 1, c_1, c_0}.ToFloat();
     }
 private:
     static constexpr auto kPi = std::numbers::pi_v<double>;
@@ -228,35 +228,35 @@ private:
         auto exp_qwc = std::exp(-zeta * wc);
         auto a1 = float{};
         if (zeta <= 1) {
-            a1 = -2 * exp_qwc * std::cos(std::sqrt(1 - zeta*zeta) * wc);
+            a1 = -2 * exp_qwc * std::cos(std::sqrt(1 - zeta * zeta) * wc);
         }
         else {
-            a1 = -2 * exp_qwc * std::cosh(std::sqrt(zeta*zeta - 1) * wc);
+            a1 = -2 * exp_qwc * std::cosh(std::sqrt(zeta * zeta - 1) * wc);
         }
         auto a2 = exp_qwc * exp_qwc;
-        return DoubleBiquadCoeff{0,0,0,a1,a2};
+        return DoubleBiquadCoeff{0, 0, 0, a1, a2};
     }
 
     static inline void Solveb(DoubleBiquadCoeff& c, float B0, float B1, float B2) noexcept {
         auto sqrt_B0 = ClampSqrt(B0);
         auto sqrt_B1 = ClampSqrt(B1);
         auto W = (sqrt_B0 + sqrt_B1) / 2;
-        c.b0 = (W + ClampSqrt(W*W + B2)) / 2;
+        c.b0 = (W + ClampSqrt(W * W + B2)) / 2;
         c.b1 = (sqrt_B0 - sqrt_B1) / 2;
-        c.b2 = -B2 / (4*c.b0);
+        c.b2 = -B2 / (4 * c.b0);
     }
 
     static inline std::array<double, 3> GetA(DoubleBiquadCoeff const& c) noexcept {
         auto a1 = c.a1;
         auto a2 = c.a2;
-        return {X2(1+a1+a2), X2(1-a1+a2), -4*a2};
+        return {X2(1 + a1 + a2), X2(1 - a1 + a2), -4 * a2};
     }
 
     static inline std::array<double, 3> GetPhi(double w) noexcept {
         auto sin2 = X2(std::sin(w / 2));
         auto phi0 = 1 - sin2;
         auto phi1 = sin2;
-        return {phi0, phi1, 4*phi0*phi1};
+        return {phi0, phi1, 4 * phi0 * phi1};
     }
 
     static inline constexpr double X2(double x) noexcept {
@@ -267,4 +267,4 @@ private:
         return std::sqrt(std::max(x, 0.0));
     }
 };
-}
+} // namespace qwqdsp_filter

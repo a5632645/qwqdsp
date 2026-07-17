@@ -12,7 +12,7 @@ inline std::filesystem::path GetWorkDir() {
 #ifdef QWQDSP_WORK_DIR
     return std::filesystem::absolute(QWQDSP_WORK_DIR);
 #else
-    #error "cmake config wrongly"
+#error "cmake config wrongly"
 #endif
 }
 

@@ -1,10 +1,10 @@
+#include "denoise_weights.h"
+#include "mfcc.h"
+#include "nnom/inc/nnom.h"
 #include <algorithm>
 #include <array>
 #include <limits>
 #include <numbers>
-#include "denoise_weights.h"
-#include "mfcc.h"
-#include "nnom/inc/nnom.h"
 
 #define NUM_FILTER 20
 
@@ -69,19 +69,18 @@ public:
                 std::copy_n(in_buffer_.begin() + kFrameSize / 2, kFrameSize / 2, in_buffer_.begin());
                 in_count_ = kFrameSize / 2;
             }
-            
+
             // 3. 输出处理后的数据
             // 注意：实时处理会有固定延迟（kRawFrameSize/2），确保 out_buffer 有足够数据
             int can_write = std::min(num_samples, out_count_);
             std::copy_n(out_buffer_.data(), can_write, ptr);
-        
+
             // 移除已输出的数据
             out_count_ -= can_write;
             if (out_count_ > 0) {
                 std::memmove(out_buffer_.data(), out_buffer_.data() + can_write, out_count_ * sizeof(float));
             }
         }
-
     }
 
     void ProcessFrame() noexcept {
@@ -92,8 +91,9 @@ public:
         // --- 步骤 1: 将当前 48k 缓冲区的全部数据降采样到 16k ---
         // 注意：in_buffer_ 此时包含 1536 个采样 (48k 下的 50% 重叠窗口)
         for (int i = 0; i < kFrameSize; ++i) {
-            audio_16k_float[i] = in_buffer_[i];                                                           // 滤波用 float
-            audio_16k_int16[i] = static_cast<int16_t>(std::clamp(in_buffer_[i], -1.0f, 1.0f) * 32767.0f); // MFCC 用 int16
+            audio_16k_float[i] = in_buffer_[i]; // 滤波用 float
+            audio_16k_int16[i] =
+                static_cast<int16_t>(std::clamp(in_buffer_[i], -1.0f, 1.0f) * 32767.0f); // MFCC 用 int16
         }
 
         // --- NN 推理部分 (保持不变) ---
@@ -151,7 +151,8 @@ public:
 private:
     void quantize_data(float* din, int8_t* dout, uint32_t size, uint32_t int_bit) {
         float limit = (1 << int_bit);
-        for (uint32_t i = 0; i < size; i++) dout[i] = (int8_t)(std::max(std::min(din[i], limit), -limit) / limit * 127);
+        for (uint32_t i = 0; i < size; i++)
+            dout[i] = (int8_t)(std::max(std::min(din[i], limit), -limit) / limit * 127);
     }
 
     void set_gains(float* b_in, float* b_out, float* gains, uint32_t num_band, uint32_t num_order) {
@@ -197,7 +198,8 @@ private:
     }
 
     void y_h_update(float* y_h, uint32_t len) {
-        for (uint32_t i = len - 1; i > 0; i--) y_h[i] = y_h[i - 1];
+        for (uint32_t i = len - 1; i > 0; i--)
+            y_h[i] = y_h[i - 1];
     }
 
     std::array<float, kFrameSize> in_buffer_{};

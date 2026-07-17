@@ -45,7 +45,7 @@ public:
         // float v2 = b2;
         // float v1 = b1 - a1 * b2;
         // float v0 = b0 - k1 * b1 + (a1 * k1 - a2) * b2;
-        
+
         /* optimise for speed */
         // v0_ = v0 + k1 * v1 + k2 * v2;
         // v1_ = v1 - k1 * v0 - k1 * k1 * v1;
@@ -77,4 +77,4 @@ private:
     float s1_{};
     float s2_{};
 };
-}
+} // namespace qwqdsp_filter

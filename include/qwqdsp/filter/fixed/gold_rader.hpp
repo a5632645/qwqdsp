@@ -1,8 +1,8 @@
 #pragma once
-#include <algorithm>
-#include <limits>
-#include <cmath>
 #include "acc_traits.hpp"
+#include <algorithm>
+#include <cmath>
+#include <limits>
 
 namespace qwqdsp_filter::fixed {
 /**
@@ -11,7 +11,7 @@ namespace qwqdsp_filter::fixed {
  * H(z) = ----------------------------------------------------------
  *         (z - 2rcos + r^2) or (z - r*exp(w))(z - conj(r*exp(w)))
  */
-template<class QTYPE, size_t FRAC_LEN>
+template <class QTYPE, size_t FRAC_LEN>
 class GoldRader {
 public:
     using ACCType = AccType<QTYPE>;
@@ -89,4 +89,4 @@ private:
     ACCType quantization_{};
     ACCType quantization2_{};
 };
-}
+} // namespace qwqdsp_filter::fixed

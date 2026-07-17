@@ -150,4 +150,4 @@ private:
     float a2{};
     float a3{};
 };
-}
+} // namespace qwqdsp_filter

@@ -40,4 +40,4 @@ private:
     std::complex<float> now_;
     std::complex<float> inc_;
 };
-}
+} // namespace qwqdsp_oscillator

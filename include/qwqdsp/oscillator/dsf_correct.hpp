@@ -1,13 +1,13 @@
 #pragma once
-#include <complex>
 #include "qwqdsp/oscillator/table_sine_v3.hpp"
+#include <complex>
 
 namespace qwqdsp_oscillator {
 /**
  * @ref https://www.verklagekasper.de/synths/dsfsynthesis/dsfsynthesis.html
  * @ref https://ccrma.stanford.edu/~stilti/papers/blit.pdf
  */
-template<size_t kLookupTableFracBits = 10>
+template <size_t kLookupTableFracBits = 10>
 class DSFCorrect {
 public:
     void Reset() noexcept {
@@ -32,10 +32,7 @@ public:
 
         float const up1 = -a_ * (cosv * cosu + sinv * sinu);
         float const up2 = cosu;
-        float const up3 = a_pow_n_ * (
-            a_ * (cosu * cosv_nsub1 - sinu * sinv_nsub1)
-            - (cosu * cosv_n - sinu * sinv_n)
-        );
+        float const up3 = a_pow_n_ * (a_ * (cosu * cosv_nsub1 - sinu * sinv_nsub1) - (cosu * cosv_n - sinu * sinv_n));
         float const down = 1.0f + a_ * a_ - 2.0f * a_ * cosv;
         return (up1 + up2 + up3) / down;
     }
@@ -123,14 +120,14 @@ private:
  *           true: sum(w^n * sin(u + nv))
  *          false: sum(w^n * cos(u + nv))
  */
-template<bool kFlipDown, size_t kLookupTableFracBits = 10>
+template <bool kFlipDown, size_t kLookupTableFracBits = 10>
 class DSFCorrectComplex {
 public:
     void Reset() noexcept {
         w0_osc_phase_ = 0;
         w_osc_phase_ = 0;
     }
-    
+
     float Tick() noexcept {
         w_osc_phase_ += w_osc_inc_;
         w0_osc_phase_ += w0_osc_inc_;
@@ -149,20 +146,16 @@ public:
         if constexpr (kFlipDown) {
             auto const up1 = a_ * (sinv * cosu - cosv * sinu);
             auto const up2 = sinu;
-            auto const up3 = a_pow_n_ * (
-                a_ * (sinu * cosv_nsub1 + cosu * sinv_nsub1)
-                - (sinu * cosv_n + cosu * sinv_n)
-            );
+            auto const up3 =
+                a_pow_n_ * (a_ * (sinu * cosv_nsub1 + cosu * sinv_nsub1) - (sinu * cosv_n + cosu * sinv_n));
             auto const down = 1.0f + a_ * a_ - 2.0f * a_ * cosv;
             return std::imag((up1 + up2 + up3) / down);
         }
         else {
             auto const up1 = -a_ * (cosv * cosu + sinv * sinu);
             auto const up2 = cosu;
-            auto const up3 = a_pow_n_ * (
-                a_ * (cosu * cosv_nsub1 - sinu * sinv_nsub1)
-                - (cosu * cosv_n - sinu * sinv_n)
-            );
+            auto const up3 =
+                a_pow_n_ * (a_ * (cosu * cosv_nsub1 - sinu * sinv_nsub1) - (cosu * cosv_n - sinu * sinv_n));
             auto const down = 1.0f + a_ * a_ - 2.0f * a_ * cosv;
             return std::real((up1 + up2 + up3) / down);
         }
@@ -244,4 +237,4 @@ private:
     float w0_{};
     float w_{};
 };
-}
+} // namespace qwqdsp_oscillator

@@ -32,19 +32,15 @@ public:
                     StepNextPoint();
                 }
                 float s = x - x0_;
-                return y0_ + s * (
-                    d0_ + s * (
-                        c0_ + s * b0_
-                    )
-                );
+                return y0_ + s * (d0_ + s * (c0_ + s * b0_));
             }
         }
     }
-    
+
     void StepNextPoint() noexcept {
         // 起点超出插值范围
         assert(rpos_ < xs_.size() - 1);
-        
+
         float h0 = xs_[rpos_ + 1] - xs_[rpos_];
         float e0 = (ys_[rpos_ + 1] - ys_[rpos_]) / h0;
         float d0 = GetDerivative(rpos_);
@@ -136,4 +132,4 @@ private:
     std::span<const float> xs_;
     std::span<const float> ys_;
 };
-}
+} // namespace qwqdsp_interpolation

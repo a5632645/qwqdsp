@@ -272,12 +272,12 @@ public:
 
     float GetTankLength() const noexcept {
         return apf1_delay_ + apf2_delay_ + del1_delay_ + del2_delay_
-               + static_cast<float>(qwqdsp_fx::PitchShifter::kLatency);
+             + static_cast<float>(qwqdsp_fx::PitchShifter::kLatency);
     }
 
     // --- public members (accessed directly by ShimmerReverb) ---
     float out_ = 0.0f;
-    float shifted_out_ = 0.0f;  // 移调 + 限幅后的输出，供下一帧反馈
+    float shifted_out_ = 0.0f; // 移调 + 限幅后的输出，供下一帧反馈
 
     qwqdsp_fx::PitchShifter shifter_;
     DelayAllpass apf1_;
@@ -601,7 +601,7 @@ private:
     detail::Tank left_tank_;
     detail::Tank right_tank_;
 
-    float pitch_shift_ = 12.0f;  // 默认 +1 八度
+    float pitch_shift_ = 12.0f; // 默认 +1 八度
 
     static constexpr size_t kNumTaps = 7;
     std::array<float, kNumTaps> base_left_taps_ = {};

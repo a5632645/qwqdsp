@@ -4,12 +4,12 @@
 #include <span>
 #include <vector>
 
-#include <qwqdsp/window/blackman_harris.hpp>
-#include <qwqdsp/window/helper.hpp>
-#include <qwqdsp/window/hamming.hpp>
 #include <qwqdsp/window/blackman.hpp>
-#include <qwqdsp/window/hann.hpp>
+#include <qwqdsp/window/blackman_harris.hpp>
 #include <qwqdsp/window/blackman_harris_3term.hpp>
+#include <qwqdsp/window/hamming.hpp>
+#include <qwqdsp/window/hann.hpp>
+#include <qwqdsp/window/helper.hpp>
 
 #include "raylib.h"
 

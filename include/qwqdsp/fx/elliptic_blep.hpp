@@ -5,8 +5,9 @@
 #include <complex>
 #include <numbers>
 
-namespace signalsmith { namespace blep {
-template<class T>
+namespace signalsmith {
+namespace blep {
+template <class T>
 concept CEllipticBlepCoeff = requires {
     T::fpass;
     T::fstop;
@@ -16,7 +17,7 @@ concept CEllipticBlepCoeff = requires {
     T::realCoeffsDirect;
 };
 
-template<CEllipticBlepCoeff TCoeffs, class Sample, size_t kPartialLUTSize>
+template <CEllipticBlepCoeff TCoeffs, class Sample, size_t kPartialLUTSize>
 struct EllipticBlep {
     using Complex = std::complex<Sample>;
 
@@ -35,7 +36,7 @@ struct EllipticBlep {
      * @note TCoeff:fpass和TCoeff:fstop均为角频率，这意味着它和采样率有关
      */
     void SetScale(Sample scale) noexcept {
-        auto addPole = [&](size_t index, Complex pole, Complex coeff, Complex impulseCoeff){
+        auto addPole = [&](size_t index, Complex pole, Complex coeff, Complex impulseCoeff) {
             // Set up partial powers of the pole (so we can move forward/back by fractional samples)
             for (size_t s = 0; s <= kPartialLUTSize; ++s) {
                 Sample partial = Sample(s) / kPartialLUTSize;
@@ -50,22 +51,24 @@ struct EllipticBlep {
         };
 
         // For now, just cast real poles to complex ones
-        const auto &realCoeffs = (TCoeffs::realCoeffsDirect);
-        const auto &realImpulseCoeffs = (TCoeffs::realCoeffsDirect);
+        const auto& realCoeffs = (TCoeffs::realCoeffsDirect);
+        const auto& realImpulseCoeffs = (TCoeffs::realCoeffsDirect);
         for (size_t i = 0; i < TCoeffs::realCount; ++i) {
             addPole(i, TCoeffs::realPoles[i] * scale, realCoeffs[i] * scale, realImpulseCoeffs[i] * scale);
         }
-        const auto &complexCoeffs = (TCoeffs::complexCoeffsDirect);
-        const auto &complexImpulseCoeffs = (TCoeffs::complexCoeffsDirect);
+        const auto& complexCoeffs = (TCoeffs::complexCoeffsDirect);
+        const auto& complexImpulseCoeffs = (TCoeffs::complexCoeffsDirect);
         for (size_t i = 0; i < TCoeffs::complexCount; ++i) {
-            addPole(i + TCoeffs::realCount, TCoeffs::complexPoles[i] * scale, complexCoeffs[i] * scale, complexImpulseCoeffs[i] * scale);
+            addPole(i + TCoeffs::realCount, TCoeffs::complexPoles[i] * scale, complexCoeffs[i] * scale,
+                    complexImpulseCoeffs[i] * scale);
         }
     }
-    
+
     void Reset() {
-        for (auto &s : state_) s = 0;
+        for (auto& s : state_)
+            s = 0;
     }
-    
+
     /// Instantaneous filter output
     Sample Get() const {
         Sample sum = 0;
@@ -81,12 +84,12 @@ struct EllipticBlep {
         size_t intIndex = static_cast<size_t>(std::floor(tableIndex));
         Sample fracIndex = tableIndex - std::floor(tableIndex);
 
-        auto &lowPoles = partial_step_poles_[intIndex];
-        auto &highPoles = partial_step_poles_[intIndex + 1];
+        auto& lowPoles = partial_step_poles_[intIndex];
+        auto& highPoles = partial_step_poles_[intIndex + 1];
 
         Sample sum = 0;
         for (size_t i = 0; i < count; ++i) {
-            Complex lerpPole = lowPoles[i] + (highPoles[i] - lowPoles[i])*fracIndex;
+            Complex lerpPole = lowPoles[i] + (highPoles[i] - lowPoles[i]) * fracIndex;
             sum += (state_[i] * lerpPole).real();
         }
         return sum;
@@ -97,15 +100,15 @@ struct EllipticBlep {
             state_[i] += amount * impluse_coeffs_[i];
         }
     }
-    
+
     void Add(Sample amount, Sample samplesInPast) {
         Sample tableIndex = samplesInPast * kPartialLUTSize;
         size_t intIndex = std::floor(tableIndex);
         Sample fracIndex = tableIndex - std::floor(tableIndex);
 
         // move the pulse along in time, the same way as state progresses in .step()
-        auto &lowPoles = partial_step_poles_[intIndex];
-        auto &highPoles = partial_step_poles_[intIndex + 1];
+        auto& lowPoles = partial_step_poles_[intIndex];
+        auto& highPoles = partial_step_poles_[intIndex + 1];
         for (size_t i = 0; i < count; ++i) {
             Complex lerpPole = lowPoles[i] + (highPoles[i] - lowPoles[i]) * fracIndex;
             state_[i] += impluse_coeffs_[i] * lerpPole * amount;
@@ -113,7 +116,7 @@ struct EllipticBlep {
     }
 
     void Step() {
-        const auto &poles = partial_step_poles_.back();
+        const auto& poles = partial_step_poles_.back();
         for (size_t i = 0; i < count; ++i) {
             state_[i] *= poles[i];
         }
@@ -129,15 +132,14 @@ struct EllipticBlep {
             intIndex -= kPartialLUTSize;
         }
 
-        auto &lowPoles = partial_step_poles_[intIndex];
-        auto &highPoles = partial_step_poles_[intIndex + 1];
+        auto& lowPoles = partial_step_poles_[intIndex];
+        auto& highPoles = partial_step_poles_[intIndex + 1];
 
         for (size_t i = 0; i < count; ++i) {
             Complex lerpPole = lowPoles[i] + (highPoles[i] - lowPoles[i]) * fracIndex;
             state_[i] *= lerpPole;
         }
     }
-
 private:
     // For now, just treat the real poles as complex ones
     static constexpr size_t count = TCoeffs::complexCount + TCoeffs::realCount;
@@ -145,11 +147,12 @@ private:
     using Array = std::array<Complex, count>;
     Array state_;
     Array impluse_coeffs_;
-    
+
     // Lookup table for std::pow(pole, fractional)
     std::array<Array, kPartialLUTSize + 1> partial_step_poles_;
 };
 
-}} // namespace
+} // namespace blep
+} // namespace signalsmith
 
 #endif // include guard

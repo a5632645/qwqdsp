@@ -3,12 +3,12 @@
 #ifdef QWQDSP_HAVE_EIGEN
 
 #include "qwqdsp/pitch/swift_f0_model.hpp"
-#include <Eigen/Dense>
 #include <Eigen/CXX11/Tensor>
+#include <Eigen/Dense>
 #include <algorithm>
 #include <cmath>
-#include <vector>
 #include <cstring>
+#include <vector>
 
 namespace qwqdsp_swift_f0 {
 
@@ -37,8 +37,7 @@ public:
      * @param pitch_hz       输出 [T] 基频估计 (Hz)
      * @param confidence     输出 [T] 置信度 (0~1)
      */
-    void Process(const Tensor2f& log_mag_spec,
-                 Eigen::Ref<Eigen::VectorXf> pitch_hz,
+    void Process(const Tensor2f& log_mag_spec, Eigen::Ref<Eigen::VectorXf> pitch_hz,
                  Eigen::Ref<Eigen::VectorXf> confidence) {
         const int T = static_cast<int>(log_mag_spec.dimension(0));
         const int F = static_cast<int>(log_mag_spec.dimension(1)); // 132
@@ -51,16 +50,11 @@ public:
 
         // ---- Conv layers (all SAME padding, stride=1) ----
         // Each keeps spatial shape [F, T]
-        x = Conv2DSameReLU(x, ConvLayer1::kWeight.data(), ConvLayer1::kBias.data(),
-                           8, 1, 5, 5);  // [1, 8,  F, T]
-        x = Conv2DSameReLU(x, ConvLayer2::kWeight.data(), ConvLayer2::kBias.data(),
-                           16, 8, 5, 5); // [1, 16, F, T]
-        x = Conv2DSameReLU(x, ConvLayer3::kWeight.data(), ConvLayer3::kBias.data(),
-                           32, 16, 5, 5); // [1, 32, F, T]
-        x = Conv2DSameReLU(x, ConvLayer4::kWeight.data(), ConvLayer4::kBias.data(),
-                           64, 32, 5, 5); // [1, 64, F, T]
-        x = Conv2DSameReLU(x, ConvLayer5::kWeight.data(), ConvLayer5::kBias.data(),
-                           1, 64, 5, 5);  // [1, 1,  F, T]
+        x = Conv2DSameReLU(x, ConvLayer1::kWeight.data(), ConvLayer1::kBias.data(), 8, 1, 5, 5);   // [1, 8,  F, T]
+        x = Conv2DSameReLU(x, ConvLayer2::kWeight.data(), ConvLayer2::kBias.data(), 16, 8, 5, 5);  // [1, 16, F, T]
+        x = Conv2DSameReLU(x, ConvLayer3::kWeight.data(), ConvLayer3::kBias.data(), 32, 16, 5, 5); // [1, 32, F, T]
+        x = Conv2DSameReLU(x, ConvLayer4::kWeight.data(), ConvLayer4::kBias.data(), 64, 32, 5, 5); // [1, 64, F, T]
+        x = Conv2DSameReLU(x, ConvLayer5::kWeight.data(), ConvLayer5::kBias.data(), 1, 64, 5, 5);  // [1, 1,  F, T]
 
         // Squeeze dim 1 → [1, F, T]
         // Transpose → [T, F] for FreqProjection
@@ -119,7 +113,8 @@ public:
                 if (std::abs(p - argmax(t)) <= kVoicingHalfWidth) {
                     masked(t, p) = softmax_out(t, p);
                     sum_masked += softmax_out(t, p);
-                } else {
+                }
+                else {
                     masked(t, p) = 0.0f;
                 }
             }
@@ -141,7 +136,6 @@ public:
             pitch_hz(t) = sum;
         }
     }
-
 private:
     // ------------------------------------------------------------
     // Conv2D (SAME padding) + Bias + ReLU
@@ -151,17 +145,13 @@ private:
     // weight_data: OutC * C * kH * kW  flat float array
     // bias_data:   OutC flat float array
     // ------------------------------------------------------------
-    static Tensor4f Conv2DSameReLU(
-        const Tensor4f& input,
-        const float* weight_data,
-        const float* bias_data,
-        int out_c, int in_c, int kH, int kW) {
-
+    static Tensor4f Conv2DSameReLU(const Tensor4f& input, const float* weight_data, const float* bias_data, int out_c,
+                                   int in_c, int kH, int kW) {
         int N = static_cast<int>(input.dimension(0));
         int H = static_cast<int>(input.dimension(2));
         int W = static_cast<int>(input.dimension(3));
 
-        int pad_h = kH / 2;  // SAME: pad = floor(k/2)
+        int pad_h = kH / 2; // SAME: pad = floor(k/2)
         int pad_w = kW / 2;
 
         Tensor4f output(N, out_c, H, W);
@@ -174,18 +164,15 @@ private:
                         for (int ic = 0; ic < in_c; ++ic) {
                             for (int kh = 0; kh < kH; ++kh) {
                                 int ih = h + kh - pad_h;
-                                if (ih < 0 || ih >= H) continue;
+                                if (ih < 0 || ih >= H)
+                                    continue;
                                 for (int kw = 0; kw < kW; ++kw) {
                                     int iw = w + kw - pad_w;
-                                    if (iw < 0 || iw >= W) continue;
+                                    if (iw < 0 || iw >= W)
+                                        continue;
 
                                     float in_val = input(n, ic, ih, iw);
-                                    float w_val = weight_data[
-                                        oc * (in_c * kH * kW) +
-                                        ic * (kH * kW) +
-                                        kh * kW +
-                                        kw
-                                    ];
+                                    float w_val = weight_data[oc * (in_c * kH * kW) + ic * (kH * kW) + kh * kW + kw];
                                     sum += in_val * w_val;
                                 }
                             }

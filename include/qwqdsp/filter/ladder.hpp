@@ -138,4 +138,4 @@ private:
     float s3_{};
     float s4_{};
 };
-}
+} // namespace qwqdsp_filter

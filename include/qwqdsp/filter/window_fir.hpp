@@ -1,9 +1,9 @@
 #pragma once
 #include <cassert>
+#include <cmath>
+#include <numbers>
 #include <numeric>
 #include <span>
-#include <numbers>
-#include <cmath>
 
 namespace qwqdsp_filter {
 /**
@@ -80,4 +80,4 @@ private:
         }
     }
 };
-}
+} // namespace qwqdsp_filter

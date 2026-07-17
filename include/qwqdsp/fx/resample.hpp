@@ -1,9 +1,9 @@
 #pragma once
-#include <vector>
-#include <span>
-#include <cassert>
 #include "qwqdsp/interpolation.hpp"
 #include "qwqdsp/window/kaiser.hpp"
+#include <cassert>
+#include <span>
+#include <vector>
 
 namespace qwqdsp_fx {
 class Resample {
@@ -23,8 +23,9 @@ public:
         size_t const lut_size = kernel_len + (kernel_len - 1) * oversample;
         kernel_.resize(lut_size + 1, 0.0f);
         float const beta = qwqdsp_window::Kaiser::Beta(atten);
-        float const width = qwqdsp_window::Kaiser::MainLobeWidth(beta) * std::numbers::pi_v<float> * 2.0f / static_cast<float>(kernel_len);
-        
+        float const width = qwqdsp_window::Kaiser::MainLobeWidth(beta) * std::numbers::pi_v<float>
+                          * 2.0f / static_cast<float>(kernel_len);
+
         std::span kernel_block{kernel_.data(), lut_size};
         {
             float cutoff = 0.0f;
@@ -44,7 +45,8 @@ public:
                     kernel_block[i] = cutoff / std::numbers::pi_v<float>;
                 }
                 else {
-                    kernel_block[i] = std::sin(omega * t) * static_cast<float>(oversample_plus1_) / (std::numbers::pi_v<float> * t);
+                    kernel_block[i] =
+                        std::sin(omega * t) * static_cast<float>(oversample_plus1_) / (std::numbers::pi_v<float> * t);
                 }
             }
         }
@@ -80,10 +82,12 @@ public:
                 int const xibegin = std::max(0, xrpos + 1);
                 int const len = std::min(ikernel_len - 1, xsize - xibegin);
                 for (int i = begin; i < len; ++i) {
-                    float const krpos = static_cast<float>(static_cast<size_t>(i) * oversample_plus1_) + frac * static_cast<float>(oversample_plus1_);
+                    float const krpos = static_cast<float>(static_cast<size_t>(i) * oversample_plus1_)
+                                      + frac * static_cast<float>(oversample_plus1_);
                     size_t const ikrpos = static_cast<size_t>(krpos);
                     float const frac_krpos = krpos - std::floor(krpos);
-                    float const kernel_v = qwqdsp::Interpolation::Linear(kernel_[ikrpos], kernel_[ikrpos + 1], frac_krpos);
+                    float const kernel_v =
+                        qwqdsp::Interpolation::Linear(kernel_[ikrpos], kernel_[ikrpos + 1], frac_krpos);
                     sum += kernel_v * x[static_cast<size_t>(xibegin + i)];
                 }
             }
@@ -96,11 +100,10 @@ public:
 
         return r;
     }
-
 private:
     float phase_inc_{};
     size_t oversample_plus1_{};
     size_t kernel_len_{};
     std::vector<float> kernel_;
 };
-}
+} // namespace qwqdsp_fx

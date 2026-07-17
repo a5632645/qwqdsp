@@ -1,8 +1,8 @@
 #pragma once
+#include "slice.hpp"
 #include <algorithm>
 #include <cstddef>
 #include <span>
-#include "slice.hpp"
 
 namespace qwqdsp_segement {
 /**
@@ -13,11 +13,9 @@ public:
     /**
      * @tparam Func void(std::span<const float> input, std::span<float> output)
      */
-    template<class Func>
-    void Process(
-        std::span<float> block,
-        Func&& func
-    ) noexcept(noexcept(func(std::declval<std::span<const float>>(), std::declval<std::span<float>>()))) {
+    template <class Func>
+    void Process(std::span<float> block, Func&& func) noexcept(noexcept(func(std::declval<std::span<const float>>(),
+                                                                             std::declval<std::span<float>>()))) {
         Slice1D input{block};
         while (!input.IsEnd()) {
             size_t need = size_ - input_wpos_;
@@ -25,7 +23,8 @@ public:
             std::copy(in.begin(), in.end(), input_buffer_.begin() + input_wpos_);
             input_wpos_ += in.size();
             if (input_wpos_ >= size_) {
-                func(std::span<const float>{input_buffer_.data(), size_}, std::span<float>{process_buffer_.data(), size_});
+                func(std::span<const float>{input_buffer_.data(), size_},
+                     std::span<float>{process_buffer_.data(), size_});
                 input_wpos_ -= hop_;
                 for (size_t i = 0; i < input_wpos_; i++) {
                     input_buffer_[i] = input_buffer_[i + hop_];
@@ -43,7 +42,7 @@ public:
                 for (int i = 0; i < extractSize; ++i) {
                     in[i] = output_buffer_[i] / ((float)size_ / hop_);
                 }
-                
+
                 // shift output buffer
                 int shiftSize = write_end_ - extractSize;
                 for (int i = 0; i < shiftSize; i++) {
@@ -97,4 +96,4 @@ private:
     size_t write_end_{};
     size_t write_add_end_{};
 };
-}
+} // namespace qwqdsp_segement

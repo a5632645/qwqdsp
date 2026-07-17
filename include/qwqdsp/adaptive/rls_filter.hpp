@@ -2,8 +2,8 @@
 
 #ifdef QWQDSP_HAVE_EIGEN
 
-#include <cmath>
 #include <Eigen/Dense>
+#include <cmath>
 
 namespace qwqdsp_adaptive {
 // qwqfixme: 不工作
@@ -44,7 +44,7 @@ public:
         k_.noalias() = (p_ * latch_) / (forget_ + (latch_.transpose() * p_ * latch_).value());
         p_.noalias() = (identity_ - k_ * latch_.transpose()) * p2_;
         w_.noalias() += k_ * err_;
-        
+
         return pred;
     }
 
@@ -79,6 +79,6 @@ private:
 
     vec iir_latch_;
 };
-}
+} // namespace qwqdsp_adaptive
 
 #endif

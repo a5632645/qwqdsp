@@ -82,4 +82,4 @@ private:
     float w_old_{};
     float backup_y_{};
 };
-}
+} // namespace qwqdsp_oscillator

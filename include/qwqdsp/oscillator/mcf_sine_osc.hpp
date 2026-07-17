@@ -1,13 +1,14 @@
 #pragma once
 #include <cmath>
-#include <numbers>
 #include <complex>
+#include <numbers>
 
 namespace qwqdsp_oscillator {
 /**
  * @brief 修正耦合正弦振荡器，又称Magic circle，等振幅，在低频下接近正交输出
  * 这个实现使用了后向差分来求解余弦，在较小的频率更改下相位可能不正确
- * @ref https://quod.lib.umich.edu/cgi/p/pod/dod-idx/sine-generation-algorithm-for-vlsi-applications.pdf?c=icmc;idno=bbp2372.1985.028;format=pdf
+ * @ref
+ * https://quod.lib.umich.edu/cgi/p/pod/dod-idx/sine-generation-algorithm-for-vlsi-applications.pdf?c=icmc;idno=bbp2372.1985.028;format=pdf
  */
 class MCFSineOsc {
 public:
@@ -72,7 +73,8 @@ private:
 /**
  * @brief 完整的正交MCF振荡器
  * 允许在低量化精度下工作，衰减慢
- * @ref https://quod.lib.umich.edu/cgi/p/pod/dod-idx/sine-generation-algorithm-for-vlsi-applications.pdf?c=icmc;idno=bbp2372.1985.028;format=pdf
+ * @ref
+ * https://quod.lib.umich.edu/cgi/p/pod/dod-idx/sine-generation-algorithm-for-vlsi-applications.pdf?c=icmc;idno=bbp2372.1985.028;format=pdf
  */
 class FullMCFSineOsc {
 public:
@@ -118,4 +120,4 @@ private:
     float cos1_{};
     float coeff_{};
 };
-}
+} // namespace qwqdsp_oscillator

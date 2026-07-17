@@ -1,20 +1,20 @@
 #pragma once
-#include <numbers>
-#include <cmath>
 #include "simd_pack.hpp"
+#include <cmath>
+#include <numbers>
 
 namespace qwqdsp_simd_element {
 
-template<size_t N>
+template <size_t N>
 class OnePoleTPT {
 public:
     void Reset() noexcept {
         lag_.Broadcast(0);
     }
-    
+
     /**
      * @brief 计算系数
-     * 
+     *
      * @param w 任何值，如果小于0，系数为0，如果大于pi，系数为1
      * @return 系数
      * @note 实际上，w的值域是[0, pi)，但这里也可以接受其他值，
@@ -37,7 +37,7 @@ public:
 
     /**
      * @brief 计算系数
-     * 
+     *
      * @param w 数字角频率，任意值，过低过高会自动处理特殊值
      * @return PackFloat<N> 系数
      */

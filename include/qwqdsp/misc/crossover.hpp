@@ -1,8 +1,8 @@
 #pragma once
+#include "qwqdsp/oscillator/vic_sine_osc.hpp"
 #include <cstddef>
 #include <numbers>
 #include <utility>
-#include "qwqdsp/oscillator/vic_sine_osc.hpp"
 
 namespace qwqdsp_misc {
 class CrossoverGain {
@@ -81,4 +81,4 @@ public:
 private:
     qwqdsp_oscillator::VicSineOsc osc_;
 };
-}
+} // namespace qwqdsp_misc

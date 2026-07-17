@@ -1,6 +1,6 @@
 #pragma once
-#include <vector>
 #include <array>
+#include <vector>
 
 namespace qwqdsp_adaptive {
 class LagBuffer {
@@ -36,7 +36,7 @@ private:
     size_t mask_{};
 };
 
-template<size_t kSize>
+template <size_t kSize>
 class LagBufferStatic {
 public:
     static constexpr size_t kMask = kSize - 1;
@@ -61,4 +61,4 @@ private:
     std::array<float, kSize> buffer_{};
     size_t wpos_{};
 };
-}
+} // namespace qwqdsp_adaptive

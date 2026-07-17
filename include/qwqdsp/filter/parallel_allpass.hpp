@@ -6,13 +6,12 @@ namespace qwqdsp_filter {
 /**
  * @brief 双路全通滤波器组成的低通/高通滤波器，只能为奇数阶，先用巴特沃斯摸一下
  * @ref 纯极点 https://radiosystemdesign.com/assets/pdf/downloads/Reducing_IIR_Comp_Workload_Lyons.pdf
- * @ref 可零点 https://www.researchgate.net/publication/278320928_A_Most_Efficient_Digital_Filter_The_Two-Path_Recursive_All-Pass_Filter
+ * @ref 可零点
+ * https://www.researchgate.net/publication/278320928_A_Most_Efficient_Digital_Filter_The_Two-Path_Recursive_All-Pass_Filter
  */
 class ParallelAllpass {
 public:
-    void Reset() noexcept {
-
-    }
+    void Reset() noexcept {}
 
     void BuildButterworth(size_t order, float w) noexcept {
         assert(order % 2 == 1);
@@ -115,7 +114,7 @@ public:
         return {up, down};
     }
 
-        /**
+    /**
      * @note up + down = LP, up - down = HP
      * @return {up, down}
      */
@@ -156,4 +155,4 @@ private:
     std::vector<qwqdsp_filter::AllpassOrder2> allpass_;
     qwqdsp_filter::AllpassOrder1 allpass1_;
 };
-}
+} // namespace qwqdsp_filter

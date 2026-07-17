@@ -13,7 +13,11 @@ struct Rectange {
     int16_t h{};
 
     constexpr Rectange() = default;
-    constexpr Rectange(int16_t x, int16_t y, int16_t w, int16_t h) : x(x), y(y), w(w), h(h) {}
+    constexpr Rectange(int16_t x, int16_t y, int16_t w, int16_t h)
+        : x(x)
+        , y(y)
+        , w(w)
+        , h(h) {}
 
     [[nodiscard]]
     constexpr Rectange RemoveFromTop(int16_t amount) {
@@ -31,7 +35,7 @@ struct Rectange {
     [[nodiscard]]
     constexpr Rectange RemoveFromBottom(int16_t amount) {
         Rectange ret = *this;
-        ret.y = y + h - amount; 
+        ret.y = y + h - amount;
         ret.h = h - amount;
         h -= amount;
         return ret;
@@ -125,7 +129,7 @@ struct Rectange {
 
     [[nodiscard]]
     constexpr Rectange Translate(int16_t dx, int16_t dy) const {
-        return Rectange(x + dx, y + dy, w, h); 
+        return Rectange(x + dx, y + dy, w, h);
     }
 
     constexpr I16Point GetCenter() const {

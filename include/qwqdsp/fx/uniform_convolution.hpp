@@ -1,10 +1,10 @@
 #pragma once
-#include <algorithm>
-#include <cstddef>
-#include "qwqdsp/spectral/real_fft_adv.hpp"
 #include "qwqdsp/segement/analyze_auto.hpp"
 #include "qwqdsp/segement/slice.hpp"
+#include "qwqdsp/spectral/real_fft_adv.hpp"
 #include "qwqdsp/window/helper.hpp"
+#include <algorithm>
+#include <cstddef>
 
 namespace qwqdsp_fx {
 class UniformConvolution {
@@ -102,7 +102,7 @@ public:
                 for (int i = 0; i < extractSize; ++i) {
                     in[i] = output_buffer_[i];
                 }
-                
+
                 // shift output buffer
                 int shiftSize = write_end_ - extractSize;
                 for (int i = 0; i < shiftSize; i++) {
@@ -139,4 +139,4 @@ private:
     size_t input_frame_wpos_{};
     Frame output_frame_;
 };
-}
+} // namespace qwqdsp_fx

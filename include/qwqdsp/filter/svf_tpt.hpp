@@ -1,6 +1,6 @@
 #pragma once
-#include <cmath>
 #include <array>
+#include <cmath>
 
 namespace qwqdsp_filter {
 class SvfTPT {
@@ -101,4 +101,4 @@ private:
     float s1_{};
     float s2_{};
 };
-}
+} // namespace qwqdsp_filter

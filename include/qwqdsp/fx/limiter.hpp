@@ -1,8 +1,8 @@
 #pragma once
-#include <span>
-#include "qwqdsp/misc/smoother.hpp"
-#include "qwqdsp/filter/int_delay.hpp"
 #include "qwqdsp/convert.hpp"
+#include "qwqdsp/filter/int_delay.hpp"
+#include "qwqdsp/misc/smoother.hpp"
+#include <span>
 
 namespace qwqdsp_fx {
 /**
@@ -75,8 +75,8 @@ public:
     }
 private:
     /**
-    * @brief a wrong peak hold but it works too.
-    */
+     * @brief a wrong peak hold but it works too.
+     */
     class SimplePeakHold {
     public:
         void Reset() noexcept {
@@ -140,4 +140,4 @@ private:
     float reduce_gain_{1.0f};
     float makeup_gain_{};
 };
-}
+} // namespace qwqdsp_fx

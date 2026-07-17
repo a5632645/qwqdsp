@@ -11,8 +11,8 @@
 #include <qwqdsp/spectral/real_fft_adv.hpp>
 #include <qwqdsp/window/blackman_harris.hpp>
 #include <qwqdsp/window/blackman_harris_3term.hpp>
-#include <qwqdsp/window/window.hpp>
 #include <qwqdsp/window/helper.hpp>
+#include <qwqdsp/window/window.hpp>
 
 #include "raylib.h"
 
@@ -204,7 +204,8 @@ struct TfDerivativeReassignmentFrame {
             float dB;
             if (weight_buf_[y] < kMinWeight) {
                 dB = dbFloor_;
-            } else {
+            }
+            else {
                 float avg = col_buf_[y] / weight_buf_[y];
                 dB = 20.0f * std::log10(avg + kDbEps);
             }

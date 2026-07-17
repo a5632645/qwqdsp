@@ -44,7 +44,6 @@ public:
     size_t FFTSize() const noexcept {
         return GetFFTSize();
     }
-
 private:
 #if defined(QWQDSP_HAVE_IPP)
     IppRealFFT backend_;

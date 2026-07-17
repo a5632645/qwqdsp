@@ -1,6 +1,6 @@
 #pragma once
-#include <vector>
 #include <cstddef>
+#include <vector>
 
 namespace qwqdsp_filter {
 class IntDelay {
@@ -46,4 +46,4 @@ private:
     size_t wpos_{};
     size_t mask_{};
 };
-}
+} // namespace qwqdsp_filter

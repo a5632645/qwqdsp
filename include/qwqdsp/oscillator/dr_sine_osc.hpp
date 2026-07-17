@@ -51,4 +51,4 @@ private:
     float cos1_{};
     float coeff_{};
 };
-}
+} // namespace qwqdsp_oscillator

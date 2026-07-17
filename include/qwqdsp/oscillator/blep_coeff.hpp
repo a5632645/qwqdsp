@@ -1,7 +1,7 @@
 #pragma once
 #include <cmath>
-#include <numbers>
 #include <complex>
+#include <numbers>
 
 namespace qwqdsp_oscillator::blep_coeff {
 static constexpr float x2(float x) noexcept {
@@ -58,21 +58,17 @@ struct Hann {
 struct BSpline {
     static constexpr float kHalfLen = 2.0f;
     static constexpr float GetBlepHalf(float x) noexcept {
-        const float is_less_than_one_mask = x - 1.0f; 
+        const float is_less_than_one_mask = x - 1.0f;
         const float result_if_less = (x2(x) - 2.0f) * (6.0f - 8.0f * x + 3.0f * x2(x)) / 24.0f;
         const float result_if_greater = -x4(x - 2.0f) / 24.0f;
-        return (is_less_than_one_mask < 0.0f) 
-            ? result_if_less 
-            : result_if_greater;
+        return (is_less_than_one_mask < 0.0f) ? result_if_less : result_if_greater;
     }
 
     static constexpr float GetBlampHalf(float x) noexcept {
-        const float is_less_than_one_mask = x - 1.0f; 
+        const float is_less_than_one_mask = x - 1.0f;
         const float result_if_less = (28.0f - 60.0f * x + 40.0f * x2(x) - 10.0f * x4(x) + 3.0f * x5(x)) / 120.0f;
         const float result_if_greater = -x5(x - 2.0f) / 120.0f;
-        return (is_less_than_one_mask < 0.0f) 
-            ? result_if_less 
-            : result_if_greater;
+        return (is_less_than_one_mask < 0.0f) ? result_if_less : result_if_greater;
     }
 };
 
@@ -102,12 +98,10 @@ struct BlackmanNutall {
     }
 
     static float GetBlampHalf(float x) noexcept {
-        const float is_less_than_one_mask = x - 1.0f; 
+        const float is_less_than_one_mask = x - 1.0f;
         const float result_if_less = (28.0f - 60.0f * x + 40.0f * x2(x) - 10.0f * x4(x) + 3.0f * x5(x)) / 120.0f;
         const float result_if_greater = -x5(x - 2.0f) / 120.0f;
-        return (is_less_than_one_mask < 0.0f) 
-            ? result_if_less 
-            : result_if_greater;
+        return (is_less_than_one_mask < 0.0f) ? result_if_less : result_if_greater;
     }
 };
 
@@ -124,10 +118,10 @@ struct BlackmanNutallApprox {
         // auto down = 1 - 0.36835659332475467968f * x + 0.28691446911539841256f * x2_
         //     - 0.062945304501047083382f * x3_ + 0.022194671162805943679f * x4_;
         // return up / down - 0.5f;
-        auto up = -6.1021365199045747765e-15f + 0.45843297259388023674f * x
-            - 0.21663097430062709809f * x2_ + 0.045461384847873654394f * x3_;
-        auto down = 1 - 0.47068729933220605095f * x + 0.29689585628509952473f * x2_
-            - 0.081682128563515880655f * x3_ + 0.015452559765959259491f * x4_;
+        auto up = -6.1021365199045747765e-15f + 0.45843297259388023674f * x - 0.21663097430062709809f * x2_
+                + 0.045461384847873654394f * x3_;
+        auto down = 1 - 0.47068729933220605095f * x + 0.29689585628509952473f * x2_ - 0.081682128563515880655f * x3_
+                  + 0.015452559765959259491f * x4_;
         return up / down - 0.5f;
     }
 
@@ -141,10 +135,10 @@ struct BlackmanNutallApprox {
     }
 };
 
-template<class T>
-concept CBlepCoeff = requires (float x) {
-    {T::GetBlepHalf(x)} -> std::same_as<float>;
-    {T::GetBlampHalf(x)} -> std::same_as<float>;
+template <class T>
+concept CBlepCoeff = requires(float x) {
+    { T::GetBlepHalf(x) } -> std::same_as<float>;
+    { T::GetBlampHalf(x) } -> std::same_as<float>;
     T::kHalfLen;
 };
-}
+} // namespace qwqdsp_oscillator::blep_coeff

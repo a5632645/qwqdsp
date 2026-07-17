@@ -1,10 +1,10 @@
 #pragma once
-#include "simd_pack.hpp"
 #include "qwqdsp/misc/smoother.hpp"
+#include "simd_pack.hpp"
 
 namespace qwqdsp_simd_element {
 
-template<size_t N>
+template <size_t N>
 class EnevelopeFollower {
 public:
     void Reset() noexcept {
@@ -78,7 +78,7 @@ private:
         }
 
         PackFloat<N> Tick(PackFloatCRef<N> x) noexcept {
-            auto mask = x  > lag_;
+            auto mask = x > lag_;
             auto factor = PackOps::Select(mask, attack_factor_, release_factor_);
             lag_ = x + factor * (lag_ - x);
             return lag_;

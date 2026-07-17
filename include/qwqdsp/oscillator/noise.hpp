@@ -195,7 +195,7 @@ public:
 
     /**
      * @brief Set the Probability
-     * 
+     *
      * @param v [0,1]
      */
     void SetProbability(float v) noexcept {
@@ -222,7 +222,7 @@ public:
 
     /**
      * @brief Set the Probability
-     * 
+     *
      * @param v [0,1]
      */
     void SetProbability(float v) noexcept {
@@ -254,7 +254,7 @@ public:
 
     /**
      * @brief Set the Probability
-     * 
+     *
      * @param v [0,1]
      */
     void SetProbability(float v) noexcept {

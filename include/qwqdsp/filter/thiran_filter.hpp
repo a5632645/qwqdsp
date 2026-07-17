@@ -1,10 +1,10 @@
 #pragma once
-#include <cstddef>
 #include <array>
 #include <cmath>
+#include <cstddef>
 
 namespace qwqdsp {
-template<size_t N>
+template <size_t N>
 class ThiranFilter {
 public:
     void Reset() noexcept {
@@ -13,14 +13,15 @@ public:
     }
 
     /**
-    * @return how many intergal samples need delay
-    */
+     * @return how many intergal samples need delay
+     */
     size_t Make(float delay) noexcept {
         delay += 0.5f;
         float frac = delay - std::floor(delay);
         float frac_thiran = frac - 0.5f;
         int ret = std::round(delay - 0.5f - frac_thiran - N);
-        if (ret < 0) ret = 0;
+        if (ret < 0)
+            ret = 0;
 
         for (size_t k = 1; k <= N; ++k) {
             float sign = k % 2 == 0 ? 1.0f : -1.0f;
@@ -72,7 +73,7 @@ private:
         return result;
     }
 
-    static constexpr auto kNChooseTable = []{
+    static constexpr auto kNChooseTable = [] {
         std::array<size_t, N> r;
         for (size_t i = 0; i < N; ++i) {
             r[i] = NChoose(N, i + 1);
@@ -84,4 +85,4 @@ private:
     std::array<float, N> y_{};
     std::array<float, N> a_{};
 };
-}
+} // namespace qwqdsp
