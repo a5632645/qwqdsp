@@ -162,8 +162,8 @@ if(QWQDSP_USE_RAYLIB)
     # ── Waveform (GUI) ──
     add_qwqdsp_gui_test(waveform2 gui/waveform2.cpp)
 
-    # ── Voicing Detection (GUI) ──
-    add_qwqdsp_gui_test(voicing_detection gui/voicing/voicing_detection.cpp)
+    # ── Voicing(GUI) ──
+    add_qwqdsp_gui_test(simple_voicing_detection gui/voicing/simple_voicing_detection.cpp)
 
     # ── Synth (GUI) ──
     add_qwqdsp_gui_test(formant_filter gui/synth/formant_filter.cpp NO_MINIAUDIO)

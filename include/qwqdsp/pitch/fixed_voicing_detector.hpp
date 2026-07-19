@@ -91,7 +91,7 @@ struct FixedVoicingDetector {
         return last_prob_;
     }
 
-    /// 调节敏感度（实质为 HP Scale，默认 1.0，越大越易判为清音）
+    // 调节敏感度（实质为 HP Scale，默认 1.0，越大越易判为清音）
     void SetSensitivity(float v) noexcept {
         hp_scale_ = v;
     }
