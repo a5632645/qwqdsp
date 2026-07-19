@@ -8,7 +8,9 @@
 namespace qwqdsp_segement {
 /**
  * @brief 适用于离线处理的分析合成
+ * @tparam zero_pad_tail 输入耗尽后是否填零继续处理
  */
+template <bool zero_pad_tail = false>
 class AnalyzeSynthsisOffline {
 public:
     /**
@@ -63,7 +65,7 @@ public:
             }
         }
         // 填充一堆0
-        {
+        if constexpr (zero_pad_tail) {
             while (input_wpos_ > 0) {
                 size_t need = size_ - input_wpos_;
                 std::fill_n(input_buffer_.begin() + input_wpos_, need, 0.0f);

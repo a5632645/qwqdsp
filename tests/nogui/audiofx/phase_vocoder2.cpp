@@ -402,13 +402,13 @@ static void TestDelta(const char* name, float kt, float kp) {
 }
 
 int main() {
-    Process("ts_1.5x.wav", 1.5f, 1.0f);
-    Process("ps_1.5x.wav", 1.0f, 1.5f);
-    Process("ts1.3_ps1.2.wav", 1.3f, 1.2f);
+    Process("PV2_ts_1.5x.wav", 1.5f, 1.0f);
+    Process("PV2_ps_1.5x.wav", 1.0f, 1.5f);
+    Process("PV2_ts1.5_ps1.5.wav", 1.5f, 1.5f);
 
-    TestDelta("delta_identity.wav", 1.0f, 1.0f);
-    TestDelta("delta_ts1.5.wav", 1.5f, 1.0f);
-    TestDelta("delta_ps1.5.wav", 1.0f, 1.5f);
+    TestDelta("PV2_delta_identity.wav", 1.0f, 1.0f);
+    TestDelta("PV2_delta_ts1.5.wav", 1.5f, 1.0f);
+    TestDelta("PV2_delta_ps1.5.wav", 1.0f, 1.5f);
 
     std::cout << std::format("all done\n") << std::flush;
 }
