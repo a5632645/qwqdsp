@@ -1,5 +1,5 @@
 #pragma once
-#include "qwqdsp/oscillator/table_sine_v3.hpp"
+#include "table_sine_v3.hpp"
 #include <complex>
 #include <cstddef>
 #include <numbers>

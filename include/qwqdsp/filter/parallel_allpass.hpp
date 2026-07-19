@@ -1,6 +1,6 @@
 #pragma once
-#include "qwqdsp/filter/allpass.hpp"
-#include "qwqdsp/filter/rbj.hpp"
+#include "allpass.hpp"
+#include "rbj.hpp"
 
 namespace qwqdsp_filter {
 /**

@@ -1,6 +1,6 @@
 #pragma once
-#include "qwqdsp/oscillator/blep_coeff.hpp"
-#include "qwqdsp/polymath.hpp"
+#include "../polymath.hpp"
+#include "blep_coeff.hpp"
 #include <algorithm>
 
 namespace qwqdsp_oscillator {

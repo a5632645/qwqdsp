@@ -1,7 +1,7 @@
 #pragma once
-#include "qwqdsp/spectral/real_fft_adv.hpp"
-#include "qwqdsp/window/hamming.hpp"
-#include "qwqdsp/window/helper.hpp"
+#include "../window/hamming.hpp"
+#include "../window/helper.hpp"
+#include "real_fft_adv.hpp"
 #include <complex>
 #include <cstddef>
 #include <numbers>

@@ -1,5 +1,5 @@
 #pragma once
-#include "qwqdsp/fx/elliptic_blep.hpp"
+#include "elliptic_blep.hpp"
 
 namespace qwqdsp_fx {
 /**

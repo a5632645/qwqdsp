@@ -1,12 +1,12 @@
 #pragma once
+#include "../segement/analyze_synthsis_online.hpp"
+#include "../spectral/real_fft.hpp"
+#include "../window/blackman.hpp"
+#include "../window/hann.hpp"
 #include <array>
 #include <cmath>
 #include <complex>
 #include <numbers>
-#include <qwqdsp/segement/analyze_synthsis_online.hpp>
-#include <qwqdsp/spectral/real_fft.hpp>
-#include <qwqdsp/window/blackman.hpp>
-#include <qwqdsp/window/hann.hpp>
 #include <span>
 
 namespace qwqdsp_fx {

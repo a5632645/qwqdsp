@@ -1,7 +1,7 @@
 #pragma once
-#include "qwqdsp/pitch/pitch.hpp"
-#include "qwqdsp/pitch/pyin/pyin_core.hpp" // PyinCandidate
-#include "qwqdsp/spectral/real_fft.hpp"
+#include "../../spectral/real_fft.hpp"
+#include "../pitch.hpp"
+#include "../pyin/pyin_core.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
@@ -47,8 +47,7 @@ public:
     // --------------------------------------------------------
     // 处理一帧音频，返回候选基频列表（已按概率降序排列）。
     // 候选不超过 max_candidates 个，概率低于 min_prob 的被过滤。
-    std::vector<PyinCandidate> Process(std::span<const float> block, int max_candidates = 5,
-                                       float min_prob = 0.01f) {
+    std::vector<PyinCandidate> Process(std::span<const float> block, int max_candidates = 5, float min_prob = 0.01f) {
         computeAutocorrelation(block);
         auto peaks = peakPicking();
 

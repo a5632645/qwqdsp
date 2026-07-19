@@ -1,5 +1,5 @@
 #pragma once
-#include "qwqdsp/oscillator/vic_sine_osc.hpp"
+#include "../oscillator/vic_sine_osc.hpp"
 #include <cstddef>
 #include <numbers>
 #include <utility>

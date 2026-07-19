@@ -1,6 +1,6 @@
 #pragma once
-#include "qwqdsp/pitch/pyin/pyin_core.hpp"
-#include "qwqdsp/pitch/pyin/pyin_hmm.hpp"
+#include "pyin/pyin_core.hpp"
+#include "pyin/pyin_hmm.hpp"
 #include <algorithm>
 #include <cmath>
 #include <limits>

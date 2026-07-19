@@ -1,6 +1,6 @@
 #pragma once
-#include "qwqdsp/pitch/pitch.hpp"
-#include "qwqdsp/spectral/real_fft_adv.hpp"
+#include "../../spectral/real_fft_adv.hpp"
+#include "../pitch.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
@@ -55,8 +55,7 @@ public:
     // --------------------------------------------------------
     // 处理一帧音频，返回候选基频列表（已按概率降序排列）。
     // 候选不超过 max_candidates 个，概率低于 min_prob 的被过滤。
-    std::vector<PyinCandidate> Process(std::span<const float> block, int max_candidates = 5,
-                                       float min_prob = 0.01f) {
+    std::vector<PyinCandidate> Process(std::span<const float> block, int max_candidates = 5, float min_prob = 0.01f) {
         fastDifference(block);
         cumulativeMeanNormalizedDifference();
         yinProb(static_cast<size_t>(min_tau_), static_cast<size_t>(max_tau_));

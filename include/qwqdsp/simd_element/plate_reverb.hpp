@@ -1,8 +1,8 @@
 #pragma once
-#include "qwqdsp/convert.hpp"
-#include "qwqdsp/simd_element/delay_allpass.hpp"
-#include "qwqdsp/simd_element/delay_line_single.hpp"
-#include "qwqdsp/simd_element/one_pole_tpt.hpp"
+#include "../convert.hpp"
+#include "delay_allpass.hpp"
+#include "delay_line_single.hpp"
+#include "one_pole_tpt.hpp"
 #include <array>
 #include <numbers>
 

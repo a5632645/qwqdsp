@@ -1,6 +1,6 @@
 #pragma once
-#include "qwqdsp/filter/biquad_coeff.hpp"
-#include "qwqdsp/simd_element/simd_pack.hpp"
+#include "../filter/biquad_coeff.hpp"
+#include "simd_pack.hpp"
 
 namespace qwqdsp_simd_element {
 

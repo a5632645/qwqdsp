@@ -1,6 +1,6 @@
 #pragma once
-#include "qwqdsp/pitch/pitch.hpp"
-#include "qwqdsp/spectral/real_fft_adv.hpp"
+#include "../spectral/real_fft_adv.hpp"
+#include "pitch.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstddef>

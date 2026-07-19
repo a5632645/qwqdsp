@@ -1,5 +1,5 @@
 #pragma once
-#include "qwqdsp/segement/slice.hpp"
+#include "../segement/slice.hpp"
 #include <algorithm>
 #include <cstddef>
 #include <span>

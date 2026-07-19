@@ -1,6 +1,6 @@
 #pragma once
-#include "qwqdsp/filter/analog_responce.hpp"
-#include "qwqdsp/filter/biquad_coeff.hpp"
+#include "analog_responce.hpp"
+#include "biquad_coeff.hpp"
 #include <algorithm>
 #include <array>
 #include <cmath>

@@ -1,5 +1,5 @@
 #pragma once
-#include "qwqdsp/misc/smoother.hpp"
+#include "../misc/smoother.hpp"
 #include "simd_pack.hpp"
 
 namespace qwqdsp_simd_element {

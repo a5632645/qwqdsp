@@ -1,5 +1,5 @@
 #pragma once
-#include "qwqdsp/polymath.hpp"
+#include "../polymath.hpp"
 #include <algorithm>
 #include <array>
 #include <cassert>

@@ -1,6 +1,5 @@
 #pragma once
-#include "qwqdsp/spectral/real_fft.hpp"
-
+#include "real_fft.hpp"
 #include <algorithm>
 #include <cassert>
 #include <cmath>

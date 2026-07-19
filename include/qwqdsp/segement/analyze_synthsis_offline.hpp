@@ -17,8 +17,7 @@ public:
      * @tparam Func void(std::span<const float> input, std::span<float> output)
      */
     template <class Func>
-    void Process(std::span<const float> in_span, std::vector<float>& output,
-                 Func&& func) {
+    void Process(std::span<const float> in_span, std::vector<float>& output, Func&& func) {
         // 处理音频
         {
             Slice1D input{in_span};

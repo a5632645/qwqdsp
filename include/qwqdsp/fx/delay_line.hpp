@@ -1,6 +1,6 @@
 #pragma once
-#include "qwqdsp/interpolation.hpp"
-#include "qwqdsp/window/kaiser.hpp"
+#include "../interpolation.hpp"
+#include "../window/kaiser.hpp"
 #include <array>
 #include <cassert>
 #include <cmath>

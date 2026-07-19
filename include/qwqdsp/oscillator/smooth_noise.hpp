@@ -1,6 +1,6 @@
 #pragma once
-#include "qwqdsp/interpolation.hpp"
-#include "qwqdsp/oscillator/noise.hpp"
+#include "../interpolation.hpp"
+#include "noise.hpp"
 
 namespace qwqdsp_oscillator {
 class SmoothNoise {

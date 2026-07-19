@@ -1,6 +1,6 @@
 #pragma once
-#include "qwqdsp/misc/integrator.hpp"
-#include "qwqdsp/oscillator/table_sine_v3.hpp"
+#include "../misc/integrator.hpp"
+#include "table_sine_v3.hpp"
 
 namespace qwqdsp_oscillator {
 class Blit {

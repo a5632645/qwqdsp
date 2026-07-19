@@ -1,7 +1,7 @@
 #pragma once
-#include "qwqdsp/convert.hpp"
-#include "qwqdsp/filter/biquad.hpp"
-#include "qwqdsp/filter/rbj.hpp"
+#include "../convert.hpp"
+#include "biquad.hpp"
+#include "rbj.hpp"
 #include <utility>
 
 namespace qwqdsp_filter {

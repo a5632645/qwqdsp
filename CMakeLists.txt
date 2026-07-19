@@ -13,7 +13,7 @@ project(qwqdsp)
 
 # main library
 add_library(qwqdsp INTERFACE)
-target_include_directories(qwqdsp INTERFACE "./include")
+target_include_directories(qwqdsp INTERFACE "include")
 set_target_properties(qwqdsp PROPERTIES CXX_STANDARD 20)
 
 # 仅定义编译宏 — 链接由外部 CMake 负责

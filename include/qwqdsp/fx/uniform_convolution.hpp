@@ -1,8 +1,8 @@
 #pragma once
-#include "qwqdsp/segement/analyze_auto.hpp"
-#include "qwqdsp/segement/slice.hpp"
-#include "qwqdsp/spectral/real_fft_adv.hpp"
-#include "qwqdsp/window/helper.hpp"
+#include "../segement/analyze_auto.hpp"
+#include "../segement/slice.hpp"
+#include "../spectral/real_fft_adv.hpp"
+#include "../window/helper.hpp"
 #include <algorithm>
 #include <cstddef>
 
