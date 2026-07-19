@@ -20,17 +20,14 @@ static constexpr int kProbY = 20;
 static constexpr int kProbW = 740;
 static constexpr int kProbH = 24;
 
-// ---- 帧分析参数 ----
-static constexpr size_t kFrameSize = 2048; // ~42.7ms
-
 // ------------------------------------------------------------
 //  全局状态
 // ------------------------------------------------------------
 static float g_voicing_prob = 0.0f;
 static float g_energy_ratio = 0.0f;
 static float g_threshold = 0.5f;
-static float g_unvoiced_gain_db = -6.0f;
-static float g_voiced_gain_db = 0.0f;
+static float g_unvoiced_gain_db = 10.0f;
+static float g_voiced_gain_db = -10.0f;
 
 // ---- 检测器 ----
 static SubbandVoicingDetector g_detector(kSampleRate);
@@ -57,26 +54,18 @@ extern "C" void MaDuplexCallback(ma_device* pDevice, void* pOutput, const void* 
     if (src == nullptr || dst == nullptr)
         return;
 
-    static size_t s_frame_count = 0;
-
     for (ma_uint32 i = 0; i < frameCount; ++i) {
         float sample = src[i];
 
         g_detector.processSample(sample);
-        ++s_frame_count;
 
-        if (s_frame_count == kFrameSize) {
-            float energy_ratio, rms_linear;
-            float prob = g_detector.frameResult(energy_ratio, rms_linear);
+        float energy_ratio, rms_linear;
+        float prob = g_detector.frameResult(energy_ratio, rms_linear);
 
-            g_voicing_prob = prob;
-            g_energy_ratio = energy_ratio;
-
-            s_frame_count = 0;
-        }
+        g_voicing_prob = prob;
+        g_energy_ratio = energy_ratio;
 
         // ----- 输出: 当前增益 × 采样 -----
-        float prob = g_detector.lastProbability();
         float gain_db = (prob >= g_threshold) ? g_voiced_gain_db : g_unvoiced_gain_db;
         dst[i] = sample * std::pow(10.0f, gain_db / 20.0f);
     }
@@ -288,7 +277,7 @@ int main(void) {
 
     Knob rms_tau_knob;
     rms_tau_knob.set_title("RMS Tau");
-    rms_tau_knob.set_range(0.005f, 0.2f, 0.005f, 0.005f);
+    rms_tau_knob.set_range(0.001f, 0.2f, 0.001f, 0.005f);
     rms_tau_knob.set_bound(490, 260, 200, 50);
     rms_tau_knob.value_to_text_function = [](float v) -> std::string {
         char buf[16];
@@ -300,7 +289,7 @@ int main(void) {
     // ----- Row 4: 增益 -----
     Knob unvoiced_gain_knob;
     unvoiced_gain_knob.set_title("Unvoiced Gain");
-    unvoiced_gain_knob.set_range(-60.0f, 12.0f, 0.5f, -6.0f);
+    unvoiced_gain_knob.set_range(-60.0f, 12.0f, 0.5f, 10.0f);
     unvoiced_gain_knob.set_bound(30, 330, 200, 50);
     unvoiced_gain_knob.value_to_text_function = [](float v) -> std::string {
         char buf[16];
@@ -311,7 +300,7 @@ int main(void) {
 
     Knob voiced_gain_knob;
     voiced_gain_knob.set_title("Voiced Gain");
-    voiced_gain_knob.set_range(-60.0f, 12.0f, 0.5f, 0.0f);
+    voiced_gain_knob.set_range(-60.0f, 12.0f, 0.5f, -10.0f);
     voiced_gain_knob.set_bound(260, 330, 200, 50);
     voiced_gain_knob.value_to_text_function = [](float v) -> std::string {
         char buf[16];
