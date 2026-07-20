@@ -1,8 +1,8 @@
-#include <AudioFile.h>
-#include <audio_ops.hpp>
+#pragma once
+
+#include "scale_helper.hpp"
 #include <qwqdsp/window/hann.hpp>
 #include <qwqdsp/spectral/real_fft.hpp>
-#include <work_dir.hpp>
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -17,84 +17,10 @@
 #include <vector>
 
 // ------------------------------------------------------------
-// ScaleHelper — 调性辅助工具
+// PitchQuantizer6 — 峰域映射 + 纯 PGHI 音高量化器
 // ------------------------------------------------------------
 /**
- * @brief 提供音阶级别上的调性判断与 MIDI 音符查找。
- *
- * 音级 (note class) 映射: 0=C, 1=C#, 2=D, ..., 11=B。
- * 通过位掩码 (uint16_t, 低 12 位) 表示哪些音级被允许。
- */
-struct ScaleHelper {
-    enum class Type : uint8_t {
-        kMajor,         ///< 大调音阶
-        kMinorNatural,  ///< 自然小调
-        kMinorHarmonic, ///< 和声小调
-        kMinorMelodic,  ///< 旋律小调（上行）
-        kChromatic,     ///< 半音阶（全部 12 个音）
-    };
-
-    static constexpr std::array<int, 7> kMajorIntervals{0, 2, 4, 5, 7, 9, 11};
-    static constexpr std::array<int, 7> kMinorNaturalIntervals{0, 2, 3, 5, 7, 8, 10};
-    static constexpr std::array<int, 7> kMinorHarmonicIntervals{0, 2, 3, 5, 7, 8, 11};
-    static constexpr std::array<int, 7> kMinorMelodicIntervals{0, 2, 3, 5, 7, 9, 11};
-    static constexpr std::array<int, 12> kChromaticIntervals{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
-
-    static uint16_t MakeMask(int root, Type type) noexcept {
-        uint16_t mask = 0;
-        std::span<const int> intervals;
-        switch (type) {
-        case Type::kMajor:
-            intervals = kMajorIntervals;
-            break;
-        case Type::kMinorNatural:
-            intervals = kMinorNaturalIntervals;
-            break;
-        case Type::kMinorHarmonic:
-            intervals = kMinorHarmonicIntervals;
-            break;
-        case Type::kMinorMelodic:
-            intervals = kMinorMelodicIntervals;
-            break;
-        case Type::kChromatic:
-            intervals = kChromaticIntervals;
-            break;
-        }
-        for (int iv : intervals) {
-            mask |= static_cast<uint16_t>(1u << ((root + iv) % 12));
-        }
-        return mask;
-    }
-
-    static bool IsAllowed(int note_class, uint16_t mask) noexcept {
-        return (mask >> static_cast<uint16_t>(note_class % 12)) & 1u;
-    }
-
-    static const char* TypeName(Type type) noexcept {
-        switch (type) {
-        case Type::kMajor:
-            return "Major";
-        case Type::kMinorNatural:
-            return "Minor(Natural)";
-        case Type::kMinorHarmonic:
-            return "Minor(Harmonic)";
-        case Type::kMinorMelodic:
-            return "Minor(Melodic)";
-        case Type::kChromatic:
-            return "Chromatic";
-        }
-        return "Unknown";
-    }
-
-    static constexpr const char* kNoteNames[12] = {"C", "C#", "D", "D#", "E", "F",
-                                                    "F#", "G", "G#", "A", "A#", "B"};
-};
-
-// ------------------------------------------------------------
-// PitchQuantizer5 — 峰域映射 + PGHI Phase Lock 音高量化器
-// ------------------------------------------------------------
-/**
- * @brief 使用峰域映射和 PGHI 相位锁定的离线音高量化器。
+ * @brief 使用峰域映射和纯 PGHI 相位投影的离线音高量化器。
  *
  * 原理（与 pitch_shifter2.hpp 的 PhaseVocoder 相同）：
  *   通过相邻样本 FFT 估计局部谱峰的瞬时频率，
@@ -106,7 +32,7 @@ struct ScaleHelper {
  *   bin 可自由移动到任意位置，频率修正不再受 ±fs/(2·hop) 约束。
  */
 template <bool kClampWhenExceed = true>
-class PitchQuantizer5 {
+class PitchQuantizer6 {
 public:
     /**
      * @brief 初始化（直接指定 hop）
@@ -151,9 +77,9 @@ public:
         synth_gain_.resize(num_bins_);
         synth_omega_.resize(num_bins_);
         synth_phase_.assign(num_bins_, 0.0f);
+        pghi_frequency_shift_.assign(num_bins_, 0.0f);
+        pghi_active_.assign(num_bins_, false);
         synth_source_idx_.resize(num_bins_);
-        synth_peak_idx_.resize(num_bins_);
-        source_target_idx_.resize(num_bins_);
         first_frame_ = true;
 
         // 默认调性：C Major
@@ -259,7 +185,7 @@ public:
                 CalcSourcePghi();
             }
 
-            // 为每个源 bin 分配最近的局部谱峰，用于 identity phase locking。
+            // 为每个源 bin 分配最近的局部谱峰，用于峰域整体映射。
             FindSourcePeaks();
 
             // ----------------------------------------------------
@@ -268,8 +194,6 @@ public:
             std::fill(synth_gain_.begin(), synth_gain_.end(), 0.0f);
             std::fill(synth_omega_.begin(), synth_omega_.end(), 0.0f);
             std::fill(synth_source_idx_.begin(), synth_source_idx_.end(), kNoBin);
-            std::fill(synth_peak_idx_.begin(), synth_peak_idx_.end(), kNoBin);
-            std::fill(source_target_idx_.begin(), source_target_idx_.end(), kNoBin);
             std::fill(peak_target_idx_.begin(), peak_target_idx_.end(), kNoBin);
 
             const float inv_omega_bin = 1.0f / omega_per_bin_;
@@ -319,7 +243,6 @@ public:
                     continue;
 
                 const size_t target_idx = static_cast<size_t>(target_signed);
-                source_target_idx_[k] = target_idx;
 
                 // 碰撞处理：保留幅度最大的源
                 if (src_gain_[k] > synth_gain_[target_idx]) {
@@ -330,56 +253,27 @@ public:
                 }
             }
 
-            // 只有仍保留在输出频谱中的峰才能作为相位锁定锚点。
+            // PGHI 提供源域绝对相位；频率平移量按帧积分，避免瞬态频率抖动累积为相位跳变。
             for (size_t k = 1; k + 1 < nb; ++k) {
-                if (synth_source_idx_[k] == kNoBin)
-                    continue;
-
-                const size_t peak_source = src_peak_[synth_source_idx_[k]];
-                const size_t peak_target = source_target_idx_[peak_source];
-                if (peak_target < nb && synth_source_idx_[peak_target] == peak_source)
-                    synth_peak_idx_[k] = peak_target;
-                else
-                    synth_peak_idx_[k] = k;
-            }
-
-            // ----------------------------------------------------
-            // 综合相位递推
-            // ----------------------------------------------------
-            if (first_frame_) {
-                // 第一帧：用分析相位初始化综合相位
-                for (size_t k = 0; k < nb; ++k) {
-                    if (synth_source_idx_[k] != kNoBin)
-                        synth_phase_[k] = src_phase_[synth_source_idx_[k]];
-                }
-                first_frame_ = false;
-            }
-            else {
-                for (size_t k = 0; k < nb; ++k) {
-                    if (synth_gain_[k] > 0.0f) {
-                        synth_phase_[k] += synth_omega_[k] * static_cast<float>(H);
-                        synth_phase_[k] = WrapPi(synth_phase_[k]);
-                    }
-                    else {
-                        // 无内容的 bin：按 bin 中心频率递推
-                        synth_phase_[k] += omega_per_bin_ * static_cast<float>(k)
-                                           * static_cast<float>(H);
-                        synth_phase_[k] = WrapPi(synth_phase_[k]);
-                    }
-                }
-            }
-
-            // Identity phase locking：保持每个谱峰邻域内的分析相对相位。
-            for (size_t k = 1; k + 1 < nb; ++k) {
-                const size_t peak_target = synth_peak_idx_[k];
-                if (peak_target == kNoBin || peak_target == k)
-                    continue;
-
                 const size_t source = synth_source_idx_[k];
-                const size_t peak_source = synth_source_idx_[peak_target];
-                const float relative_phase = WrapPi(src_pghi_phase_[source] - src_pghi_phase_[peak_source]);
-                synth_phase_[k] = WrapPi(synth_phase_[peak_target] + relative_phase);
+                if (source == kNoBin) {
+                    pghi_frequency_shift_[k] = 0.0f;
+                    pghi_active_[k] = false;
+                    continue;
+                }
+
+                if (!pghi_active_[k]) {
+                    pghi_frequency_shift_[k] = 0.0f;
+                    pghi_active_[k] = true;
+                }
+                else {
+                    pghi_frequency_shift_[k] = WrapPi(
+                        pghi_frequency_shift_[k]
+                        + (synth_omega_[k] - src_omega_[source]) * static_cast<float>(H));
+                }
+                synth_phase_[k] = WrapPi(src_pghi_phase_[source] + pghi_frequency_shift_[k]);
             }
+            first_frame_ = false;
 
             // ----------------------------------------------------
             // 综合：重构频谱 → IFFT → 加窗 → OLA
@@ -428,6 +322,8 @@ public:
     void Reset() noexcept {
         first_frame_ = true;
         std::fill(synth_phase_.begin(), synth_phase_.end(), 0.0f);
+        std::fill(pghi_frequency_shift_.begin(), pghi_frequency_shift_.end(), 0.0f);
+        std::fill(pghi_active_.begin(), pghi_active_.end(), false);
         std::fill(prev_src_re_.begin(), prev_src_re_.end(), 0.0f);
         std::fill(prev_src_im_.begin(), prev_src_im_.end(), 0.0f);
         std::fill(prev_src_pghi_phase_.begin(), prev_src_pghi_phase_.end(), 0.0f);
@@ -446,7 +342,7 @@ private:
      * @brief 在源频谱域使用群延迟重建当前帧相位。
      *
      * 时间方向由前一帧的 PGHI 相位传播，频率方向通过相邻源 bin 的
-     * 群延迟传播。结果仅用于 phase lock 的峰域相对相位。
+     * 群延迟传播。结果作为目标频谱的纯 PGHI 相位投影基准。
      */
     void CalcSourcePghi() {
         const float analysis_hop = static_cast<float>(hop_size_) / static_cast<float>(fft_size_);
@@ -643,45 +539,7 @@ private:
     std::vector<float> synth_gain_;
     std::vector<float> synth_omega_;
     std::vector<float> synth_phase_;
+    std::vector<float> pghi_frequency_shift_;
+    std::vector<bool> pghi_active_;
     std::vector<size_t> synth_source_idx_;
-    std::vector<size_t> synth_peak_idx_;
-    std::vector<size_t> source_target_idx_;
 };
-
-// ------------------------------------------------------------
-// main
-// ------------------------------------------------------------
-int main() {
-    const auto wav_path = qwqdsp_support::WormholeWav();
-    // const auto wav_path = qwqdsp_support::InputFile("drumloop.wav");
-    std::cout << std::format("loading {}\n", wav_path) << std::flush;
-
-    AudioFile<float> file{wav_path};
-    auto& x_vec = file.samples.front();
-    const float fs = file.getSampleRate();
-    std::cout << std::format("sample_rate={}, len={}\n", fs, x_vec.size()) << std::flush;
-
-    constexpr size_t kFftSize = 2048;
-
-    // 使用 Init2：由最大修正频率自动计算 hop
-    // bin-mapping 模式无硬性上限，这里设一个合理的值控制 hop
-    PitchQuantizer5<true> pq;
-    pq.Init(fs, kFftSize / 4, kFftSize);
-
-    // 调性: C Major
-    pq.SetKey(0, ScaleHelper::Type::kMajor);
-    std::cout << std::format("key: {}\n", pq.KeyDescription()) << std::flush;
-
-    auto out = pq.Process(x_vec);
-    std::cout << std::format("output len={}\n", out.size()) << std::flush;
-
-    qwqdsp_support::AudioOps::Normalize(out);
-
-    file.setNumSamplesPerChannel(out.size());
-    file.samples[0] = out;
-    file.setNumChannels(1);
-    file.save(qwqdsp_support::OutputFile("pitch_quantizer5_pghi.wav"));
-
-    std::cout << "saved pitch_quantizer5_pghi.wav\n" << std::flush;
-    return 0;
-}

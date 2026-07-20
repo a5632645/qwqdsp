@@ -1,8 +1,8 @@
-#include <AudioFile.h>
-#include <audio_ops.hpp>
+#pragma once
+
+#include "scale_helper.hpp"
 #include <qwqdsp/window/hann.hpp>
 #include <qwqdsp/spectral/real_fft.hpp>
-#include <work_dir.hpp>
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -17,84 +17,10 @@
 #include <vector>
 
 // ------------------------------------------------------------
-// ScaleHelper — 调性辅助工具
+// PitchQuantizer5 — 峰域映射 + PGHI Phase Lock 音高量化器
 // ------------------------------------------------------------
 /**
- * @brief 提供音阶级别上的调性判断与 MIDI 音符查找。
- *
- * 音级 (note class) 映射: 0=C, 1=C#, 2=D, ..., 11=B。
- * 通过位掩码 (uint16_t, 低 12 位) 表示哪些音级被允许。
- */
-struct ScaleHelper {
-    enum class Type : uint8_t {
-        kMajor,         ///< 大调音阶
-        kMinorNatural,  ///< 自然小调
-        kMinorHarmonic, ///< 和声小调
-        kMinorMelodic,  ///< 旋律小调（上行）
-        kChromatic,     ///< 半音阶（全部 12 个音）
-    };
-
-    static constexpr std::array<int, 7> kMajorIntervals{0, 2, 4, 5, 7, 9, 11};
-    static constexpr std::array<int, 7> kMinorNaturalIntervals{0, 2, 3, 5, 7, 8, 10};
-    static constexpr std::array<int, 7> kMinorHarmonicIntervals{0, 2, 3, 5, 7, 8, 11};
-    static constexpr std::array<int, 7> kMinorMelodicIntervals{0, 2, 3, 5, 7, 9, 11};
-    static constexpr std::array<int, 12> kChromaticIntervals{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
-
-    static uint16_t MakeMask(int root, Type type) noexcept {
-        uint16_t mask = 0;
-        std::span<const int> intervals;
-        switch (type) {
-        case Type::kMajor:
-            intervals = kMajorIntervals;
-            break;
-        case Type::kMinorNatural:
-            intervals = kMinorNaturalIntervals;
-            break;
-        case Type::kMinorHarmonic:
-            intervals = kMinorHarmonicIntervals;
-            break;
-        case Type::kMinorMelodic:
-            intervals = kMinorMelodicIntervals;
-            break;
-        case Type::kChromatic:
-            intervals = kChromaticIntervals;
-            break;
-        }
-        for (int iv : intervals) {
-            mask |= static_cast<uint16_t>(1u << ((root + iv) % 12));
-        }
-        return mask;
-    }
-
-    static bool IsAllowed(int note_class, uint16_t mask) noexcept {
-        return (mask >> static_cast<uint16_t>(note_class % 12)) & 1u;
-    }
-
-    static const char* TypeName(Type type) noexcept {
-        switch (type) {
-        case Type::kMajor:
-            return "Major";
-        case Type::kMinorNatural:
-            return "Minor(Natural)";
-        case Type::kMinorHarmonic:
-            return "Minor(Harmonic)";
-        case Type::kMinorMelodic:
-            return "Minor(Melodic)";
-        case Type::kChromatic:
-            return "Chromatic";
-        }
-        return "Unknown";
-    }
-
-    static constexpr const char* kNoteNames[12] = {"C", "C#", "D", "D#", "E", "F",
-                                                    "F#", "G", "G#", "A", "A#", "B"};
-};
-
-// ------------------------------------------------------------
-// PitchQuantizer2 — 基于 Bin-mapping Phase Vocoder 的音高量化器
-// ------------------------------------------------------------
-/**
- * @brief 基于 bin-mapping 相位声码器的离线音高量化器。
+ * @brief 使用峰域映射和 PGHI 相位锁定的离线音高量化器。
  *
  * 原理（与 pitch_shifter2.hpp 的 PhaseVocoder 相同）：
  *   通过相邻样本 FFT 估计局部谱峰的瞬时频率，
@@ -106,7 +32,7 @@ struct ScaleHelper {
  *   bin 可自由移动到任意位置，频率修正不再受 ±fs/(2·hop) 约束。
  */
 template <bool kClampWhenExceed = true>
-class PitchQuantizer2 {
+class PitchQuantizer5 {
 public:
     /**
      * @brief 初始化（直接指定 hop）
@@ -647,41 +573,3 @@ private:
     std::vector<size_t> synth_peak_idx_;
     std::vector<size_t> source_target_idx_;
 };
-
-// ------------------------------------------------------------
-// main
-// ------------------------------------------------------------
-int main() {
-    const auto wav_path = qwqdsp_support::WormholeWav();
-    // const auto wav_path = qwqdsp_support::InputFile("drumloop.wav");
-    std::cout << std::format("loading {}\n", wav_path) << std::flush;
-
-    AudioFile<float> file{wav_path};
-    auto& x_vec = file.samples.front();
-    const float fs = file.getSampleRate();
-    std::cout << std::format("sample_rate={}, len={}\n", fs, x_vec.size()) << std::flush;
-
-    constexpr size_t kFftSize = 2048;
-
-    // 使用 Init2：由最大修正频率自动计算 hop
-    // bin-mapping 模式无硬性上限，这里设一个合理的值控制 hop
-    PitchQuantizer2<true> pq;
-    pq.Init(fs, kFftSize / 4, kFftSize);
-
-    // 调性: C Major
-    pq.SetKey(0, ScaleHelper::Type::kMajor);
-    std::cout << std::format("key: {}\n", pq.KeyDescription()) << std::flush;
-
-    auto out = pq.Process(x_vec);
-    std::cout << std::format("output len={}\n", out.size()) << std::flush;
-
-    qwqdsp_support::AudioOps::Normalize(out);
-
-    file.setNumSamplesPerChannel(out.size());
-    file.samples[0] = out;
-    file.setNumChannels(1);
-    file.save(qwqdsp_support::OutputFile("pitch_quantizer3.wav"));
-
-    std::cout << "saved pitch_quantizer2.wav\n" << std::flush;
-    return 0;
-}
