@@ -39,8 +39,9 @@ struct FixedVoicingDetector {
     FixedVoicingDetector() noexcept = default;
 
     void Init(float sample_rate) noexcept {
-        float alpha = 1.0f - std::exp(-1.0f / (kRmsTau * sample_rate));
-        rms_alpha_ = alpha;
+        sample_rate_ = sample_rate;
+        rms_tau_ = kRmsTau;
+        UpdateRmsAlpha();
 
         float const kQ = std::numbers::sqrt2_v<float> / 2.0f;
         float const w_lp = 2.0f * std::numbers::pi_v<float> * kLpFreq / sample_rate;
@@ -95,7 +96,17 @@ struct FixedVoicingDetector {
     void SetSensitivity(float v) noexcept {
         hp_scale_ = v;
     }
+
+    // 设置 RMS 时间常数（秒），默认 0.005 (5 ms)
+    void SetRmsTau(float tau_sec) noexcept {
+        rms_tau_ = tau_sec;
+        UpdateRmsAlpha();
+    }
 private:
+    void UpdateRmsAlpha() noexcept {
+        rms_alpha_ = 1.0 - std::exp(-1.0 / (rms_tau_ * sample_rate_));
+    }
+
     static float ProbabilityFromRatio(float rms, float ratio) noexcept {
         if (rms < kSilenceRms)
             return 0.0f;
@@ -112,6 +123,8 @@ private:
     double hp_mean_sq_ = 0.0;
 
     double rms_alpha_ = 1.0;
+    float sample_rate_ = 0.0f;
+    float rms_tau_ = 0.005f;
     float hp_scale_ = 1.0f;
     float last_prob_ = 0.0f;
 };

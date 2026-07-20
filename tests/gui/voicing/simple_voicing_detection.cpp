@@ -34,7 +34,7 @@ static SubbandVoicingDetector g_detector(kSampleRate);
 
 /// 将检测器参数同步为 FixedVoicingDetector 默认值
 static void InitDetectorDefaults() noexcept {
-    g_detector.setLpFreq(500.0f);
+    g_detector.setLpFreq(2000.0f);
     g_detector.setHpFreq(5000.0f);
     g_detector.setDelta(0.0001f);
     g_detector.setCenter(0.0f);
