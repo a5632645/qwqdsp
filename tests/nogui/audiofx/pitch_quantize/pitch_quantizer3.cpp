@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <format>
 #include <iostream>
+#include <limits>
 #include <numbers>
 #include <span>
 #include <vector>
@@ -96,15 +97,10 @@ struct ScaleHelper {
  * @brief 基于 bin-mapping 相位声码器的离线音高量化器。
  *
  * 原理（与 pitch_shifter2.hpp 的 PhaseVocoder 相同）：
- *   通过相邻样本 FFT 估计每个 bin 的瞬时频率，
- *   将幅度和相位重新映射到目标 MIDI 音符对应的 bin 位置，
+ *   通过相邻样本 FFT 估计局部谱峰的瞬时频率，
+ *   将谱峰量化到目标 MIDI 音符对应的 bin 位置，
+ *   并将峰域内的 bin 整体平移以保留频谱邻域和相位关系。
  *   碰撞时保留幅度最大的 bin，再递推综合相位。
- *
- * @details 综合相位递推采用 **Identity Phase Locking（Puckette 式）**：
- *   检测合成幅度谱的局部峰值，每个 bin 分配到最近峰值区域；
- *   峰值 bin 独立按瞬时频率递推相位；
- *   非峰值 bin 锁定到所属峰值的相位 + 线性 FFT 偏移 (k-p)·(2π/N)·H。
- *   这抑制了独立相位传播导致的「phasiness」金属感音染。
  *
  * 优势：
  *   bin 可自由移动到任意位置，频率修正不再受 ±fs/(2·hop) 约束。
@@ -139,9 +135,25 @@ public:
         // 复数格式的分析/综合缓冲
         src_gain_.resize(num_bins_);
         src_omega_.resize(num_bins_);
+        src_phase_.resize(num_bins_);
+        src_re_.resize(num_bins_);
+        src_im_.resize(num_bins_);
+        prev_src_re_.resize(num_bins_);
+        prev_src_im_.resize(num_bins_);
+        src_pghi_phase_.resize(num_bins_);
+        prev_src_pghi_phase_.resize(num_bins_);
+        pghi_done_.resize(num_bins_);
+        pghi_heap_.reserve(2 * num_bins_);
+        src_peak_.resize(num_bins_);
+        peak_bins_.reserve(num_bins_);
+        peak_target_idx_.resize(num_bins_);
+        peak_target_omega_.resize(num_bins_);
         synth_gain_.resize(num_bins_);
         synth_omega_.resize(num_bins_);
         synth_phase_.assign(num_bins_, 0.0f);
+        synth_source_idx_.resize(num_bins_);
+        synth_peak_idx_.resize(num_bins_);
+        source_target_idx_.resize(num_bins_);
         first_frame_ = true;
 
         // 默认调性：C Major
@@ -235,26 +247,44 @@ public:
 
                 src_gain_[k] = gain;
                 src_omega_[k] = omega;
+                src_phase_[k] = std::atan2(im0, re0);
+                src_re_[k] = re0;
+                src_im_[k] = im0;
             }
 
+            if (first_frame_) {
+                src_pghi_phase_ = src_phase_;
+            }
+            else {
+                CalcSourcePghi();
+            }
+
+            // 为每个源 bin 分配最近的局部谱峰，用于 identity phase locking。
+            FindSourcePeaks();
+
             // ----------------------------------------------------
-            // Bin 重映射：源 bin → 目标 MIDI 音符位置
+            // 峰域重映射：源峰 → 目标 MIDI 峰，邻域整体平移
             // ----------------------------------------------------
             std::fill(synth_gain_.begin(), synth_gain_.end(), 0.0f);
             std::fill(synth_omega_.begin(), synth_omega_.end(), 0.0f);
+            std::fill(synth_source_idx_.begin(), synth_source_idx_.end(), kNoBin);
+            std::fill(synth_peak_idx_.begin(), synth_peak_idx_.end(), kNoBin);
+            std::fill(source_target_idx_.begin(), source_target_idx_.end(), kNoBin);
+            std::fill(peak_target_idx_.begin(), peak_target_idx_.end(), kNoBin);
 
             const float inv_omega_bin = 1.0f / omega_per_bin_;
 
-            for (size_t k = 0; k < nb; ++k) {
-                if (k == 0 || k == N / 2 || src_gain_[k] < 1e-6f)
+            // 仅量化局部谱峰；峰域内的其他 bin 跟随峰整体移动。
+            for (const size_t peak : peak_bins_) {
+                if (src_gain_[peak] < 1e-6f)
                     continue;
 
                 // 瞬时频率 (Hz)
-                const float f_inst = src_omega_[k] * fs_over_2pi_;
+                const float f_inst = src_omega_[peak] * fs_over_2pi_;
                 // 最近允许 MIDI 频率
                 const float f_midi = FindNearestAllowedMidi(f_inst);
                 // 目标 omega (rad/sample)
-                float omega_target = f_midi / fs_over_2pi_;
+                const float omega_target = f_midi / fs_over_2pi_;
 
                 if constexpr (!kClampWhenExceed) {
                     // 检查是否需要跳过
@@ -266,87 +296,69 @@ public:
 
                 // 目标 bin 索引
                 size_t target_idx = static_cast<size_t>(omega_target * inv_omega_bin + 0.5f);
-                if (target_idx >= nb)
-                    target_idx = nb - 1;
-                if (target_idx == 0)
-                    target_idx = 1;
+                if (target_idx == 0 || target_idx >= nb - 1)
+                    continue;
+
+                peak_target_idx_[peak] = target_idx;
+                peak_target_omega_[peak] = omega_target;
+            }
+
+            for (size_t k = 1; k + 1 < nb; ++k) {
+                if (src_gain_[k] < 1e-6f)
+                    continue;
+
+                const size_t peak = src_peak_[k];
+                const size_t peak_target = peak_target_idx_[peak];
+                if (peak_target == kNoBin)
+                    continue;
+
+                const std::ptrdiff_t offset = static_cast<std::ptrdiff_t>(k)
+                                              - static_cast<std::ptrdiff_t>(peak);
+                const std::ptrdiff_t target_signed = static_cast<std::ptrdiff_t>(peak_target) + offset;
+                if (target_signed <= 0 || target_signed >= static_cast<std::ptrdiff_t>(nb - 1))
+                    continue;
+
+                const size_t target_idx = static_cast<size_t>(target_signed);
+                source_target_idx_[k] = target_idx;
 
                 // 碰撞处理：保留幅度最大的源
                 if (src_gain_[k] > synth_gain_[target_idx]) {
                     synth_gain_[target_idx] = src_gain_[k];
-                    synth_omega_[target_idx] = omega_target;
+                    synth_omega_[target_idx] = peak_target_omega_[peak]
+                                               + omega_per_bin_ * static_cast<float>(offset);
+                    synth_source_idx_[target_idx] = k;
                 }
             }
 
-            // ----------------------------------------------------
-            // 综合相位递推（Phase-locked）
-            // ----------------------------------------------------
-            // 检测合成谱峰值，分配每个 bin 到最近峰值
-            std::vector<size_t> peak_map(nb);
-            {
-                // 前向扫描：找到左侧最近峰值
-                size_t nearest_left = 0;
-                for (size_t k = 0; k < nb; ++k) {
-                    if (k > 0 && k < nb - 1 &&
-                        synth_gain_[k] > synth_gain_[k - 1] &&
-                        synth_gain_[k] > synth_gain_[k + 1]) {
-                        nearest_left = k;
-                    }
-                    peak_map[k] = nearest_left;
-                }
-                // 后向扫描：选择更近的峰值
-                size_t nearest_right = nb - 1;
-                for (size_t k = nb; k > 0;) {
-                    --k;
-                    if (k > 0 && k < nb - 1 &&
-                        synth_gain_[k] > synth_gain_[k - 1] &&
-                        synth_gain_[k] > synth_gain_[k + 1]) {
-                        nearest_right = k;
-                    }
-                    const size_t left = peak_map[k];
-                    const size_t right = nearest_right;
-                    if (right - k < k - left)
-                        peak_map[k] = right;
-                }
+            // 只有仍保留在输出频谱中的峰才能作为相位锁定锚点。
+            for (size_t k = 1; k + 1 < nb; ++k) {
+                if (synth_source_idx_[k] == kNoBin)
+                    continue;
+
+                const size_t peak_source = src_peak_[synth_source_idx_[k]];
+                const size_t peak_target = source_target_idx_[peak_source];
+                if (peak_target < nb && synth_source_idx_[peak_target] == peak_source)
+                    synth_peak_idx_[k] = peak_target;
+                else
+                    synth_peak_idx_[k] = k;
             }
 
+            // ----------------------------------------------------
+            // 综合相位递推
+            // ----------------------------------------------------
             if (first_frame_) {
-                // 第一帧：峰值 bin 用分析相位初始化，非峰值 bin 锁定到最近峰值
+                // 第一帧：用分析相位初始化综合相位
                 for (size_t k = 0; k < nb; ++k) {
-                    const size_t p = peak_map[k];
-                    const float re = fft_buf_delay_[2 * k];
-                    const float im = fft_buf_delay_[2 * k + 1];
-                    if (p == k) {
-                        synth_phase_[k] = std::atan2(im, re);
-                    }
-                    else {
-                        // 锁定到峰值相位 + 线性 FFT 偏移
-                        const float peak_re = fft_buf_delay_[2 * p];
-                        const float peak_im = fft_buf_delay_[2 * p + 1];
-                        const float peak_phase = std::atan2(peak_im, peak_re);
-                        synth_phase_[k] = peak_phase
-                            + static_cast<float>(static_cast<int>(k) - static_cast<int>(p))
-                              * omega_per_bin_ * static_cast<float>(H);
-                    }
+                    if (synth_source_idx_[k] != kNoBin)
+                        synth_phase_[k] = src_phase_[synth_source_idx_[k]];
                 }
                 first_frame_ = false;
             }
             else {
                 for (size_t k = 0; k < nb; ++k) {
-                    const size_t p = peak_map[k];
                     if (synth_gain_[k] > 0.0f) {
-                        if (p == k) {
-                            // 峰值 bin：独立传播
-                            synth_phase_[k] += synth_omega_[k] * static_cast<float>(H);
-                            synth_phase_[k] = WrapPi(synth_phase_[k]);
-                        }
-                        else {
-                            // 非峰值 bin：锁定到峰值相位
-                            synth_phase_[k] = synth_phase_[p]
-                                + static_cast<float>(static_cast<int>(k) - static_cast<int>(p))
-                                  * omega_per_bin_ * static_cast<float>(H);
-                            synth_phase_[k] = WrapPi(synth_phase_[k]);
-                        }
+                        synth_phase_[k] += synth_omega_[k] * static_cast<float>(H);
+                        synth_phase_[k] = WrapPi(synth_phase_[k]);
                     }
                     else {
                         // 无内容的 bin：按 bin 中心频率递推
@@ -355,6 +367,18 @@ public:
                         synth_phase_[k] = WrapPi(synth_phase_[k]);
                     }
                 }
+            }
+
+            // Identity phase locking：保持每个谱峰邻域内的分析相对相位。
+            for (size_t k = 1; k + 1 < nb; ++k) {
+                const size_t peak_target = synth_peak_idx_[k];
+                if (peak_target == kNoBin || peak_target == k)
+                    continue;
+
+                const size_t source = synth_source_idx_[k];
+                const size_t peak_source = synth_source_idx_[peak_target];
+                const float relative_phase = WrapPi(src_pghi_phase_[source] - src_pghi_phase_[peak_source]);
+                synth_phase_[k] = WrapPi(synth_phase_[peak_target] + relative_phase);
             }
 
             // ----------------------------------------------------
@@ -373,6 +397,10 @@ public:
             for (size_t j = 0; j < N; ++j) {
                 output[i * H + j] += fft_buf_delay_[j] * window_[j];
             }
+
+            std::swap(prev_src_re_, src_re_);
+            std::swap(prev_src_im_, src_im_);
+            std::swap(prev_src_pghi_phase_, src_pghi_phase_);
         }
 
         // ---- OLA 增益归一化 ----
@@ -400,9 +428,126 @@ public:
     void Reset() noexcept {
         first_frame_ = true;
         std::fill(synth_phase_.begin(), synth_phase_.end(), 0.0f);
+        std::fill(prev_src_re_.begin(), prev_src_re_.end(), 0.0f);
+        std::fill(prev_src_im_.begin(), prev_src_im_.end(), 0.0f);
+        std::fill(prev_src_pghi_phase_.begin(), prev_src_pghi_phase_.end(), 0.0f);
     }
 
 private:
+    static constexpr size_t kNoBin = std::numeric_limits<size_t>::max();
+
+    struct PghiHeapItem {
+        float gain;
+        size_t bin;
+        bool is_previous;
+    };
+
+    /**
+     * @brief 在源频谱域使用群延迟重建当前帧相位。
+     *
+     * 时间方向由前一帧的 PGHI 相位传播，频率方向通过相邻源 bin 的
+     * 群延迟传播。结果仅用于 phase lock 的峰域相对相位。
+     */
+    void CalcSourcePghi() {
+        const float analysis_hop = static_cast<float>(hop_size_) / static_cast<float>(fft_size_);
+        const float two_pi_hop = 2.0f * std::numbers::pi_v<float> * analysis_hop;
+
+        std::fill(pghi_done_.begin(), pghi_done_.end(), false);
+        pghi_heap_.clear();
+        for (size_t k = 0; k < num_bins_; ++k) {
+            const float gain = std::sqrt(prev_src_re_[k] * prev_src_re_[k]
+                                         + prev_src_im_[k] * prev_src_im_[k]);
+            pghi_heap_.push_back({gain, k, true});
+        }
+
+        const auto compare_gain = [](const PghiHeapItem& lhs, const PghiHeapItem& rhs) {
+            return lhs.gain < rhs.gain;
+        };
+        std::make_heap(pghi_heap_.begin(), pghi_heap_.end(), compare_gain);
+
+        size_t processed = 0;
+        while (processed < num_bins_) {
+            std::pop_heap(pghi_heap_.begin(), pghi_heap_.end(), compare_gain);
+            const PghiHeapItem item = pghi_heap_.back();
+            pghi_heap_.pop_back();
+            const size_t k = item.bin;
+
+            if (item.is_previous) {
+                if (pghi_done_[k])
+                    continue;
+
+                const float cr = src_re_[k] * prev_src_re_[k] + src_im_[k] * prev_src_im_[k];
+                const float ci = src_im_[k] * prev_src_re_[k] - src_re_[k] * prev_src_im_[k];
+                const float phase_delta = std::atan2(ci, cr) - two_pi_hop * static_cast<float>(k);
+                src_pghi_phase_[k] = WrapPi(prev_src_pghi_phase_[k] + WrapPi(phase_delta)
+                                             + two_pi_hop * static_cast<float>(k));
+
+                pghi_done_[k] = true;
+                ++processed;
+                const float gain = std::sqrt(src_re_[k] * src_re_[k] + src_im_[k] * src_im_[k]);
+                pghi_heap_.push_back({gain, k, false});
+                std::push_heap(pghi_heap_.begin(), pghi_heap_.end(), compare_gain);
+                continue;
+            }
+
+            const auto propagate = [this, k](size_t neighbor) {
+                const float cr = src_re_[neighbor] * src_re_[k] + src_im_[neighbor] * src_im_[k];
+                const float ci = src_im_[neighbor] * src_re_[k] - src_re_[neighbor] * src_im_[k];
+                const float group_delay = std::atan2(ci, cr);
+                src_pghi_phase_[neighbor] = WrapPi(src_pghi_phase_[k] + group_delay);
+                pghi_done_[neighbor] = true;
+                const float gain = std::sqrt(src_re_[neighbor] * src_re_[neighbor]
+                                             + src_im_[neighbor] * src_im_[neighbor]);
+                pghi_heap_.push_back({gain, neighbor, false});
+                std::push_heap(pghi_heap_.begin(), pghi_heap_.end(),
+                               [](const PghiHeapItem& lhs, const PghiHeapItem& rhs) {
+                                   return lhs.gain < rhs.gain;
+                               });
+            };
+
+            if (k + 1 < num_bins_ && !pghi_done_[k + 1]) {
+                propagate(k + 1);
+                ++processed;
+            }
+            if (k > 0 && !pghi_done_[k - 1]) {
+                propagate(k - 1);
+                ++processed;
+            }
+        }
+    }
+
+    /**
+     * @brief 查找局部谱峰，并为每个源 bin 分配最近的峰。
+     *
+     * 仅使用内部 bin 作为锚点，直流和 Nyquist bin 维持其自身索引。
+     */
+    void FindSourcePeaks() {
+        peak_bins_.clear();
+        for (size_t k = 1; k + 1 < num_bins_; ++k) {
+            const float gain = src_gain_[k];
+            if (gain >= src_gain_[k - 1] && gain >= src_gain_[k + 1]
+                && (gain > src_gain_[k - 1] || gain > src_gain_[k + 1])) {
+                peak_bins_.push_back(k);
+            }
+        }
+
+        if (peak_bins_.empty()) {
+            for (size_t k = 0; k < num_bins_; ++k)
+                src_peak_[k] = k;
+            return;
+        }
+
+        size_t peak_index = 0;
+        for (size_t k = 0; k < num_bins_; ++k) {
+            while (peak_index + 1 < peak_bins_.size()
+                   && k >= peak_bins_[peak_index]
+                               + (peak_bins_[peak_index + 1] - peak_bins_[peak_index] + 1) / 2) {
+                ++peak_index;
+            }
+            src_peak_[k] = peak_bins_[peak_index];
+        }
+    }
+
     static float WrapPi(float x) noexcept {
         constexpr float two_pi = 2.0f * std::numbers::pi_v<float>;
         while (x > std::numbers::pi_v<float>)
@@ -480,18 +625,35 @@ private:
     // 分析结果
     std::vector<float> src_gain_;
     std::vector<float> src_omega_;
+    std::vector<float> src_phase_;
+    std::vector<float> src_re_;
+    std::vector<float> src_im_;
+    std::vector<float> prev_src_re_;
+    std::vector<float> prev_src_im_;
+    std::vector<float> src_pghi_phase_;
+    std::vector<float> prev_src_pghi_phase_;
+    std::vector<bool> pghi_done_;
+    std::vector<PghiHeapItem> pghi_heap_;
+    std::vector<size_t> src_peak_;
+    std::vector<size_t> peak_bins_;
+    std::vector<size_t> peak_target_idx_;
+    std::vector<float> peak_target_omega_;
 
     // 综合结果
     std::vector<float> synth_gain_;
     std::vector<float> synth_omega_;
     std::vector<float> synth_phase_;
+    std::vector<size_t> synth_source_idx_;
+    std::vector<size_t> synth_peak_idx_;
+    std::vector<size_t> source_target_idx_;
 };
 
 // ------------------------------------------------------------
 // main
 // ------------------------------------------------------------
 int main() {
-    const auto wav_path = qwqdsp_support::SweepWav();
+    const auto wav_path = qwqdsp_support::WormholeWav();
+    // const auto wav_path = qwqdsp_support::InputFile("drumloop.wav");
     std::cout << std::format("loading {}\n", wav_path) << std::flush;
 
     AudioFile<float> file{wav_path};
@@ -518,7 +680,7 @@ int main() {
     file.setNumSamplesPerChannel(out.size());
     file.samples[0] = out;
     file.setNumChannels(1);
-    file.save(qwqdsp_support::OutputFile("pitch_quantizer2.wav"));
+    file.save(qwqdsp_support::OutputFile("pitch_quantizer3.wav"));
 
     std::cout << "saved pitch_quantizer2.wav\n" << std::flush;
     return 0;

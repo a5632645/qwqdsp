@@ -451,7 +451,8 @@ private:
 // main
 // ------------------------------------------------------------
 int main() {
-    const auto wav_path = qwqdsp_support::SweepWav();
+    const auto wav_path = qwqdsp_support::WormholeWav();
+    // const auto wav_path = qwqdsp_support::InputFile("drumloop.wav");
     std::cout << std::format("loading {}\n", wav_path) << std::flush;
 
     AudioFile<float> file{wav_path};

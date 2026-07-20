@@ -91,10 +91,10 @@ struct ScaleHelper {
 };
 
 // ------------------------------------------------------------
-// PitchQuantizer2 — 基于 Bin-mapping Phase Vocoder 的音高量化器
+// PitchQuantizer5 — 峰域映射 + PGHI Phase Lock 音高量化器
 // ------------------------------------------------------------
 /**
- * @brief 基于 bin-mapping 相位声码器的离线音高量化器。
+ * @brief 使用峰域映射和 PGHI 相位锁定的离线音高量化器。
  *
  * 原理（与 pitch_shifter2.hpp 的 PhaseVocoder 相同）：
  *   通过相邻样本 FFT 估计局部谱峰的瞬时频率，
@@ -106,7 +106,7 @@ struct ScaleHelper {
  *   bin 可自由移动到任意位置，频率修正不再受 ±fs/(2·hop) 约束。
  */
 template <bool kClampWhenExceed = true>
-class PitchQuantizer2 {
+class PitchQuantizer5 {
 public:
     /**
      * @brief 初始化（直接指定 hop）
@@ -652,7 +652,8 @@ private:
 // main
 // ------------------------------------------------------------
 int main() {
-    const auto wav_path = qwqdsp_support::InputFile("drumloop.wav");
+    const auto wav_path = qwqdsp_support::WormholeWav();
+    // const auto wav_path = qwqdsp_support::InputFile("drumloop.wav");
     std::cout << std::format("loading {}\n", wav_path) << std::flush;
 
     AudioFile<float> file{wav_path};
@@ -664,7 +665,7 @@ int main() {
 
     // 使用 Init2：由最大修正频率自动计算 hop
     // bin-mapping 模式无硬性上限，这里设一个合理的值控制 hop
-    PitchQuantizer2<true> pq;
+    PitchQuantizer5<true> pq;
     pq.Init(fs, kFftSize / 4, kFftSize);
 
     // 调性: C Major
@@ -679,8 +680,8 @@ int main() {
     file.setNumSamplesPerChannel(out.size());
     file.samples[0] = out;
     file.setNumChannels(1);
-    file.save(qwqdsp_support::OutputFile("pitch_quantizer3.wav"));
+    file.save(qwqdsp_support::OutputFile("pitch_quantizer5_pghi.wav"));
 
-    std::cout << "saved pitch_quantizer2.wav\n" << std::flush;
+    std::cout << "saved pitch_quantizer5_pghi.wav\n" << std::flush;
     return 0;
 }
