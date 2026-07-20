@@ -10,8 +10,9 @@
 | 2 | `pitch_quantizer2.cpp` | 每个源 bin 独立映射到最近 MIDI bin，碰撞保留最大幅度 | 目标谱峰递推 + Puckette identity phase lock | `pitch_quantizer2.wav` | 瞬态丢失 | 听起来很流畅 |
 | 3 | `pitch_quantizer3.cpp` | 局部谱峰量化，峰域随峰整体平移 | PGHI 源相位差的 phase lock | `pitch_quantizer3.wav` | 瞬态还行 | 低频有 auto tune 的感觉 |
 | 4 | `pitch_quantizer4.cpp` | 与版本 3 相同 | 原始分析相位差的 phase lock | `pitch_quantizer4_phase_lock.wav` | 瞬态还行 | 低频有 auto tune 的感觉 |
-| 5 | `pitch_quantizer5.cpp` | 与版本 3 相同 | PGHI 源相位差的 phase lock | `pitch_quantizer5_pghi.wav` | 瞬态还行 | 低频有 auto tune 的感觉 |
 | 6 | `pitch_quantizer6.cpp` | 与版本 3 相同 | 纯 PGHI 源绝对相位投影，无 phase lock | `pitch_quantizer6_pure_pghi.wav` | 瞬态丢失 + 大量 music noise | 低中频调制感 |
+
+> 版本 5 与版本 3 代码完全相同，已删除。
 
 ## 共同处理流程
 
@@ -69,26 +70,9 @@ phase(target_bin) = phase(target_peak)
 
 此版本用于判断峰域映射和 phase lock 本身的效果。
 
-**鼓循环瞬态保留较好；人声听感与版本 3、5 相同。**
+**鼓循环瞬态保留较好；人声听感与版本 3 相同。**
 
-## 版本 5：峰域映射 + PGHI Phase Lock
-
-`pitch_quantizer5.cpp` 与版本 4 使用相同的峰域映射和目标峰递推，但将 phase lock 的相对相位替换为 PGHI 结果：
-
-```text
-phase(target_bin) = phase(target_peak)
-                  + wrap(pghi_phase(source_bin)
-                       - pghi_phase(source_peak))
-```
-
-源域 PGHI 使用幅度优先堆：
-
-- 时间方向由前一帧的 PGHI 相位传播；
-- 频率方向由相邻源 bin 的群延迟传播。
-
-版本 3 当前也使用同一算法路径。
-
-**鼓循环瞬态保留较好；人声听感与版本 3、4 相同。**
+> 原版本 5 与版本 3 代码完全相同，已删除。版本 6 序号不变。
 
 ## 版本 6：峰域映射 + 纯 PGHI
 

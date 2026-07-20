@@ -76,12 +76,9 @@ add_qwqdsp_dsp_test(pitch_shifter nogui/audiofx/pitch_shifter.cpp)
 add_qwqdsp_dsp_test(phase_vocoder2 nogui/audiofx/phase_vocoder2.cpp)
 add_qwqdsp_dsp_test(phase_vocoder3 nogui/audiofx/phase_vocoder3.cpp)
 add_qwqdsp_dsp_test(pitch_quantizers nogui/audiofx/pitch_quantizers.cpp)
-
-if(QWQDSP_USE_IPP)
-    add_qwqdsp_dsp_test(auto_notch nogui/audiofx/auto_notch.cpp)
-    add_qwqdsp_dsp_test(wiener_filter nogui/audiofx/wiener_filter.cpp)
-    add_qwqdsp_dsp_test(piwarp nogui/audiofx/piwarp.cpp)
-endif()
+add_qwqdsp_dsp_test(auto_notch nogui/audiofx/auto_notch.cpp)
+add_qwqdsp_dsp_test(wiener_filter nogui/audiofx/wiener_filter.cpp)
+add_qwqdsp_dsp_test(piwarp nogui/audiofx/piwarp.cpp)
 
 # ── Spectral ──
 add_qwqdsp_dsp_test(fft_interpolation nogui/spectral/fft_interpolation.cpp)

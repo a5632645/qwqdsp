@@ -9,7 +9,6 @@
 #include "pitch_quantize/pitch_quantizer2.hpp"
 #include "pitch_quantize/pitch_quantizer3.hpp"
 #include "pitch_quantize/pitch_quantizer4.hpp"
-#include "pitch_quantize/pitch_quantizer5.hpp"
 #include "pitch_quantize/pitch_quantizer6.hpp"
 
 // ------------------------------------------------------------
@@ -82,13 +81,6 @@ int main() {
             RunAndSave(pq, x_vec, fs, "PitchQuantizer4 (v4, peak-domain + raw phase lock)", "pitch_quantizer4_vocal.wav");
         }
 
-        // 版本 5: 峰域映射 + PGHI phase lock
-        {
-            PitchQuantizer5<true> pq;
-            pq.Init(fs, kFftSize / 4, kFftSize);
-            RunAndSave(pq, x_vec, fs, "PitchQuantizer5 (v5, peak-domain + PGHI phase lock)", "pitch_quantizer5_vocal.wav");
-        }
-
         // 版本 6: 峰域映射 + 纯 PGHI
         {
             PitchQuantizer6<true> pq;
@@ -135,13 +127,6 @@ int main() {
             PitchQuantizer4<true> pq;
             pq.Init(fs_drum, kFftSize / 4, kFftSize);
             RunAndSave(pq, x_vec, fs_drum, "PitchQuantizer4 (v4, drumloop)", "pitch_quantizer4_drum.wav");
-        }
-
-        // 版本 5: 峰域映射 + PGHI phase lock (drumloop)
-        {
-            PitchQuantizer5<true> pq;
-            pq.Init(fs_drum, kFftSize / 4, kFftSize);
-            RunAndSave(pq, x_vec, fs_drum, "PitchQuantizer5 (v5, drumloop)", "pitch_quantizer5_drum.wav");
         }
 
         // 版本 6: 峰域映射 + 纯 PGHI (drumloop)
