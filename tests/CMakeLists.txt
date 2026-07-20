@@ -76,6 +76,7 @@ add_qwqdsp_dsp_test(pitch_shifter nogui/audiofx/pitch_shifter.cpp)
 add_qwqdsp_dsp_test(phase_vocoder2 nogui/audiofx/phase_vocoder2.cpp)
 add_qwqdsp_dsp_test(phase_vocoder3 nogui/audiofx/phase_vocoder3.cpp)
 add_qwqdsp_dsp_test(pitch_quantizers nogui/audiofx/pitch_quantizers.cpp)
+
 if(QWQDSP_USE_IPP)
     add_qwqdsp_dsp_test(auto_notch nogui/audiofx/auto_notch.cpp)
     add_qwqdsp_dsp_test(wiener_filter nogui/audiofx/wiener_filter.cpp)
@@ -87,7 +88,6 @@ add_qwqdsp_dsp_test(fft_interpolation nogui/spectral/fft_interpolation.cpp)
 add_qwqdsp_dsp_test(ifft_random_phase nogui/spectral/ifft_random_phase.cpp)
 add_qwqdsp_dsp_test(fft_fold nogui/spectral/fold.cpp)
 
-
 # ── Pitch ──
 add_qwqdsp_dsp_test(pyin nogui/pitch/pyin.cpp)
 add_qwqdsp_dsp_test(pmpm nogui/pitch/pmpm.cpp)
@@ -95,6 +95,7 @@ add_qwqdsp_dsp_test(pmpm-vs-pyin nogui/pitch/pmpm_vs_pyin.cpp)
 add_qwqdsp_dsp_test(pitch_algorithms nogui/pitch/pitch_algorithms.cpp)
 add_qwqdsp_dsp_test(pyin-vis nogui/pitch/pyin_vis.cpp EXTRA_LIBS qwqdsp_support_stb_image)
 add_qwqdsp_dsp_test(vad nogui/pitch/vad.cpp)
+
 if(QWQDSP_USE_EIGEN)
     add_qwqdsp_dsp_test(swift_f0 nogui/pitch/swift_f0.cpp)
     add_qwqdsp_dsp_test(swift_f0-vis nogui/pitch/swift_f0_vis.cpp EXTRA_LIBS qwqdsp_support_stb_image)
@@ -127,15 +128,14 @@ if(QWQDSP_USE_RAYLIB)
     # ── GUI Tests ──
 
     # ── General ──
+    add_qwqdsp_gui_test(interpolations gui/interpolations.cpp)
+    add_qwqdsp_gui_test(auto_notch_rt gui/auto_notch_rt.cpp)
+    add_qwqdsp_gui_test(waveform2 gui/waveform2.cpp)
+
+    # ── AudioFx (GUI) ──
     add_qwqdsp_gui_test(echo gui/audiofx/echo.cpp)
     add_qwqdsp_gui_test(reverb_rt gui/audiofx/reverb.cpp)
-
-    add_qwqdsp_gui_test(reverb_shimmer gui/audiofx/reverb.cpp)
-
-    add_qwqdsp_gui_test(interpolations gui/interpolations.cpp)
-    if(QWQDSP_USE_IPP)
-        add_qwqdsp_gui_test(auto_notch_rt gui/auto_notch_rt.cpp)
-    endif()
+    add_qwqdsp_gui_test(pitch_quantize_rt gui/audiofx/pitch_quantize_rt.cpp)
     add_qwqdsp_gui_test(filters gui/audiofx/filters.cpp NO_MINIAUDIO)
     add_qwqdsp_gui_test(filters2 gui/audiofx/filters2.cpp NO_MINIAUDIO)
 
@@ -149,20 +149,15 @@ if(QWQDSP_USE_RAYLIB)
     add_qwqdsp_gui_test(resonate_bank gui/spectral/resonate_bank.cpp)
     target_compile_options(qwqdsp-resonate_bank PUBLIC -mavx2 -mfma)
 
-    if(QWQDSP_USE_IPP)
-        add_qwqdsp_gui_test(spectrum gui/spectral/spectrum/spectrum.cpp)
-        target_sources(qwqdsp-spectrum PUBLIC gui/spectral/spectrum/spectrum_driver.cpp)
+    add_qwqdsp_gui_test(spectrum gui/spectral/spectrum/spectrum.cpp)
+    target_sources(qwqdsp-spectrum PUBLIC gui/spectral/spectrum/spectrum_driver.cpp)
 
-        add_qwqdsp_gui_test(spectrum2 gui/spectral/spectrum2/spectrum.cpp)
-        target_sources(qwqdsp-spectrum2 PUBLIC gui/spectral/spectrum2/spectrum_driver.cpp)
-    endif()
+    add_qwqdsp_gui_test(spectrum2 gui/spectral/spectrum2/spectrum.cpp)
+    target_sources(qwqdsp-spectrum2 PUBLIC gui/spectral/spectrum2/spectrum_driver.cpp)
 
     add_qwqdsp_gui_test(spectrum3 gui/spectral/spectrum3.cpp)
     add_qwqdsp_gui_test(spectrum4 gui/spectral/spectrum4.cpp)
     add_qwqdsp_gui_test(reassignment gui/spectral/reassignment.cpp)
-
-    # ── Waveform (GUI) ──
-    add_qwqdsp_gui_test(waveform2 gui/waveform2.cpp)
 
     # ── Voicing(GUI) ──
     add_qwqdsp_gui_test(simple_voicing_detection gui/voicing/simple_voicing_detection.cpp)
