@@ -11,7 +11,7 @@ namespace qwqdsp_pitch {
 /**
  * @ref https://github.com/JorenSix/TarsosDSP/blob/master/core/src/main/java/be/tarsos/dsp/pitch/FastYin.java#L197
  */
-class FastYin {
+class Yin {
 public:
     void Init(float fs, int size) {
         fs_ = fs;
@@ -65,6 +65,7 @@ public:
 
             for (int i = 0; i < max_tal; ++i) {
                 delta_corr_[i] = powers_[0] + powers_[i] - 2 * temp_[max_tal - 1 + i]; // why reverse correlation
+                delta_corr_[i] = std::max(delta_corr_[i], 0.0f);
             }
         }
 

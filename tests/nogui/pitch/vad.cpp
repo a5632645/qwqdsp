@@ -1,6 +1,6 @@
 #include <AudioFile.h>
 #include <cmath>
-#include <qwqdsp/pitch/fixed_voicing_detector.hpp>
+#include <qwqdsp/pitch/simple_voicing_detector.hpp>
 #include <vector>
 #include <work_dir.hpp>
 
@@ -17,7 +17,7 @@ int main() {
     size_t const n = x.size();
 
     // ── 检测器 ──
-    qwqdsp_pitch::FixedVoicingDetector detector;
+    qwqdsp_pitch::SimpleVoicingDetector detector;
     detector.Init(fs);
 
     // ── 逐采样处理 ──
@@ -27,10 +27,9 @@ int main() {
     for (size_t i = 0; i < n; ++i) {
         detector.ProcessSample(x[i]);
 
-        float ratio_dummy, rms_dummy;
-        float prob = detector.FrameResult(ratio_dummy, rms_dummy);
+        float prob = detector.FrameResult();
 
-        if (prob >= qwqdsp_pitch::FixedVoicingDetector::kThreshold) {
+        if (prob >= qwqdsp_pitch::SimpleVoicingDetector::kThreshold) {
             voiced[i] = x[i];   // 浊音保留
             unvoiced[i] = 0.0f; // 清音静音
         }

@@ -2,7 +2,7 @@
 
 #ifdef QWQDSP_HAVE_EIGEN
 
-#include "swift_f0_model.hpp"
+#include "hide/swift_f0_model.hpp"
 #include <Eigen/CXX11/Tensor>
 #include <Eigen/Dense>
 #include <algorithm>

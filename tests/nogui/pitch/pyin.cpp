@@ -1,6 +1,6 @@
 #include <qwqdsp/pitch/pyin.hpp>
-#include <qwqdsp/pitch/pyin/pyin_core.hpp>
-#include <qwqdsp/pitch/pyin/pyin_hmm.hpp>
+#include <qwqdsp/pitch/hide/pyin_core.hpp>
+#include <qwqdsp/pitch/hide/pyin_hmm.hpp>
 
 #include <cmath>
 #include <format>
@@ -46,7 +46,6 @@ static int testPyinCore() noexcept {
 
     qwqdsp_pitch::PyinCore core;
     core.Init(fs, block_size);
-    core.SetThresholdDistribution(2);
 
     auto candidates = core.Process(buffer, 10, 0.001f);
 
@@ -98,7 +97,6 @@ static int testMultipleFrequencies() noexcept {
 
     qwqdsp_pitch::PyinCore core;
     core.Init(fs, block_size);
-    core.SetThresholdDistribution(2);
 
     std::vector<float> buffer(block_size);
 
@@ -142,7 +140,6 @@ static int testPyinFull() noexcept {
 
     qwqdsp_pitch::Pyin pyin;
     pyin.Init(fs, block_size, step_size);
-    pyin.SetThresholdDistribution(2);
     pyin.SetMinPitch(200.0f);
     pyin.SetMaxPitch(500.0f);
 

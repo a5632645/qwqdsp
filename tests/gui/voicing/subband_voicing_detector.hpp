@@ -6,7 +6,6 @@
 
 #include <qwqdsp/filter/biquad.hpp>
 #include <qwqdsp/filter/rbj.hpp>
-#include <qwqdsp/pitch/fixed_voicing_detector.hpp>
 
 #include "rms_tracker.hpp"
 
@@ -139,6 +138,18 @@ struct SubbandVoicingDetector {
         float prob = probabilityFromRatio(out_rms, out_energy_ratio, center_, width_);
         last_prob_ = prob;
         return prob;
+    }
+
+    // --------------------------------------------------------
+    //  simpleProbability
+    // --------------------------------------------------------
+    //  简化版概率计算：clamp(hp_scale * hp_rms / (lp_rms + 1e-4), 0, 1)
+    //  不依赖 center/width/delta/lp_scale/静音门限。
+    // --------------------------------------------------------
+    float simpleProbability() noexcept {
+        float lp_val = lp_rms_.MeanSq();
+        float hp_val = hp_rms_.MeanSq();
+        return std::clamp(1.0f - (hp_scale_ * hp_val) / (lp_val + 1e-5f), 0.0f, 1.0f);
     }
 
     /// 获取最近一次 frameResult 的概率

@@ -1,6 +1,6 @@
 #pragma once
-#include "pmpm/pmpm_core.hpp"
-#include "pyin/pyin_hmm.hpp"
+#include "hide/pmpm_core.hpp"
+#include "hide/pyin_hmm.hpp"
 #include <algorithm>
 #include <cmath>
 #include <limits>

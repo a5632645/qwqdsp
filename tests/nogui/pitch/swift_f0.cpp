@@ -1,5 +1,5 @@
 #include <qwqdsp/pitch/swift_f0.hpp>
-#include <qwqdsp/pitch/swift_f0_model.hpp>
+#include <qwqdsp/pitch/hide/swift_f0_model.hpp>
 #include <qwqdsp/spectral/real_fft_adv.hpp>
 #include <qwqdsp/window/hann.hpp>
 #include <work_dir.hpp>

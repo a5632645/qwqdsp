@@ -33,6 +33,10 @@ struct RmsTracker {
     float value() const noexcept {
         return static_cast<float>(std::sqrt(mean_sq_));
     }
+
+    float MeanSq() const noexcept {
+        return mean_sq_;
+    }
 private:
     double mean_sq_ = 0.0;
     double alpha_ = 1.0;

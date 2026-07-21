@@ -1,6 +1,6 @@
 #pragma once
-#include "pyin/pyin_core.hpp"
-#include "pyin/pyin_hmm.hpp"
+#include "hide/pyin_core.hpp"
+#include "hide/pyin_hmm.hpp"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -186,11 +186,6 @@ public:
     // 直接访问每帧的候选概率（用于自定义后处理）
     std::span<const std::vector<std::pair<double, double>>> PitchProbabilities() const noexcept {
         return pitch_probs_;
-    }
-
-    // 参数设置
-    void SetThresholdDistribution(int dist) noexcept {
-        core_.SetThresholdDistribution(dist);
     }
 
     void SetMinPitch(float hz) noexcept {

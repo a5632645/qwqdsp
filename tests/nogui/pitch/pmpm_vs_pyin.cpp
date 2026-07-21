@@ -115,7 +115,6 @@ int main() {
         float pmpm_pitch = processFile(pmpm, audio, sample_rate, block_size, hop_size);
 
         qwqdsp_pitch::Pyin pyin;
-        pyin.SetThresholdDistribution(2);
         float pyin_pitch = processFile(pyin, audio, sample_rate, block_size, hop_size);
 
         float pmpm_err = (pmpm_pitch > 0.0f) ? std::abs(pmpm_pitch - kE3) / kE3 * 100.0f : -1.0f;

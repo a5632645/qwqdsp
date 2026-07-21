@@ -2,7 +2,7 @@
 #include "stb_image_write.h"
 #include "work_dir.hpp"
 #include <qwqdsp/pitch/pyin.hpp>
-#include <qwqdsp/pitch/pyin/pyin_core.hpp>
+#include <qwqdsp/pitch/hide/pyin_core.hpp>
 #include <qwqdsp/spectral/real_fft_adv.hpp>
 #include <qwqdsp/window/hann.hpp>
 
@@ -47,7 +47,6 @@ int main() {
     // ---- pYIN ----
     qwqdsp_pitch::Pyin pyin;
     pyin.Init(fs, block_size, step_size);
-    pyin.SetThresholdDistribution(2);
     pyin.SetMinPitch(60.0f);
     pyin.SetMaxPitch(900.0f);
 

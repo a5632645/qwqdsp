@@ -24,7 +24,6 @@ static constexpr int kProbH = 24;
 //  全局状态
 // ------------------------------------------------------------
 static float g_voicing_prob = 0.0f;
-static float g_energy_ratio = 0.0f;
 static float g_threshold = 0.5f;
 static float g_unvoiced_gain_db = 10.0f;
 static float g_voiced_gain_db = -10.0f;
@@ -36,9 +35,7 @@ static SubbandVoicingDetector g_detector(kSampleRate);
 static void InitDetectorDefaults() noexcept {
     g_detector.setLpFreq(2000.0f);
     g_detector.setHpFreq(5000.0f);
-    g_detector.setDelta(0.0001f);
-    g_detector.setCenter(0.0f);
-    g_detector.setWidth(0.1f);
+    g_detector.setHpScale(1.0f);
     g_detector.setRmsTau(0.005f);
 }
 
@@ -59,14 +56,10 @@ extern "C" void MaDuplexCallback(ma_device* pDevice, void* pOutput, const void* 
 
         g_detector.processSample(sample);
 
-        float energy_ratio, rms_linear;
-        float prob = g_detector.frameResult(energy_ratio, rms_linear);
-
-        g_voicing_prob = prob;
-        g_energy_ratio = energy_ratio;
+        g_voicing_prob = g_detector.simpleProbability();
 
         // ----- 输出: 当前增益 × 采样 -----
-        float gain_db = (prob >= g_threshold) ? g_voiced_gain_db : g_unvoiced_gain_db;
+        float gain_db = (g_voicing_prob >= g_threshold) ? g_voiced_gain_db : g_unvoiced_gain_db;
         dst[i] = sample * std::pow(10.0f, gain_db / 20.0f);
     }
 }
@@ -111,66 +104,6 @@ static void DrawProbabilityBar(float prob, float threshold) {
     DrawText(label, kProbX + 4, kProbY + 4, 14, WHITE);
 }
 
-// ---- 映射曲线画布 ----
-static constexpr int kCurveX = 30;
-static constexpr int kCurveY = 400;
-static constexpr int kCurveW = 740;
-static constexpr int kCurveH = 60;
-
-/// 绘制 ratio → prob 映射曲线
-static void DrawMappingCurve(float center, float width, float current_ratio, float threshold) {
-    // 背景
-    DrawRectangle(kCurveX, kCurveY, kCurveW, kCurveH, {20, 20, 20, 255});
-
-    // 网格: 概率 0.0, 0.5, 1.0
-    for (int row = 0; row <= 2; ++row) {
-        int y = kCurveY + kCurveH - static_cast<int>(static_cast<float>(row) * 0.5f * kCurveH);
-        DrawLine(kCurveX, y, kCurveX + kCurveW, y, {50, 50, 50, 255});
-    }
-
-    // 阈值线 (概率域)
-    int thresh_y = kCurveY + kCurveH - static_cast<int>(threshold * kCurveH);
-    DrawLine(kCurveX, thresh_y, kCurveX + kCurveW, thresh_y, {80, 50, 20, 255});
-
-    // 采样曲线: log10(ratio) ∈ [-3, 3]
-    static constexpr int kNumSamples = 200;
-    static constexpr float kLogMin = -3.0f;
-    static constexpr float kLogMax = 3.0f;
-    Vector2 points[kNumSamples];
-
-    for (int i = 0; i < kNumSamples; ++i) {
-        float t = static_cast<float>(i) / (kNumSamples - 1);
-        float log_r = kLogMin + t * (kLogMax - kLogMin);
-        float ratio = std::pow(10.0f, log_r);
-        float p = RatioToProbability(ratio, center, width);
-
-        float x = kCurveX + t * kCurveW;
-        float y = kCurveY + kCurveH - p * kCurveH;
-        points[i] = {x, std::clamp(y, static_cast<float>(kCurveY), static_cast<float>(kCurveY + kCurveH - 1))};
-    }
-    DrawLineStrip(points, kNumSamples, {200, 200, 100, 255});
-
-    // 当前 ratio 位置标记
-    float cur_log_r = std::log10(current_ratio + 1e-10f);
-    float cur_t = std::clamp((cur_log_r - kLogMin) / (kLogMax - kLogMin), 0.0f, 1.0f);
-    int marker_x = kCurveX + static_cast<int>(cur_t * kCurveW);
-    float cur_p = RatioToProbability(current_ratio, center, width);
-    int marker_y = kCurveY + kCurveH - static_cast<int>(cur_p * kCurveH);
-
-    // 垂直线
-    DrawLine(marker_x, kCurveY, marker_x, kCurveY + kCurveH, {255, 100, 100, 180});
-    // 标记点
-    DrawCircle(marker_x, marker_y, 4, {255, 60, 60, 255});
-
-    // 标签
-    char buf[64];
-    snprintf(buf, sizeof(buf), "ratio=%.2f  prob=%.2f", current_ratio, cur_p);
-    DrawText(buf, kCurveX + 4, kCurveY + 2, 10, {180, 180, 180, 255});
-    DrawText("log10(ratio)", kCurveX + kCurveW - 80, kCurveY + kCurveH - 12, 9, {120, 120, 120, 255});
-    DrawText("0", kCurveX - 14, kCurveY + kCurveH - 12, 9, {120, 120, 120, 255});
-    DrawText("1", kCurveX - 14, kCurveY + 2, 9, {120, 120, 120, 255});
-}
-
 // ------------------------------------------------------------
 //  main
 // ------------------------------------------------------------
@@ -196,17 +129,6 @@ int main(void) {
     };
     threshold_knob.on_value_change = [](float v) { g_threshold = v; };
 
-    Knob lp_scale_knob;
-    lp_scale_knob.set_title("LP Scale");
-    lp_scale_knob.set_range(0.0f, 5.0f, 0.05f, 1.0f);
-    lp_scale_knob.set_bound(260, 120, 200, 50);
-    lp_scale_knob.value_to_text_function = [](float v) -> std::string {
-        char buf[16];
-        snprintf(buf, sizeof(buf), "%.2f", v);
-        return buf;
-    };
-    lp_scale_knob.on_value_change = [](float v) { g_detector.setLpScale(v); };
-
     Knob hp_scale_knob;
     hp_scale_knob.set_title("HP Scale");
     hp_scale_knob.set_range(0.0f, 5.0f, 0.05f, 1.0f);
@@ -218,7 +140,7 @@ int main(void) {
     };
     hp_scale_knob.on_value_change = [](float v) { g_detector.setHpScale(v); };
 
-    // ----- Row 2: 滤波器频率 + Delta -----
+    // ----- Row 2: 滤波器频率 -----
     Knob lp_freq_knob;
     lp_freq_knob.set_title("LP Freq");
     lp_freq_knob.set_range(100.0f, 3000.0f, 10.0f, 500.0f);
@@ -241,44 +163,11 @@ int main(void) {
     };
     hp_freq_knob.on_value_change = [](float v) { g_detector.setHpFreq(v); };
 
-    Knob delta_knob;
-    delta_knob.set_title("Delta");
-    delta_knob.set_range(0.0f, 0.01f, 0.0001f, 0.0001f);
-    delta_knob.set_bound(490, 190, 200, 50);
-    delta_knob.value_to_text_function = [](float v) -> std::string {
-        char buf[16];
-        snprintf(buf, sizeof(buf), "%.4f", v);
-        return buf;
-    };
-    delta_knob.on_value_change = [](float v) { g_detector.setDelta(v); };
-
-    // ----- Row 3: 概率映射 + RMS 时间 -----
-    Knob center_knob;
-    center_knob.set_title("Center");
-    center_knob.set_range(-2.0f, 4.0f, 0.05f, 0.0f);
-    center_knob.set_bound(30, 260, 200, 50);
-    center_knob.value_to_text_function = [](float v) -> std::string {
-        char buf[16];
-        snprintf(buf, sizeof(buf), "%.2f", v);
-        return buf;
-    };
-    center_knob.on_value_change = [](float v) { g_detector.setCenter(v); };
-
-    Knob width_knob;
-    width_knob.set_title("Width");
-    width_knob.set_range(0.1f, 5.0f, 0.05f, 0.1f);
-    width_knob.set_bound(260, 260, 200, 50);
-    width_knob.value_to_text_function = [](float v) -> std::string {
-        char buf[16];
-        snprintf(buf, sizeof(buf), "%.2f", v);
-        return buf;
-    };
-    width_knob.on_value_change = [](float v) { g_detector.setWidth(v); };
-
+    // ----- Row 3: RMS 时间 -----
     Knob rms_tau_knob;
     rms_tau_knob.set_title("RMS Tau");
     rms_tau_knob.set_range(0.001f, 0.2f, 0.001f, 0.005f);
-    rms_tau_knob.set_bound(490, 260, 200, 50);
+    rms_tau_knob.set_bound(260, 260, 200, 50);
     rms_tau_knob.value_to_text_function = [](float v) -> std::string {
         char buf[16];
         snprintf(buf, sizeof(buf), "%.0f ms", v * 1000.0f);
@@ -341,13 +230,9 @@ int main(void) {
 
         // Knobs
         threshold_knob.display();
-        lp_scale_knob.display();
         hp_scale_knob.display();
         lp_freq_knob.display();
         hp_freq_knob.display();
-        delta_knob.display();
-        center_knob.display();
-        width_knob.display();
         rms_tau_knob.display();
         unvoiced_gain_knob.display();
         voiced_gain_knob.display();
@@ -357,11 +242,6 @@ int main(void) {
         const char* status_str = is_voiced ? "VOICED" : "UNVOICED";
         Color status_color = is_voiced ? GREEN : SKYBLUE;
         DrawText(status_str, 30, 70, 36, status_color);
-
-        // 映射曲线
-        float center = g_detector.center();
-        float width = g_detector.width();
-        DrawMappingCurve(center, width, g_energy_ratio, threshold);
 
         DrawFPS(kWindowWidth - 80, 10);
         EndDrawing();

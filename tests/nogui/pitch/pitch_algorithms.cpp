@@ -1,4 +1,4 @@
-#include <qwqdsp/pitch/fast_yin.hpp>
+#include <qwqdsp/pitch/yin.hpp>
 #include <qwqdsp/pitch/mpm.hpp>
 
 #include <cmath>
@@ -28,7 +28,7 @@ static int testFastYin() noexcept {
     int const block_size = 2048;
     float test_freqs[] = {110.0f, 220.0f, 440.0f, 880.0f};
 
-    qwqdsp_pitch::FastYin yin;
+    qwqdsp_pitch::Yin yin;
     yin.Init(fs, block_size * 2);
 
     std::vector<float> buffer(block_size * 2);
@@ -127,7 +127,7 @@ static int testNonPeriodic() noexcept {
 
     // FastYin
     {
-        qwqdsp_pitch::FastYin yin;
+        qwqdsp_pitch::Yin yin;
         yin.Init(fs, block_size);
         yin.Process(noise);
         auto p = yin.GetPitch();

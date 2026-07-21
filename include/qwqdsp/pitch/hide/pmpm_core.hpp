@@ -1,7 +1,7 @@
 #pragma once
 #include "../../spectral/real_fft.hpp"
 #include "../pitch.hpp"
-#include "../pyin/pyin_core.hpp"
+#include "pyin_core.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
@@ -48,8 +48,8 @@ public:
     // 处理一帧音频，返回候选基频列表（已按概率降序排列）。
     // 候选不超过 max_candidates 个，概率低于 min_prob 的被过滤。
     std::vector<PyinCandidate> Process(std::span<const float> block, int max_candidates = 5, float min_prob = 0.01f) {
-        computeAutocorrelation(block);
-        auto peaks = peakPicking();
+        ComputeAutocorrelation(block);
+        auto peaks = PeakPicking();
 
         // ---- 抛物线插值所有有效峰值 ----
         estimates_.clear();
@@ -58,7 +58,7 @@ public:
             float val = autocorr_[static_cast<size_t>(idx)];
             highest_amplitude = std::max(highest_amplitude, val);
             if (val > kSmallCutoff) {
-                auto est = parabolicInterpolation(autocorr_, static_cast<size_t>(idx));
+                auto est = ParabolicInterpolation(autocorr_, static_cast<size_t>(idx));
                 estimates_.push_back(est);
                 highest_amplitude = std::max(highest_amplitude, est.second);
             }
@@ -91,7 +91,7 @@ public:
         for (auto const& [tau, prob] : tau_prob) {
             if (tau <= 0 || prob < min_prob)
                 continue;
-            float tau_interp = parabolicInterpolationFromBuffer(static_cast<size_t>(tau));
+            float tau_interp = ParabolicInterpolationFromBuffer(static_cast<size_t>(tau));
             float pitch = fs_ / tau_interp;
             if (pitch >= 20.0f && pitch <= 2000.0f) {
                 candidates.push_back({pitch, prob});
@@ -102,39 +102,17 @@ public:
         std::sort(candidates.begin(), candidates.end(),
                   [](const PyinCandidate& a, const PyinCandidate& b) { return a.probability > b.probability; });
 
-        if (candidates.size() > static_cast<size_t>(max_candidates))
+        if (candidates.size() > static_cast<size_t>(max_candidates)) {
             candidates.resize(max_candidates);
+        }
 
         return candidates;
     }
 private:
-    static constexpr float kCutoffBegin = 0.80f;
-    static constexpr float kCutoffStep = 0.01f;
-    static constexpr int kNumCutoffs = 20;
-    static constexpr float kProbDist = 1.0f / static_cast<float>(kNumCutoffs); // 0.05
-    static constexpr float kPa = 0.01f;
-    static constexpr float kSmallCutoff = 0.5f;
-    static constexpr float kMinPitchDefault = 50.0f;
-    static constexpr float kMaxPitchDefault = 500.0f;
-
-    float fs_{};
-    int block_size_{};
-    int min_tau_{2};
-    int max_tau_{};
-    float min_pitch_{kMinPitchDefault};
-    float max_pitch_{kMaxPitchDefault};
-
-    qwqdsp_spectral::RealFFT fft_;
-    std::vector<float> fft_in_;
-    std::vector<float> fft_out_;
-    std::vector<float> autocorr_;
-    std::vector<int> peaks_;
-    std::vector<std::pair<float, float>> estimates_;
-
     // --------------------------------------------------------
     // computeAutocorrelation — FFT 加速自相关
     // --------------------------------------------------------
-    void computeAutocorrelation(std::span<const float> block) noexcept {
+    void ComputeAutocorrelation(std::span<const float> block) noexcept {
         // 零填充到 2*block_size
         std::copy_n(block.begin(), block.size(), fft_in_.begin());
         std::fill_n(fft_in_.begin() + block.size(), block.size(), 0.0f);
@@ -161,20 +139,23 @@ private:
     // --------------------------------------------------------
     // peakPicking — 在自相关函数中寻找正峰值
     // --------------------------------------------------------
-    std::vector<int> const& peakPicking() noexcept {
+    std::vector<int> const& PeakPicking() noexcept {
         peaks_.clear();
 
         int const size = max_tau_;
         int pos = min_tau_;
 
         // 跳过初始正区
-        while (pos < (size - 1) / 3 && autocorr_[static_cast<size_t>(pos)] > 0)
+        while (pos < (size - 1) / 3 && autocorr_[static_cast<size_t>(pos)] > 0) {
             ++pos;
-        while (pos < size - 1 && autocorr_[static_cast<size_t>(pos)] <= 0.0f)
+        }
+        while (pos < size - 1 && autocorr_[static_cast<size_t>(pos)] <= 0.0f) {
             ++pos;
+        }
 
-        if (pos == 0)
+        if (pos == 0) {
             pos = 1;
+        }
 
         int cur_max_pos = 0;
         while (pos < size - 1) {
@@ -205,7 +186,7 @@ private:
     // --------------------------------------------------------
     // parabolicInterpolation
     // --------------------------------------------------------
-    static std::pair<float, float> parabolicInterpolation(std::vector<float> const& array, size_t x) noexcept {
+    static std::pair<float, float> ParabolicInterpolation(std::vector<float> const& array, size_t x) noexcept {
         if (x < 1) {
             size_t x_adj = (array[x] <= array[x + 1]) ? x : x + 1;
             return {static_cast<float>(x_adj), array[x_adj]};
@@ -225,7 +206,7 @@ private:
         return {tau, amp};
     }
 
-    float parabolicInterpolationFromBuffer(size_t tau_estimate) const noexcept {
+    float ParabolicInterpolationFromBuffer(size_t tau_estimate) const noexcept {
         if (tau_estimate <= 0 || tau_estimate >= autocorr_.size() - 1) {
             return static_cast<float>(tau_estimate);
         }
@@ -233,10 +214,34 @@ private:
         float s1 = autocorr_[tau_estimate];
         float s2 = autocorr_[tau_estimate + 1];
         double adj = static_cast<double>(s2 - s0) / (2.0 * (2.0 * s1 - s2 - s0));
-        if (std::abs(adj) > 1.0)
+        if (std::abs(adj) > 1.0) {
             adj = 0.0;
+        }
         return static_cast<float>(static_cast<double>(tau_estimate) + adj);
     }
+
+    static constexpr float kCutoffBegin = 0.80f;
+    static constexpr float kCutoffStep = 0.01f;
+    static constexpr int kNumCutoffs = 20;
+    static constexpr float kProbDist = 1.0f / static_cast<float>(kNumCutoffs); // 0.05
+    static constexpr float kPa = 0.01f;
+    static constexpr float kSmallCutoff = 0.5f;
+    static constexpr float kMinPitchDefault = 50.0f;
+    static constexpr float kMaxPitchDefault = 500.0f;
+
+    float fs_{};
+    int block_size_{};
+    int min_tau_{2};
+    int max_tau_{};
+    float min_pitch_{kMinPitchDefault};
+    float max_pitch_{kMaxPitchDefault};
+
+    qwqdsp_spectral::RealFFT fft_;
+    std::vector<float> fft_in_;
+    std::vector<float> fft_out_;
+    std::vector<float> autocorr_;
+    std::vector<int> peaks_;
+    std::vector<std::pair<float, float>> estimates_;
 };
 
 } // namespace qwqdsp_pitch

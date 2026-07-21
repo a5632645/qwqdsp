@@ -1,5 +1,5 @@
 #include <qwqdsp/pitch/pmpm.hpp>
-#include <qwqdsp/pitch/pmpm/pmpm_core.hpp>
+#include <qwqdsp/pitch/hide/pmpm_core.hpp>
 
 #include <cmath>
 #include <format>
