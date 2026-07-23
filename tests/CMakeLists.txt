@@ -135,7 +135,7 @@ if(QWQDSP_USE_RAYLIB)
     add_qwqdsp_gui_test(echo gui/audiofx/echo.cpp)
     add_qwqdsp_gui_test(reverb_rt gui/audiofx/reverb.cpp)
     add_qwqdsp_gui_test(pitch_quantize_rt gui/audiofx/pitch_quantize_rt.cpp)
-    add_qwqdsp_gui_test(psola_rt gui/audiofx/psola_rt.cpp)
+    add_qwqdsp_gui_test(psola_rt2 gui/audiofx/psola_rt2.cpp)
     add_qwqdsp_gui_test(filters gui/audiofx/filters.cpp NO_MINIAUDIO)
     add_qwqdsp_gui_test(filters2 gui/audiofx/filters2.cpp NO_MINIAUDIO)
 
