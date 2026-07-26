@@ -10,11 +10,12 @@
 #include "slider.hpp"
 
 #include "pitch_quantize/pitch_quantizer_rt_gui.hpp"
+#include "pitch_quantize/pitch_quantizer_rt_gui_v2.hpp"
 
 static constexpr float kSampleRate = 48000.0f;
 
 // 全局实例
-static PitchQuantizerRTGui s_pq;
+static PitchQuantizerRTGuiV2 s_pq;
 
 // ------------------------------------------------------------
 //  miniaudio 回调（单声道入 → 单声道出）

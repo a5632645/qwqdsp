@@ -14,17 +14,21 @@
 #include <vector>
 
 // ------------------------------------------------------------
-// PitchQuantizerRT — 实时流式音高量化器
+// PitchQuantizerRTV2 — 实时流式音高量化器 (v2)
 // ------------------------------------------------------------
 /**
- * @brief 基于 PitchQuantizer4 的实时流式封装，使用 AnalyzeSynthsisOnline
- *        管理输入环形缓冲和 OLA 输出。
+ * @brief 基于 PitchQuantizerRT v1 的改进版本，color 参数扩展为 [0, 200%]。
  *
- * 原理：相邻样本 FFT 估计局部谱峰的瞬时频率，
+ * color 行为：
+ *   0%   — 频率不改变
+ *   100% — 将 bin 频率按 src_midi → target_midi 的比值缩放
+ *   200% — 与 v1 100% 一致（完全量化到最近允许 MIDI 频率）
+ *
+ * 原理同 v1：相邻样本 FFT 估计局部谱峰的瞬时频率，
  *       将谱峰量化到目标 MIDI 音符对应的 bin 位置，
  *       峰域整体平移 + identity phase locking。
  */
-class PitchQuantizerRT {
+class PitchQuantizerRTV2 {
 public:
     void Init(float sample_rate, size_t hop_size, size_t fft_size) {
         sr_ = sample_rate;
@@ -105,12 +109,12 @@ public:
     }
 
     float mix_ = 1.0f;
-    float color_ = 1.0f;
+    float color_ = 1.0f; // [0, 2], 0=off, 1=ratio, 2=full quantize
     float low_cut_hz_ = 0.0f;
     float high_cut_hz_ = 20000.0f;
 
     void SetColor(float color) noexcept {
-        color_ = std::clamp(color, 0.0f, 1.0f);
+        color_ = std::clamp(color, 0.0f, 2.0f);
     }
     void SetLowCut(float hz) noexcept {
         low_cut_hz_ = hz;
@@ -170,15 +174,30 @@ private:
                 continue;
             const float f_inst = src_omega_[peak] * fs_over_2pi_;
 
-            // 带通滤波：threshold 值表示关闭
-            //   low_cut ≤ 21   → 等效 0Hz（低频全通）
-            //   high_cut ≥ 19999 → 等效 ∞Hz（高频全通）
+            // 带通滤波
             const float eff_low = (low_cut_hz_ <= 21.0f) ? 0.0f : low_cut_hz_;
             const float eff_high = (high_cut_hz_ >= 19999.0f) ? 1e9f : high_cut_hz_;
             float f_blend;
             if (f_inst >= eff_low && f_inst <= eff_high) {
                 const float f_midi = FindNearestAllowedMidi(f_inst);
-                f_blend = f_inst + (f_midi - f_inst) * color_;
+
+                // v2 color 逻辑：两段插值
+                //   [0%, 100%]: f_inst → f_inst * ratio
+                //   [100%, 200%]: f_inst * ratio → f_midi
+                const float midi_float = FreqToMidi(f_inst);
+                const float midi_src = std::round(midi_float);
+                const float f_midi_src = MidiToFreq(midi_src);
+                const float ratio = f_midi / f_midi_src;
+
+                if (color_ <= 1.0f) {
+                    // [0%, 100%]: lerp between f_inst and f_inst * ratio
+                    f_blend = f_inst * (1.0f + (ratio - 1.0f) * color_);
+                }
+                else {
+                    // [100%, 200%]: lerp between f_inst * ratio and f_midi
+                    const float c = color_ - 1.0f; // [0, 1]
+                    f_blend = (f_inst * ratio) * (1.0f - c) + f_midi * c;
+                }
             }
             else {
                 f_blend = f_inst; // 直通，不量化
@@ -263,10 +282,6 @@ private:
         }
         fft_obj_.IFFT(fft_buf_.data(), fft_buf_delay_.data());
 
-        // WOLA 增益补偿：
-        //   Hann² OLA sum = 1.5 (75% overlap, 4 frames)
-        //   ASO 除以 N/H = 4
-        //   补偿因子 = 4 / 1.5 = 8/3
         constexpr float kWolaScale = 8.0f / 3.0f;
         for (size_t j = 0; j < N; ++j) {
             out[j] = fft_buf_delay_[j] * win_[j] * kWolaScale;
@@ -306,6 +321,16 @@ private:
         while (x < -std::numbers::pi_v<float>)
             x += two_pi;
         return x;
+    }
+
+    /** @brief 频率 → MIDI 序号（浮点，不取整） */
+    static float FreqToMidi(float freq_hz) noexcept {
+        return 12.0f * std::log2(freq_hz / 440.0f) + 69.0f;
+    }
+
+    /** @brief MIDI 序号 → 频率 */
+    static float MidiToFreq(float midi) noexcept {
+        return 440.0f * std::pow(2.0f, (midi - 69.0f) / 12.0f);
     }
 
     float FindNearestAllowedMidi(float freq_hz) const noexcept {

@@ -11,12 +11,12 @@
 #include "slider.hpp"
 
 #include "../../../nogui/audiofx/pitch_quantize/scale_helper.hpp"
-#include "pitch_quantizer_rt.hpp"
+#include "pitch_quantizer_rt_v2.hpp"
 
 // ------------------------------------------------------------
-//  PitchQuantizerRTGui — 实时音高量化器的完整 GUI 包装器
+//  PitchQuantizerRTGuiV2 — 实时音高量化器 v2 的完整 GUI 包装器
 // ------------------------------------------------------------
-struct PitchQuantizerRTGui {
+struct PitchQuantizerRTGuiV2 {
     // ── 原子参数（UI 线程写入，音频线程读取）──
     std::atomic<int> root_note_{0};  // 0=C, 1=C#, ..., 11=B
     std::atomic<int> scale_type_{0}; // 0=Major, 1=MinorNatural, ...
@@ -26,7 +26,7 @@ struct PitchQuantizerRTGui {
     std::atomic<float> high_cut_hz_{20000.0f};
     std::atomic<bool> params_dirty_{true};
 
-    static constexpr const char* kWindowTitle = "Pitch Quantizer — Real-time";
+    static constexpr const char* kWindowTitle = "Pitch Quantizer v2 — Real-time";
 
     static constexpr int kWindowWidth = 480;
     static constexpr int kWindowHeight = 180;
@@ -102,7 +102,8 @@ struct PitchQuantizerRTGui {
         high_cut_hz_.store(high_cut_knob_.get_value(), std::memory_order_relaxed);
         kx += kKnobW + kGap;
 
-        color_knob_ = MakeKnob(kx, ky, kKnobW, kKnobH, "Color", 0.0f, 1.0f, 0.01f, 1.0f);
+        // v2: color 范围 [0, 2]，显示 0%~200%
+        color_knob_ = MakeKnob(kx, ky, kKnobW, kKnobH, "Color", 0.0f, 2.0f, 0.01f, 1.0f);
         color_knob_.value_to_text_function = [](float v) { return TextFormat("%.0f%%", v * 100.0f); };
         color_knob_.on_value_change = [this](float v) { color_.store(v, std::memory_order_relaxed); };
         color_.store(color_knob_.get_value(), std::memory_order_relaxed);
@@ -163,7 +164,7 @@ struct PitchQuantizerRTGui {
     }
 private:
     // --------------------------------------------------------
-    //  工具：创建旋钮（与 reverb 风格一致）
+    //  工具：创建旋钮
     // --------------------------------------------------------
     static Knob MakeKnob(int kx, int ky, int w, int h, const char* title, float vmin, float vmax, float vstep,
                          float vdef) {
@@ -210,7 +211,7 @@ private:
     }
 
     float sr_ = 48000.0f;
-    PitchQuantizerRT pq_;
+    PitchQuantizerRTV2 pq_;
 
     Knob low_cut_knob_;
     Knob high_cut_knob_;
