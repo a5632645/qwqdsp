@@ -109,21 +109,6 @@ add_qwqdsp_dsp_test(dsf nogui/synth/dsf.cpp)
 add_qwqdsp_dsp_test(stupid_resynthsis nogui/synth/stupid_resynthsis.cpp)
 add_qwqdsp_dsp_test(wsola nogui/synth/wsola.cpp)
 
-# ----- rnn noise lite -----
-file(GLOB_RECURSE qwqdsp-rnnoise-lite-src "rnnoise_lite/nnom/*.c")
-add_executable(qwqdsp-rnnoise-lite
-    ${qwqdsp-rnnoise-lite-src}
-    rnnoise_lite/main.cpp
-    rnnoise_lite/mfcc.c
-    rnnoise_lite/rnnoise.c
-)
-target_link_libraries(qwqdsp-rnnoise-lite PUBLIC qwqdsp raylib qwqdsp_support)
-target_compile_definitions(qwqdsp-rnnoise-lite PRIVATE
-    QWQDSP_WORK_DIR="${CMAKE_CURRENT_SOURCE_DIR}/work_dir"
-)
-set_target_properties(qwqdsp-rnnoise-lite PROPERTIES CXX_STANDARD 20)
-set_target_properties(qwqdsp-rnnoise-lite PROPERTIES FOLDER qwqdsp-dsp-tests)
-
 # ------------------------------------------------------------
 # gui test/demo
 # ------------------------------------------------------------

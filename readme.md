@@ -132,14 +132,6 @@
 | [`polyblep.cpp`](tests/gui/synth/polyblep.cpp) | PolyBLEP 振荡器 9 波形（含硬同步）演示 |
 | [`noise.cpp`](tests/gui/synth/noise.cpp) | 噪声（白/粉红/布朗/点击）演示 |
 
-### 🧠 轻量级 RNNoise 噪声抑制 (RNNoise Lite)
-
-`tests/rnnoise_lite/`
-
-| 文件 | 说明 |
-|------|------|
-| [`main.cpp`](tests/rnnoise_lite/main.cpp) | WAV 加载 → RNNoise 降噪 → 保存输出的完整流程 |
-
 ---
 
 ### 📓 Notebooks
