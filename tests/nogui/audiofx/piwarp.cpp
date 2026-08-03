@@ -225,8 +225,8 @@ struct Piwarp4Class {
     int out_size_{};
 };
 
-struct Piwarp5Class {
-    Piwarp5Class(int in_size, int out_size) {
+struct Piwarp4bClass {
+    Piwarp4bClass(int in_size, int out_size) {
         window_.resize(in_size);
         qwqdsp_window::BlackmanHarris::Window(window_, true);
         buffer_.resize(in_size);
@@ -284,7 +284,7 @@ static void Piwarp4() {
     as.Reset();
 
     std::vector<float> y_vec;
-    Piwarp5Class piwarp4{len, out_size};
+    Piwarp4bClass piwarp4{len, out_size};
     as.Process(x_vec, y_vec, piwarp4);
 
     file.setNumSamplesPerChannel(y_vec.size());
@@ -294,9 +294,62 @@ static void Piwarp4() {
     file.save(qwqdsp_support::OutputFile("piwarp4.wav"));
 }
 
+// ------------------------------------------------------------
+// DFT每个取共轭 等价于 实数信号反向时间
+// 重叠参数对齐 dft_filter_bank (M=256, L=2M=512, hop=128), 窗 = Kaiser β=16
+// ------------------------------------------------------------
+
+struct Piwarp5Class {
+    Piwarp5Class(int dft_size, float kaiser_beta) {
+        window_.resize(dft_size);
+        // 仅 Kaiser 窗 (窗函数本身, 非低通原型滤波器系数)
+        qwqdsp_window::Kaiser::Window(window_, kaiser_beta, false);
+    }
+
+    void operator()(std::span<const float> in, std::span<float> out) noexcept {
+        int len = in.size();
+        for (int i = 0; i < in.size(); ++i) {
+            out[i] = 2 * window_[i] * in[len - i - 1];
+        }
+    }
+
+    std::vector<float> window_;
+};
+
+static void Piwarp5() {
+    AudioFile<float> file{qwqdsp_support::InputFile("noise.wav")};
+    auto& x_vec = file.samples.front();
+
+    // len*  beta
+    //   4    32/16/8
+    //   2    16/8/4
+    //   1     8/4/2
+
+    constexpr int filter_banks = 32;        // M — 子带数 (与 dft_filter_bank 一致)
+    constexpr int len = filter_banks * 1;    // L = 2M = 512
+    constexpr float kKaiserBeta = 2.0f;
+
+    qwqdsp_segement::AnalyzeSynthsisOffline as;
+    as.SetSize(len);
+    // 重叠参数 = dft_filter_bank 过采样版: R = M/2
+    as.SetInputHop(filter_banks - 1);
+    as.SetOutputHop(filter_banks - 1);
+    as.Reset();
+
+    std::vector<float> y_vec;
+    Piwarp5Class piwarp5{len, kKaiserBeta};
+    as.Process(x_vec, y_vec, piwarp5);
+
+    file.setNumSamplesPerChannel(y_vec.size());
+    file.samples.front() = std::move(y_vec);
+    file.setNumChannels(1);
+    file.save(qwqdsp_support::OutputFile("piwarp5.wav"));
+}
+
 int main() {
     Piwarp1();
     Piwarp2();
     Piwarp3();
     Piwarp4();
+    Piwarp5();
 }

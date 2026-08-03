@@ -58,6 +58,7 @@
 | [`reverb.cpp`](tests/nogui/audiofx/reverb.cpp) | C 风格 FDN 混响 |
 | [`oversample.cpp`](tests/nogui/audiofx/oversample.cpp) | 过采样对代数波形塑形器的失真抑制效果对比 |
 | [`piwarp.cpp`](tests/nogui/audiofx/piwarp.cpp) | 重新实现piwarp的效果!(STFT滤波器组/时间反向/时间拉伸反向) |
+| [`piwarp5_comb.cpp`](tests/nogui/audiofx/piwarp5_comb.cpp) | Piwarp5 (Kaiser 窗+帧内反转) len/beta 参数矩阵 comb 扫描 |
 
 ### 📊 频谱处理示例 (Spectral Demos)
 
@@ -68,6 +69,7 @@
 | [`fft_interpolation.cpp`](tests/nogui/spectral/fft_interpolation.cpp) | FFT 域频谱缩放实现时域上采样 |
 | [`ifft_random_phase.cpp`](tests/nogui/spectral/ifft_random_phase.cpp) | 随机相位谱 + IFFT 生成全通 FIR |
 | [`fold.cpp`](tests/nogui/spectral/fold.cpp) | FFT的时间混叠增强通道不相干性 |
+| [`dft_filter_bank.cpp`](tests/nogui/spectral/dft_filter_bank.cpp) | DFT 调制滤波器组 (临界/过采样) 分解与还原对比 |
 
 ### 🎹 合成示例 (Synth Demos)
 

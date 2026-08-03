@@ -1,0 +1,197 @@
+/* ============================================================
+   piwarp5 复刻 — 深色主题 / 三排网格布局
+   ============================================================ */
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    background: #12141c;
+    color: #e8eaf0;
+    font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+    padding: 16px 20px 40px;
+}
+
+/* ---------- 头部 ---------- */
+h1 {
+    font-size: 20px;
+}
+
+h1 .sub {
+    font-size: 13px;
+    color: #8a8fa3;
+    font-weight: normal;
+    margin-left: 8px;
+}
+
+.signal-controls {
+    margin-top: 12px;
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.signal-controls label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #b8bccb;
+}
+
+.signal-controls input {
+    width: 92px;
+    background: #1d2130;
+    color: #e8eaf0;
+    border: 1px solid #333a4d;
+    border-radius: 4px;
+    padding: 4px 6px;
+}
+
+button {
+    cursor: pointer;
+    border: none;
+    border-radius: 4px;
+    padding: 5px 12px;
+    font-size: 13px;
+    background: #2f6feb;
+    color: #fff;
+    font-family: inherit;
+}
+
+button:hover {
+    background: #4a85f5;
+}
+
+#status {
+    margin-left: 6px;
+    color: #ffd166;
+    font-size: 13px;
+}
+
+/* ---------- 行标签 ---------- */
+.row-label {
+    margin: 16px 0 6px;
+    font-size: 14px;
+    color: #ffd166;
+    font-weight: 600;
+}
+
+/* ---------- 三列布局 (左参数 / 中白噪声 / 右扫频) ---------- */
+.columns {
+    display: grid;
+    grid-template-columns: 250px 1fr 1fr;
+    gap: 14px;
+    align-items: start;
+    margin-top: 4px;
+}
+
+.col {
+    min-width: 0;
+}
+
+.col-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.cell {
+    background: #1a1e2b;
+    border: 1px solid #2a3042;
+    border-radius: 6px;
+    padding: 8px;
+    min-width: 0;
+}
+
+.cell-head {
+    font-size: 12px;
+    color: #9aa0b5;
+    margin-bottom: 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ---------- 参数卡片 ---------- */
+.param-cell {
+    position: relative;
+    /* 与输出单元格等高, 保证三列按索引对齐 */
+    min-height: 318px;
+}
+
+.param-cell label {
+    display: block;
+    font-size: 12px;
+    color: #b8bccb;
+    margin-bottom: 5px;
+}
+
+.param-cell input {
+    width: 100%;
+    background: #12141c;
+    color: #e8eaf0;
+    border: 1px solid #333a4d;
+    border-radius: 4px;
+    padding: 3px 6px;
+}
+
+.param-note {
+    font-size: 12px;
+    color: #6b7186;
+    padding-top: 10px;
+}
+
+.del-btn {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    background: #b3344a;
+    width: 20px;
+    height: 20px;
+    line-height: 1;
+    padding: 0;
+    border-radius: 50%;
+    font-size: 13px;
+}
+
+.del-btn:hover {
+    background: #d6465f;
+}
+
+.add-btn {
+    align-self: center;
+    height: 38px;
+    background: #1f6f43;
+}
+
+.add-btn:hover {
+    background: #2a8c56;
+}
+
+/* ---------- 输出单元格 ---------- */
+.out-cell canvas {
+    display: block;
+    width: 100%;
+    height: 90px;
+    margin-bottom: 6px;
+    border-radius: 4px;
+    background: #0d0f16;
+}
+
+.out-cell canvas.spec {
+    height: 150px;
+}
+
+.play-btn {
+    width: 100%;
+    background: #31405c;
+}
+
+.play-btn:hover {
+    background: #42557a;
+}
