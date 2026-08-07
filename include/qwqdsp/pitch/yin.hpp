@@ -114,10 +114,6 @@ public:
                 preiod = where + frac;
                 pitch_.pitch_hz = fs_ / preiod;
                 pitch_.non_period_ratio = delta_corr_[where];
-
-                // if (pitch_.non_period_ratio >= threshold_) {
-                //     pitch_.non_period_ratio = 1.0f;
-                // }
             }
             else {
                 // 无峰值，大概是噪声或者在外面吧

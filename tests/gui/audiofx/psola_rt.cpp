@@ -4,627 +4,715 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <format>
+#include <iostream>
 #include <numbers>
-
-#include <qwqdsp/pitch/yin.hpp>
+#include <span>
+#include <string>
 
 #include "miniaudio.h"
 #include "raylib.h"
 #include "slider.hpp"
 
-// ------------------------------------------------------------
-// 常量
-// ------------------------------------------------------------
-static constexpr int kWindowWidth = 480;
-static constexpr int kWindowHeight = 240;
+#include "qwqdsp/pitch/yin.hpp"
+
+namespace psola_rt2 {
+
 static constexpr float kSampleRate = 48000.0f;
+static constexpr int kWindowWidth = 560;
+static constexpr int kWindowHeight = 300;
+static constexpr const char* kWindowTitle = "PSOLA RT2";
+static constexpr float kMinPitchSemitones = -12.0f;
+static constexpr float kMaxPitchSemitones = 12.0f;
+static constexpr float kMinFormantSemitones = -8.0f;
+static constexpr float kMaxFormantSemitones = 8.0f;
 
-static constexpr float kMinF0 = 75.0f;
-static constexpr float kMaxF0 = 500.0f;
-
-static constexpr int kInputBufSize = 8192;     // 须为 2 的幂
-static constexpr int kOutputBufSize = 32768;   // 须为 2 的幂
-static constexpr int kAlgorithmLatency = 2048; // 合成输出和清音直通的公共延迟
-static constexpr int kGrainMaxLen = 4096;
-static constexpr int kPendingGrainCount = 8;
-
-// YIN 音高检测参数
-static constexpr int kYinFrameSize = 2048;
-static constexpr int kYinInterval = static_cast<int>(0.01f * kSampleRate);
-static constexpr float kYinThreshold = 0.18f;
-
-// 窗函数 LUT
-static constexpr int kWinTableSize = 2048;
+namespace detail {
 
 // ------------------------------------------------------------
-// HannWindow
+// 公共数值工具
 // ------------------------------------------------------------
-struct HannWindow {
+
+struct PsolaMath {
     /**
-     * @brief 初始化 Hann 窗查找表。
+     * @brief 将半音偏移量换算为频率倍率
+     * @param[in] semitones 半音偏移量
+     * @return 对应的频率倍率
      */
-    static void init() noexcept {
-        for (int i = 0; i < kWinTableSize; ++i) {
-            table_[i] = 0.5f
-                      * (1.0f
-                         - std::cos(2.0f * std::numbers::pi_v<float>
-                                    * static_cast<float>(i) / static_cast<float>(kWinTableSize - 1)));
-        }
+    static float semitonesToRatio(float semitones) {
+        return std::exp2(semitones / 12.0f);
     }
 
     /**
-     * @brief 返回指定长度 Hann 窗中的一个采样值。
-     * @param[in] index 窗内采样索引。
-     * @param[in] length 窗的总采样数。
-     * @return 范围为 [0, 1] 的窗权重。
+     * @brief 计算以脉冲标记为中心的 Hann 窗权重
+     * @param[in] offset 相对脉冲标记的采样偏移
+     * @param[in] half_width 窗函数的半宽
+     * @return 范围为零到一的窗权重
      */
-    static float value(int index, int length) noexcept {
-        if (length <= 1) {
-            return 1.0f;
+    static float hannWindow(int offset, int half_width) {
+        if (half_width <= 0 || std::abs(offset) >= half_width) {
+            return 0.0f;
         }
 
-        const float pos =
-            static_cast<float>(index) / static_cast<float>(length - 1) * static_cast<float>(kWinTableSize - 1);
-        const int index0 = static_cast<int>(pos);
-        const int index1 = std::min(index0 + 1, kWinTableSize - 1);
-        const float fraction = pos - static_cast<float>(index0);
-        return table_[index0] + fraction * (table_[index1] - table_[index0]);
+        const float phase = static_cast<float>(offset) / static_cast<float>(half_width);
+        return 0.5f + 0.5f * std::cos(std::numbers::pi_v<float> * phase);
     }
-private:
-    inline static std::array<float, kWinTableSize> table_{};
 };
 
 // ------------------------------------------------------------
-// FormantGrain
+// 基频检测
 // ------------------------------------------------------------
-struct FormantGrain {
-    std::array<float, kGrainMaxLen> samples{};
-    int length = 0;
-    int t0 = 0;
+
+struct PitchEstimate {
+    float period_samples = kSampleRate / 200.0f;
+    float pitch_hz = 0.0f;
+    float confidence = 0.0f;
+    bool voiced = false;
 };
 
-struct PendingGrain {
-    std::int64_t epoch_time = 0;
-    int t0 = 0;
-    int radius = 0;
-    bool active = false;
-};
+struct PitchDetector {
+    static constexpr std::size_t kFrameSize = 2048;
+    static constexpr std::size_t kHopSize = 256;
+    static constexpr float kMinPitchHz = 70.0f;
+    static constexpr float kMaxPitchHz = 500.0f;
+    static constexpr float kYinThreshold = 0.25f;
+    static constexpr float kRmsThreshold = 0.0025f;
+    // static constexpr float kConfidenceThreshold = 0.62f;
+    static constexpr float kConfidenceThreshold = 1 - kYinThreshold;
 
-// ------------------------------------------------------------
-// 实时 PSOLA
-// ------------------------------------------------------------
-/**
- * @brief 支持清浊音切换、完整 Grain 提取及归一化 OLA 的实时 TD-PSOLA。
- *
- * 浊音由 YIN 周期估计和残差信号中的周期峰值共同驱动。清音不参与
- * PSOLA 合成，而是通过同一输出时间轴上的延迟直通路径输出，并在
- * 清浊音边界进行平滑交叉淡化。
- */
-class RealtimePsola {
-public:
     /**
-     * @brief 重置处理器并设置采样率。
-     * @param[in] sample_rate 采样率，单位为 Hz。
+     * @brief 初始化 YIN 检测器及分析缓冲
+     * @param[in] sample_rate 音频采样率，单位为 Hz
      */
     void init(float sample_rate) {
         sample_rate_ = sample_rate;
-        min_period_ = static_cast<int>(sample_rate_ / kMaxF0);
-        max_period_ = static_cast<int>(sample_rate_ / kMinF0);
-        default_period_ = (min_period_ + max_period_) / 2;
-
-        std::fill(input_buf_.begin(), input_buf_.end(), 0.0f);
-        std::fill(output_buf_.begin(), output_buf_.end(), 0.0f);
-        std::fill(output_weight_buf_.begin(), output_weight_buf_.end(), 0.0f);
-        std::fill(dry_buf_.begin(), dry_buf_.end(), 0.0f);
-        std::fill(voicing_buf_.begin(), voicing_buf_.end(), 0.0f);
-        pending_grains_.fill(PendingGrain{});
-
-        latest_grain_ = FormantGrain{};
-        synth_grain_ = FormantGrain{};
-        input_wpos_ = 0;
-        output_rpos_ = 0;
-        input_time_ = 0;
-        phasor_phase_ = 0.0f;
-        synthesis_active_ = false;
-        pitch_scale_smoothed_ = 1.0f;
-        voiced_mix_ = 0.0f;
-
-        yin_counter_ = 0;
-        yin_period_ = 0.0f;
-        yin_previous_period_ = 0.0f;
-        yin_clarity_ = 0.0f;
-        yin_voiced_ = false;
-        voiced_candidate_count_ = 0;
-        unvoiced_candidate_count_ = 0;
-        yin_.Init(sample_rate_, kYinFrameSize);
-        yin_.SetMinPitch(kMinF0);
-        yin_.SetMaxPitch(kMaxF0);
+        yin_.Init(sample_rate, static_cast<int>(kFrameSize));
+        yin_.SetMinPitch(kMinPitchHz);
+        yin_.SetMaxPitch(kMaxPitchHz);
         yin_.SetThreshold(kYinThreshold);
 
-        previous_epoch_time_ = -1;
-        previous_period_ = static_cast<float>(default_period_);
-        gci_since_last_ = 0;
-        gci_searching_ = false;
-        gci_peak_ = 0.0f;
-        gci_peak_time_ = 0;
-        gci_peak_age_ = 0;
-        residual_previous_input_ = 0.0f;
+        input_ring_.fill(0.0f);
+        analysis_frame_.fill(0.0f);
+        write_position_ = 0;
+        samples_received_ = 0;
+        samples_until_analysis_ = kHopSize;
+        estimate_ = PitchEstimate{};
     }
 
-    std::atomic<float> pitch_shift_semitones_{0.0f};
-    std::atomic<float> formant_shift_{1.0f};
-    std::atomic<float> pitch_scale_target_{1.0f};
+    /**
+     * @brief 接收一个输入采样并按固定步长更新基频估计
+     * @param[in] input_sample 当前单声道输入采样
+     * @return 本次调用完成新一帧分析时返回 true
+     */
+    bool processSample(float input_sample) {
+        input_ring_[write_position_] = input_sample;
+        write_position_ = (write_position_ + 1) % kFrameSize;
+        samples_received_ = std::min(samples_received_ + 1, kFrameSize);
+
+        if (samples_received_ < kFrameSize) {
+            return false;
+        }
+
+        if (--samples_until_analysis_ > 0) {
+            return false;
+        }
+        samples_until_analysis_ = kHopSize;
+
+        float squared_sum = 0.0f;
+        for (std::size_t i = 0; i < kFrameSize; ++i) {
+            const float sample = input_ring_[(write_position_ + i) % kFrameSize];
+            analysis_frame_[i] = sample;
+            squared_sum += sample * sample;
+        }
+
+        yin_.Process(std::span<const float>{analysis_frame_});
+        const qwqdsp_pitch::Pitch pitch = yin_.GetPitch();
+        const float rms = std::sqrt(squared_sum / static_cast<float>(kFrameSize));
+        const float confidence = std::clamp(1.0f - pitch.non_period_ratio, 0.0f, 1.0f);
+        const bool pitch_in_range = pitch.pitch_hz >= kMinPitchHz && pitch.pitch_hz <= kMaxPitchHz;
+
+        estimate_.pitch_hz = pitch_in_range ? pitch.pitch_hz : 0.0f;
+        estimate_.confidence = confidence;
+        estimate_.voiced = pitch_in_range && rms >= kRmsThreshold && confidence >= kConfidenceThreshold;
+        if (estimate_.voiced) {
+            estimate_.period_samples = sample_rate_ / pitch.pitch_hz;
+        }
+        return true;
+    }
 
     /**
-     * @brief 处理一段单声道实时音频。
-     * @param[in] input 输入采样缓冲区。
-     * @param[out] output 输出采样缓冲区。
-     * @param[in] num_samples 缓冲区中的采样数。
+     * @brief 查询检测器是否已接收完整分析帧
+     * @return 可以提供稳定分析结果时返回 true
      */
-    void process(const float* input, float* output, int num_samples) noexcept {
-        const float pitch_target = pitch_scale_target_.load(std::memory_order_relaxed);
-        const float formant_scale = std::clamp(formant_shift_.load(std::memory_order_relaxed), 0.05f, 4.0f);
-        constexpr float kParameterSmooth = 0.001f;
-        constexpr float kVoicingFade = 0.004f;
+    bool ready() const noexcept {
+        return samples_received_ >= kFrameSize;
+    }
 
-        for (int i = 0; i < num_samples; ++i) {
-            const float x = input[i];
-            pitch_scale_smoothed_ += kParameterSmooth * (pitch_target - pitch_scale_smoothed_);
-            const float pitch_scale = std::max(pitch_scale_smoothed_, 0.05f);
+    /**
+     * @brief 获取最近一次基频估计
+     * @return 当前基频周期、频率、置信度和清浊音状态
+     */
+    PitchEstimate estimate() const noexcept {
+        return estimate_;
+    }
+private:
+    qwqdsp_pitch::Yin yin_;
+    std::array<float, kFrameSize> input_ring_{};
+    std::array<float, kFrameSize> analysis_frame_{};
+    std::size_t write_position_ = 0;
+    std::size_t samples_received_ = 0;
+    std::size_t samples_until_analysis_ = kHopSize;
+    float sample_rate_ = kSampleRate;
+    PitchEstimate estimate_{};
+};
 
-            input_buf_[input_wpos_] = x;
-            runAnalyzer(input_time_, x);
+// ------------------------------------------------------------
+// 实时 TD-PSOLA
+// ------------------------------------------------------------
 
-            const int synthesis_center =
-                wrapIndex(static_cast<std::int64_t>(output_rpos_) + kAlgorithmLatency, kOutputBufSize);
-            dry_buf_[synthesis_center] = x;
-            voicing_buf_[synthesis_center] = yin_voiced_ ? 1.0f : 0.0f;
+struct RealtimePsola {
+    static constexpr std::size_t kRingSize = 32768;
+    static constexpr std::size_t kRingMask = kRingSize - 1;
+    static constexpr std::size_t kVoicedHangoverUpdates = 3;
+    static constexpr float kVoicedReleaseConfidence = 0.45f;
+    static constexpr float kPeriodSmoothing = 0.18f;
+    static constexpr float kUnvoicedMaxJitterRatio = 0.30f;
+    static constexpr float kPitchMarkSearchHalfPeriods = 0.55f;
+    static constexpr float kSourceGrainHalfPeriods = 1.15f;
+    static constexpr float kTargetOverlapHalfPeriods = 0.55f;
+    static constexpr float kMinimumOlaNormalization = 1.0f;
+    static constexpr std::uint64_t kLatency = 6144;
+    static constexpr double kScheduleLookahead = 3200.0;
+    static constexpr float kMinPeriod = kSampleRate / PitchDetector::kMaxPitchHz;
+    static constexpr float kMaxPeriod = kSampleRate / PitchDetector::kMinPitchHz;
+    static_assert((kRingSize & (kRingSize - 1)) == 0, "环形缓冲长度必须为二的幂");
 
-            const bool can_synthesize = yin_voiced_ && latest_grain_.length > 0;
-            if (can_synthesize && !synthesis_active_) {
-                phasor_phase_ = 1.0f;
-            }
+    /**
+     * @brief 初始化 PSOLA 状态和固定容量环形缓冲
+     * @param[in] sample_rate 音频采样率，单位为 Hz
+     */
+    void init(float sample_rate) {
+        pitch_detector_.init(sample_rate);
+        input_ring_.fill(0.0f);
+        overlap_ring_.fill(0.0f);
+        weight_ring_.fill(0.0f);
+        voiced_ring_.fill(0.0f);
 
-            if (can_synthesize) {
-                const float t0 = static_cast<float>(latest_grain_.t0);
-                phasor_phase_ += pitch_scale / std::max(t0, 1.0f);
-                if (phasor_phase_ >= 1.0f) {
-                    phasor_phase_ -= std::floor(phasor_phase_);
-                    synth_grain_ = latest_grain_;
-                    if (std::abs(formant_scale - 1.0f) > 1e-4f) {
-                        synth_grain_ = resampleGrain(synth_grain_, formant_scale);
-                    }
-                    renderGrain(synth_grain_, synthesis_center);
-                }
-            }
-            else {
-                phasor_phase_ = 0.0f;
-            }
-            synthesis_active_ = can_synthesize;
+        input_position_ = 0;
+        next_target_mark_ = 0.0;
+        smoothed_period_ = sample_rate / 200.0f;
+        voiced_target_ = 0.0f;
+        voiced_hangover_updates_ = 0;
+        mark_polarity_ = 1.0f;
+        noise_state_ = 0x9E3779B9U;
+        scheduler_started_ = false;
+        polarity_initialized_ = false;
+    }
 
-            const float weight = output_weight_buf_[output_rpos_];
-            const bool has_psola = weight > 0.02f;
-            const float mix_target = has_psola ? voicing_buf_[output_rpos_] : 0.0f;
-            voiced_mix_ += kVoicingFade * (mix_target - voiced_mix_);
+    /**
+     * @brief 处理一段单声道实时音频
+     * @param[in] input 输入采样缓冲
+     * @param[out] output 输出采样缓冲
+     * @param[in] frame_count 缓冲中的采样数
+     * @param[in] pitch_ratio 目标音高倍率
+     * @param[in] formant_ratio 目标共振峰倍率
+     */
+    void process(const float* input, float* output, std::size_t frame_count, float pitch_ratio, float formant_ratio) {
+        const float safe_pitch_ratio = std::clamp(pitch_ratio, 0.5f, 2.0f);
+        const float safe_formant_ratio = std::clamp(formant_ratio, 0.5f, 2.0f);
 
-            const float dry = dry_buf_[output_rpos_];
-            const float wet = has_psola ? output_buf_[output_rpos_] / weight : dry;
-            output[i] = dry + voiced_mix_ * (wet - dry);
-
-            output_buf_[output_rpos_] = 0.0f;
-            output_weight_buf_[output_rpos_] = 0.0f;
-            dry_buf_[output_rpos_] = 0.0f;
-            voicing_buf_[output_rpos_] = 0.0f;
-
-            input_wpos_ = wrapIndex(static_cast<std::int64_t>(input_wpos_) + 1, kInputBufSize);
-            output_rpos_ = wrapIndex(static_cast<std::int64_t>(output_rpos_) + 1, kOutputBufSize);
-            ++input_time_;
+        for (std::size_t i = 0; i < frame_count; ++i) {
+            output[i] = processSample(input[i], safe_pitch_ratio, safe_formant_ratio);
         }
+    }
+
+    /**
+     * @brief 获取最近检测到的基频
+     * @return 有声输入的基频，无法可靠检测时返回零
+     */
+    float detectedPitchHz() const noexcept {
+        return pitch_detector_.estimate().voiced ? pitch_detector_.estimate().pitch_hz : 0.0f;
+    }
+
+    /**
+     * @brief 获取最近基频检测的置信度
+     * @return 范围为零到一的置信度
+     */
+    float pitchConfidence() const noexcept {
+        return pitch_detector_.estimate().confidence;
     }
 private:
     /**
-     * @brief 将有符号位置映射到 2 的幂大小的环形缓冲区。
-     * @param[in] index 单调采样位置或相对位置。
-     * @param[in] size 环形缓冲区大小。
-     * @return 缓冲区内的有效索引。
+     * @brief 将绝对采样位置映射到环形缓冲索引
+     * @param[in] position 绝对采样位置
+     * @return 环形缓冲中的数组索引
      */
-    static int wrapIndex(std::int64_t index, int size) noexcept {
-        return static_cast<int>(index & static_cast<std::int64_t>(size - 1));
+    static std::size_t ringIndex(std::uint64_t position) noexcept {
+        return static_cast<std::size_t>(position) & kRingMask;
     }
 
     /**
-     * @brief 运行周期估计、GCI 跟踪和延迟 Grain 发布。
-     * @param[in] time 当前输入的单调采样位置。
-     * @param[in] x 当前输入采样。
+     * @brief 按清浊音类型处理一个采样并输出延迟结果
+     * @param[in] input_sample 当前输入采样
+     * @param[in] pitch_ratio 目标音高倍率
+     * @param[in] formant_ratio 目标共振峰倍率
+     * @return 当前输出采样
+     * @note 低权重 OLA 区域不做满幅归一化，防止降调时恢复被跳过的源脉冲
      */
-    void runAnalyzer(std::int64_t time, float x) noexcept {
-        if (++yin_counter_ >= kYinInterval) {
-            yin_counter_ = 0;
-            runYin(time);
+    float processSample(float input_sample, float pitch_ratio, float formant_ratio) {
+        const std::size_t current_index = ringIndex(input_position_);
+        input_ring_[current_index] = input_sample;
+
+        if (pitch_detector_.processSample(input_sample)) {
+            updatePitchEstimate(pitch_detector_.estimate());
+        }
+        voiced_ring_[current_index] = voiced_target_;
+
+        if (!scheduler_started_ && pitch_detector_.ready()
+            && static_cast<double>(input_position_) > kScheduleLookahead) {
+            next_target_mark_ = static_cast<double>(input_position_) - kScheduleLookahead;
+            scheduler_started_ = true;
+        }
+        scheduleAvailableGrains(pitch_ratio, formant_ratio);
+
+        float dry_sample = 0.0f;
+        if (input_position_ >= kLatency) {
+            const std::size_t delayed_index = ringIndex(input_position_ - kLatency);
+            dry_sample = input_ring_[delayed_index];
         }
 
-        runGci(time, x);
-        publishReadyGrains(time);
+        float wet_sample = dry_sample;
+        if (weight_ring_[current_index] > 0.02f) {
+            const float normalization = std::max(weight_ring_[current_index], kMinimumOlaNormalization);
+            wet_sample = overlap_ring_[current_index] / normalization;
+        }
+
+        overlap_ring_[current_index] = 0.0f;
+        weight_ring_[current_index] = 0.0f;
+        ++input_position_;
+        return std::clamp(wet_sample, -1.0f, 1.0f);
     }
 
     /**
-     * @brief 使用 FFT 加速 YIN 估计基音周期和周期清晰度。
-     * @param[in] time 当前输入的单调采样位置。
+     * @brief 平滑基频周期并以迟滞方式更新二值浊音门控
+     * @param[in] estimate 最新 YIN 基频估计
+     * @note 置信度只参与清浊音状态判定，不作为干湿混合比例
      */
-    void runYin(std::int64_t time) noexcept {
-        float raw_energy = 0.0f;
-        const std::int64_t frame_start = time - kYinFrameSize + 1;
-        for (int i = 0; i < kYinFrameSize; ++i) {
-            const float sample = input_buf_[wrapIndex(frame_start + i, kInputBufSize)];
-            yin_frame_[i] = sample;
-            raw_energy += sample * sample;
-        }
-        const float rms = std::sqrt(raw_energy / static_cast<float>(kYinFrameSize));
-
-        yin_.Process(yin_frame_);
-        const qwqdsp_pitch::Pitch result = yin_.GetPitch();
-        const float clarity = std::clamp(1.0f - result.non_period_ratio, 0.0f, 1.0f);
-
-        float detected_period = 0.0f;
-        if (result.pitch_hz >= kMinF0 && result.pitch_hz <= kMaxF0 && result.non_period_ratio <= 0.45f) {
-            detected_period = sample_rate_ / result.pitch_hz;
-            if (yin_previous_period_ > 0.0f) {
-                const float ratio = detected_period / yin_previous_period_;
-                if (ratio > 1.55f && detected_period * 0.5f >= static_cast<float>(min_period_)) {
-                    detected_period *= 0.5f;
-                }
-                else if (ratio < 0.65f && detected_period * 2.0f <= static_cast<float>(max_period_)) {
-                    detected_period *= 2.0f;
-                }
+    void updatePitchEstimate(const PitchEstimate& estimate) {
+        if (!estimate.voiced) {
+            const bool weakly_voiced =
+                voiced_target_ > 0.0f && estimate.pitch_hz > 0.0f && estimate.confidence >= kVoicedReleaseConfidence;
+            if (weakly_voiced) {
+                voiced_hangover_updates_ = kVoicedHangoverUpdates;
+                return;
             }
-        }
 
-        if (detected_period > 0.0f && clarity >= 0.35f) {
-            if (yin_previous_period_ > 0.0f) {
-                detected_period = 0.55f * yin_previous_period_ + 0.45f * detected_period;
+            if (voiced_hangover_updates_ > 0) {
+                --voiced_hangover_updates_;
+                voiced_target_ = 1.0f;
             }
-            yin_period_ = detected_period;
-            yin_previous_period_ = detected_period;
-        }
-        yin_clarity_ = clarity;
-        updateVoicing(detected_period > 0.0f, clarity, rms);
-    }
-
-    /**
-     * @brief 通过双阈值和连续帧确认更新清浊音状态。
-     * @param[in] has_period 当前帧是否检测到有效周期。
-     * @param[in] clarity 当前帧的 YIN 周期清晰度。
-     * @param[in] rms 当前分析帧的线性 RMS。
-     */
-    void updateVoicing(bool has_period, float clarity, float rms) noexcept {
-        constexpr float kSilenceRms = 0.001f;
-        constexpr float kVoicedEnterClarity = 0.62f;
-        constexpr float kVoicedExitClarity = 0.45f;
-        const bool previous_state = yin_voiced_;
-
-        if (yin_voiced_) {
-            const bool lost_voice = rms < kSilenceRms || !has_period || clarity < kVoicedExitClarity;
-            unvoiced_candidate_count_ = lost_voice ? unvoiced_candidate_count_ + 1 : 0;
-            if (unvoiced_candidate_count_ >= 2) {
-                yin_voiced_ = false;
+            else {
+                voiced_target_ = 0.0f;
             }
-        }
-        else {
-            const bool found_voice = rms >= kSilenceRms && has_period && clarity >= kVoicedEnterClarity;
-            voiced_candidate_count_ = found_voice ? voiced_candidate_count_ + 1 : 0;
-            if (voiced_candidate_count_ >= 2) {
-                yin_voiced_ = true;
-            }
-        }
-
-        if (yin_voiced_ != previous_state) {
-            voiced_candidate_count_ = 0;
-            unvoiced_candidate_count_ = 0;
-            resetPitchMarks();
-            if (!yin_voiced_) {
-                yin_period_ = 0.0f;
-                yin_previous_period_ = 0.0f;
-            }
-        }
-    }
-
-    /**
-     * @brief 清除 GCI、待发布 Grain 和当前合成 Grain 状态。
-     */
-    void resetPitchMarks() noexcept {
-        previous_epoch_time_ = -1;
-        previous_period_ = yin_period_ > 0.0f ? yin_period_ : static_cast<float>(default_period_);
-        gci_since_last_ = 0;
-        gci_searching_ = false;
-        gci_peak_ = 0.0f;
-        gci_peak_age_ = 0;
-        latest_grain_.length = 0;
-        pending_grains_.fill(PendingGrain{});
-        synthesis_active_ = false;
-    }
-
-    /**
-     * @brief 在预测周期附近搜索残差峰值并生成 GCI 标记。
-     * @param[in] time 当前输入的单调采样位置。
-     * @param[in] x 当前输入采样。
-     */
-    void runGci(std::int64_t time, float x) noexcept {
-        const float residual = 0.5f * (x - residual_previous_input_);
-        residual_previous_input_ = x;
-
-        if (!yin_voiced_ || yin_period_ <= 0.0f) {
             return;
         }
 
-        ++gci_since_last_;
-        const float expected_period = previous_epoch_time_ >= 0 ? previous_period_ : yin_period_;
-        const int search_start = std::max(1, static_cast<int>(0.55f * expected_period));
-        const int earliest_finish = std::max(search_start + 1, static_cast<int>(0.78f * expected_period));
-        const int latest_finish = std::max(earliest_finish + 1, static_cast<int>(1.35f * expected_period));
+        voiced_target_ = 1.0f;
+        voiced_hangover_updates_ = kVoicedHangoverUpdates;
 
-        if (!gci_searching_ && gci_since_last_ >= search_start) {
-            gci_searching_ = true;
-            gci_peak_ = std::abs(residual);
-            gci_peak_time_ = time;
-            gci_peak_age_ = 0;
+        float candidate_period = std::clamp(estimate.period_samples, kMinPeriod, kMaxPeriod);
+        const float period_ratio = candidate_period / smoothed_period_;
+        if (period_ratio > 1.80f && period_ratio < 2.20f) {
+            candidate_period *= 0.5f;
         }
-        else if (gci_searching_) {
-            ++gci_peak_age_;
-            const float magnitude = std::abs(residual);
-            if (magnitude > gci_peak_) {
-                gci_peak_ = magnitude;
-                gci_peak_time_ = time;
-                gci_peak_age_ = 0;
-            }
+        else if (period_ratio > 0.45f && period_ratio < 0.56f) {
+            candidate_period *= 2.0f;
         }
 
-        const int settling_samples = std::max(4, static_cast<int>(0.04f * expected_period));
-        const bool peak_settled =
-            gci_searching_ && gci_since_last_ >= earliest_finish && gci_peak_age_ >= settling_samples;
-        const bool search_expired = gci_searching_ && gci_since_last_ >= latest_finish;
-        if (!peak_settled && !search_expired) {
+        smoothed_period_ += kPeriodSmoothing * (candidate_period - smoothed_period_);
+        smoothed_period_ = std::clamp(smoothed_period_, kMinPeriod, kMaxPeriod);
+    }
+
+    /**
+     * @brief 按清浊音类型安排具备输入前瞻的 PSOLA 颗粒
+     * @param[in] pitch_ratio 目标音高倍率
+     * @param[in] formant_ratio 目标共振峰倍率
+     */
+    void scheduleAvailableGrains(float pitch_ratio, float formant_ratio) {
+        if (!scheduler_started_) {
             return;
         }
 
-        int period = static_cast<int>(std::round(yin_period_));
-        if (previous_epoch_time_ >= 0) {
-            const std::int64_t measured = gci_peak_time_ - previous_epoch_time_;
-            const float ratio = static_cast<float>(measured) / std::max(yin_period_, 1.0f);
-            if (ratio >= 0.70f && ratio <= 1.40f) {
-                period = static_cast<int>(measured);
+        const double latest_schedulable = static_cast<double>(input_position_) - kScheduleLookahead;
+        while (next_target_mark_ <= latest_schedulable) {
+            if (readAlignedVoicing(next_target_mark_) >= 0.5f) {
+                const float target_period = smoothed_period_ / pitch_ratio;
+                addVoicedGrain(next_target_mark_, smoothed_period_, target_period, formant_ratio);
+                next_target_mark_ += static_cast<double>(target_period);
+            }
+            else {
+                addUnvoicedGrain(next_target_mark_, smoothed_period_, formant_ratio);
+                next_target_mark_ += static_cast<double>(smoothed_period_);
             }
         }
-        period = std::clamp(period, min_period_, max_period_);
-
-        queueGrain(gci_peak_time_, period);
-        previous_epoch_time_ = gci_peak_time_;
-        previous_period_ = 0.7f * previous_period_ + 0.3f * static_cast<float>(period);
-        gci_since_last_ = static_cast<int>(time - gci_peak_time_);
-        gci_searching_ = false;
-        gci_peak_ = 0.0f;
-        gci_peak_age_ = 0;
     }
 
     /**
-     * @brief 将 GCI 加入延迟提取队列，等待完整右半窗到达。
-     * @param[in] epoch_time GCI 的单调采样位置。
-     * @param[in] t0 当前基音周期，单位为采样数。
+     * @brief 读取与输入帧中心对齐的浊音状态
+     * @param[in] target_position 输入时间轴上的目标位置
+     * @return 浊音返回一，清音或越界位置返回零
      */
-    void queueGrain(std::int64_t epoch_time, int t0) noexcept {
-        const float pitch_scale = std::max(pitch_scale_smoothed_, 0.05f);
-        const float formant_scale = std::clamp(formant_shift_.load(std::memory_order_relaxed), 0.05f, 4.0f);
-        const float support_ratio = std::max(1.0f, formant_scale / pitch_scale);
-        const int radius =
-            std::clamp(static_cast<int>(std::ceil(static_cast<float>(t0) * support_ratio)), t0, kGrainMaxLen / 2 - 1);
-
-        PendingGrain* slot = nullptr;
-        for (PendingGrain& pending : pending_grains_) {
-            if (!pending.active) {
-                slot = &pending;
-                break;
-            }
-            if (slot == nullptr || pending.epoch_time < slot->epoch_time) {
-                slot = &pending;
-            }
+    float readAlignedVoicing(double target_position) const noexcept {
+        const std::int64_t target = static_cast<std::int64_t>(target_position);
+        const std::int64_t aligned_position = target + static_cast<std::int64_t>(PitchDetector::kFrameSize / 2);
+        if (aligned_position < 0 || static_cast<std::uint64_t>(aligned_position) > input_position_) {
+            return 0.0f;
         }
-
-        *slot = PendingGrain{epoch_time, t0, radius, true};
+        return voiced_ring_[ringIndex(static_cast<std::uint64_t>(aligned_position))];
     }
 
     /**
-     * @brief 发布所有右半窗已经完整写入输入缓冲区的 Grain。
-     * @param[in] time 当前输入的单调采样位置。
+     * @brief 定位目标时刻附近同极性的输入脉冲
+     * @param[in] target_position 目标时刻对应的输入位置
+     * @param[in] source_period 当前输入基音周期
+     * @return 对齐后的整数输入脉冲位置
      */
-    void publishReadyGrains(std::int64_t time) noexcept {
-        while (true) {
-            PendingGrain* ready = nullptr;
-            for (PendingGrain& pending : pending_grains_) {
-                if (!pending.active || time - pending.epoch_time < pending.radius) {
-                    continue;
-                }
-                if (ready == nullptr || pending.epoch_time < ready->epoch_time) {
-                    ready = &pending;
+    std::int64_t findSourceMark(double target_position, float source_period) {
+        const std::int64_t target = static_cast<std::int64_t>(std::llround(target_position));
+        const int search_half = std::max(1, static_cast<int>(std::lround(source_period * kPitchMarkSearchHalfPeriods)));
+        std::int64_t best_position = target;
+
+        if (!polarity_initialized_) {
+            float largest_magnitude = 0.0f;
+            for (int offset = -search_half; offset <= search_half; ++offset) {
+                const float sample = readInput(target + offset);
+                if (std::abs(sample) > largest_magnitude) {
+                    largest_magnitude = std::abs(sample);
+                    best_position = target + offset;
+                    mark_polarity_ = sample < 0.0f ? -1.0f : 1.0f;
                 }
             }
-            if (ready == nullptr) {
-                break;
+            polarity_initialized_ = true;
+            return best_position;
+        }
+
+        float best_score = -1.0f;
+        for (int offset = -search_half; offset <= search_half; ++offset) {
+            const float score = mark_polarity_ * readInput(target + offset);
+            if (score > best_score) {
+                best_score = score;
+                best_position = target + offset;
+            }
+        }
+        return best_position;
+    }
+
+    /**
+     * @brief 将一个经共振峰重采样的脉冲片段叠加到输出环形缓冲
+     * @param[in] target_position 合成标记在输入时间轴上的位置
+     * @param[in] source_period 输入基音周期
+     * @param[in] target_period 输出基音周期
+     * @param[in] formant_ratio 共振峰频率倍率
+     * @note 窗宽同时限制源域脉冲数量并保证目标标记之间具有稳定重叠
+     */
+    void addVoicedGrain(double target_position, float source_period, float target_period, float formant_ratio) {
+        const std::int64_t source_mark = findSourceMark(target_position, source_period);
+        const std::uint64_t output_mark =
+            static_cast<std::uint64_t>(std::llround(target_position + static_cast<double>(kLatency)));
+        const float source_limited_half_width = kSourceGrainHalfPeriods * source_period / formant_ratio;
+        const float overlap_limited_half_width = kTargetOverlapHalfPeriods * target_period;
+        const int half_width =
+            std::max(2, static_cast<int>(std::ceil(std::max(source_limited_half_width, overlap_limited_half_width))));
+
+        overlapGrain(source_mark, output_mark, half_width, formant_ratio);
+    }
+
+    /**
+     * @brief 使用最近浊音周期合成非周期清音颗粒
+     * @param[in] target_position 合成标记在输入时间轴上的位置
+     * @param[in] held_period 最近可靠浊音的基音周期
+     * @param[in] formant_ratio 共振峰频率倍率
+     * @note Formant 非零时随机扰动分析标记，避免稳定的周期性相消
+     */
+    void addUnvoicedGrain(double target_position, float held_period, float formant_ratio) {
+        const float formant_octaves = std::abs(std::log2(formant_ratio));
+        const float jitter_ratio = std::min(kUnvoicedMaxJitterRatio, formant_octaves * 0.45f);
+        const double source_position =
+            target_position + static_cast<double>(nextNoiseSample() * jitter_ratio * held_period);
+        const std::int64_t source_mark = static_cast<std::int64_t>(std::llround(source_position));
+        const std::uint64_t output_mark =
+            static_cast<std::uint64_t>(std::llround(target_position + static_cast<double>(kLatency)));
+        const int half_width = std::max(2, static_cast<int>(std::ceil(held_period)));
+
+        overlapGrain(source_mark, output_mark, half_width, formant_ratio);
+    }
+
+    /**
+     * @brief 生成用于清音分析标记扰动的双极性伪随机数
+     * @return 范围约为负一到一的伪随机值
+     */
+    float nextNoiseSample() noexcept {
+        noise_state_ ^= noise_state_ << 13U;
+        noise_state_ ^= noise_state_ >> 17U;
+        noise_state_ ^= noise_state_ << 5U;
+        constexpr float kScale = 1.0f / 16777215.0f;
+        const float normalized = static_cast<float>(noise_state_ >> 8U) * kScale;
+        return 2.0f * normalized - 1.0f;
+    }
+
+    /**
+     * @brief 对颗粒内部重采样并执行带权重归一化的重叠相加
+     * @param[in] source_mark 输入颗粒中心的绝对采样位置
+     * @param[in] output_mark 输出颗粒中心的绝对采样位置
+     * @param[in] half_width Hann 窗半宽
+     * @param[in] formant_ratio 共振峰频率倍率
+     */
+    void overlapGrain(std::int64_t source_mark, std::uint64_t output_mark, int half_width, float formant_ratio) {
+        for (int offset = -half_width; offset <= half_width; ++offset) {
+            const float window = PsolaMath::hannWindow(offset, half_width);
+            if (window <= 0.0f) {
+                continue;
             }
 
-            publishGrain(*ready);
-            ready->active = false;
+            const double source_position =
+                static_cast<double>(source_mark) + static_cast<double>(offset) * static_cast<double>(formant_ratio);
+            const float sample = readInputLinear(source_position);
+            const std::uint64_t output_position =
+                static_cast<std::uint64_t>(static_cast<std::int64_t>(output_mark) + offset);
+            const std::size_t output_index = ringIndex(output_position);
+            overlap_ring_[output_index] += sample * window;
+            weight_ring_[output_index] += window;
         }
     }
 
     /**
-     * @brief 从输入环形缓冲区提取一个未加窗的完整 Grain。
-     * @param[in] pending 待发布 Grain 的时间和尺寸信息。
+     * @brief 读取指定绝对位置的输入采样
+     * @param[in] position 有符号绝对采样位置
+     * @return 有效历史范围内的采样，越界时返回零
      */
-    void publishGrain(const PendingGrain& pending) noexcept {
-        const int length = std::min(2 * pending.radius, kGrainMaxLen);
-        for (int i = 0; i < length; ++i) {
-            const std::int64_t source_time = pending.epoch_time + i - pending.radius;
-            latest_grain_.samples[i] = input_buf_[wrapIndex(source_time, kInputBufSize)];
+    float readInput(std::int64_t position) const noexcept {
+        if (position < 0 || static_cast<std::uint64_t>(position) > input_position_) {
+            return 0.0f;
         }
-        latest_grain_.length = length;
-        latest_grain_.t0 = pending.t0;
+        return input_ring_[ringIndex(static_cast<std::uint64_t>(position))];
     }
 
     /**
-     * @brief 围绕 Grain 中心进行线性插值重采样。
-     * @param[in] source 原始未加窗 Grain。
-     * @param[in] ratio 重采样倍率，大于 1 时缩短 Grain。
-     * @return 重采样后的 Grain；尺寸越界时返回原 Grain。
+     * @brief 以线性插值读取非整数位置的输入采样
+     * @param[in] position 浮点绝对采样位置
+     * @return 插值后的输入采样
      */
-    static FormantGrain resampleGrain(const FormantGrain& source, float ratio) noexcept {
-        FormantGrain destination;
-        const int output_length = static_cast<int>(std::round(static_cast<float>(source.length) / ratio));
-        if (output_length < 2 || output_length > kGrainMaxLen) {
-            return source;
-        }
-
-        destination.length = output_length;
-        destination.t0 = source.t0;
-        const float source_center = 0.5f * static_cast<float>(source.length - 1);
-        const float output_center = 0.5f * static_cast<float>(output_length - 1);
-        for (int i = 0; i < output_length; ++i) {
-            const float source_position = source_center + (static_cast<float>(i) - output_center) * ratio;
-            const int index0 = std::clamp(static_cast<int>(std::floor(source_position)), 0, source.length - 1);
-            const int index1 = std::min(index0 + 1, source.length - 1);
-            const float fraction = std::clamp(source_position - static_cast<float>(index0), 0.0f, 1.0f);
-            destination.samples[i] =
-                source.samples[index0] + fraction * (source.samples[index1] - source.samples[index0]);
-        }
-        return destination;
+    float readInputLinear(double position) const {
+        const std::int64_t first_position = static_cast<std::int64_t>(std::floor(position));
+        const float fraction = static_cast<float>(position - static_cast<double>(first_position));
+        return std::lerp(readInput(first_position), readInput(first_position + 1), fraction);
     }
 
-    /**
-     * @brief 将一个 Grain 加窗并叠加到输出及归一化权重缓冲区。
-     * @param[in] grain 待渲染的未加窗 Grain。
-     * @param[in] center Grain 在输出环形缓冲区中的中心位置。
-     */
-    void renderGrain(const FormantGrain& grain, int center) noexcept {
-        const int half = grain.length / 2;
-        for (int i = 0; i < grain.length; ++i) {
-            const float window = HannWindow::value(i, grain.length);
-            const int output_index = wrapIndex(static_cast<std::int64_t>(center) + i - half, kOutputBufSize);
-            output_buf_[output_index] += grain.samples[i] * window;
-            output_weight_buf_[output_index] += window;
-        }
-    }
+    PitchDetector pitch_detector_;
+    std::array<float, kRingSize> input_ring_{};
+    std::array<float, kRingSize> overlap_ring_{};
+    std::array<float, kRingSize> weight_ring_{};
+    std::array<float, kRingSize> voiced_ring_{};
 
-    float sample_rate_ = kSampleRate;
-    int min_period_ = 0;
-    int max_period_ = 0;
-    int default_period_ = 0;
-
-    std::array<float, kInputBufSize> input_buf_{};
-    int input_wpos_ = 0;
-    std::int64_t input_time_ = 0;
-
-    FormantGrain latest_grain_{};
-    FormantGrain synth_grain_{};
-    std::array<PendingGrain, kPendingGrainCount> pending_grains_{};
-    float phasor_phase_ = 0.0f;
-    bool synthesis_active_ = false;
-    float pitch_scale_smoothed_ = 1.0f;
-
-    std::array<float, kOutputBufSize> output_buf_{};
-    std::array<float, kOutputBufSize> output_weight_buf_{};
-    std::array<float, kOutputBufSize> dry_buf_{};
-    std::array<float, kOutputBufSize> voicing_buf_{};
-    int output_rpos_ = 0;
-    float voiced_mix_ = 0.0f;
-
-    qwqdsp_pitch::Yin yin_{};
-    std::array<float, kYinFrameSize> yin_frame_{};
-    int yin_counter_ = 0;
-    float yin_period_ = 0.0f;
-    float yin_previous_period_ = 0.0f;
-    float yin_clarity_ = 0.0f;
-    bool yin_voiced_ = false;
-    int voiced_candidate_count_ = 0;
-    int unvoiced_candidate_count_ = 0;
-
-    std::int64_t previous_epoch_time_ = -1;
-    float previous_period_ = 0.0f;
-    int gci_since_last_ = 0;
-    bool gci_searching_ = false;
-    float gci_peak_ = 0.0f;
-    std::int64_t gci_peak_time_ = 0;
-    int gci_peak_age_ = 0;
-    float residual_previous_input_ = 0.0f;
+    std::uint64_t input_position_ = 0;
+    double next_target_mark_ = 0.0;
+    float smoothed_period_ = kSampleRate / 200.0f;
+    float voiced_target_ = 0.0f;
+    std::size_t voiced_hangover_updates_ = 0;
+    std::uint32_t noise_state_ = 0x9E3779B9U;
+    float mark_polarity_ = 1.0f;
+    bool scheduler_started_ = false;
+    bool polarity_initialized_ = false;
 };
 
-static RealtimePsola s_psola;
+} // namespace detail
 
 // ------------------------------------------------------------
-// miniaudio 回调
+// 音频与界面
 // ------------------------------------------------------------
-/**
- * @brief 将 miniaudio 双工输入交给实时 PSOLA 处理器。
- * @param[in] device miniaudio 设备指针。
- * @param[out] output_buffer 输出缓冲区。
- * @param[in] input_buffer 输入缓冲区。
- * @param[in] frame_count 单声道帧数。
- */
-extern "C" void maCallback(ma_device* device, void* output_buffer, const void* input_buffer, ma_uint32 frame_count) {
-    (void)device;
-    const auto* input = static_cast<const float*>(input_buffer);
-    auto* output = static_cast<float*>(output_buffer);
-    if (input == nullptr || output == nullptr) {
-        return;
+
+struct PsolaDemo {
+    /**
+     * @brief 初始化 DSP 与界面旋钮
+     * @param[in] sample_rate 音频设备采样率，单位为 Hz
+     */
+    void init(float sample_rate) {
+        processor_.init(sample_rate);
+        createControls();
     }
-    s_psola.process(input, output, static_cast<int>(frame_count));
-}
 
-// ------------------------------------------------------------
-// 旋钮工具
-// ------------------------------------------------------------
-/**
- * @brief 创建并排列一个参数旋钮。
- * @param[in,out] x 旋钮横坐标，返回时移动到下一个位置。
- * @param[in] y 旋钮纵坐标。
- * @param[in] width 旋钮宽度。
- * @param[in] height 旋钮高度。
- * @param[in] title 显示标题。
- * @param[in] minimum 参数最小值。
- * @param[in] maximum 参数最大值。
- * @param[in] step 参数步进值。
- * @param[in] default_value 参数默认值。
- * @return 配置完成的旋钮。
- */
-static Knob makeKnob(int& x, int y, int width, int height, const char* title, float minimum, float maximum, float step,
-                     float default_value) {
-    Knob knob;
-    knob.set_bound(x, y, width, height)
-        .set_title(title)
-        .set_range(minimum, maximum, step, default_value)
-        .set_value(default_value)
-        .set_name_font_size(9)
-        .set_number_font_size(9)
-        .set_fore_color(Color{200, 200, 210, 255})
-        .set_bg_color(Color{30, 30, 35, 255});
-    x += width + 14;
-    return knob;
-}
+    /**
+     * @brief 创建相互独立的音高和共振峰控制旋钮
+     */
+    void createControls() {
+        pitch_knob_.set_bound(118, 104, 130, 132)
+            .set_title("Pitch")
+            .set_range(kMinPitchSemitones, kMaxPitchSemitones, 0.1f, 0.0f)
+            .set_value(0.0f)
+            .set_sensitivity(2)
+            .set_name_font_size(17)
+            .set_number_font_size(13)
+            .set_fore_color(Color{235, 235, 238, 255})
+            .set_bg_color(Color{24, 26, 29, 255});
+        pitch_knob_.value_to_text_function = [](float value) { return std::format("{:+.1f} st", value); };
+        pitch_knob_.on_value_change = [this](float value) { pitch_semitones_.store(value, std::memory_order_relaxed); };
 
-// ------------------------------------------------------------
-// main
-// ------------------------------------------------------------
+        formant_knob_.set_bound(312, 104, 130, 132)
+            .set_title("Formant")
+            .set_range(kMinFormantSemitones, kMaxFormantSemitones, 0.1f, 0.0f)
+            .set_value(0.0f)
+            .set_sensitivity(2)
+            .set_name_font_size(17)
+            .set_number_font_size(13)
+            .set_fore_color(Color{235, 235, 238, 255})
+            .set_bg_color(Color{24, 26, 29, 255});
+        formant_knob_.value_to_text_function = [](float value) { return std::format("{:+.1f} st", value); };
+        formant_knob_.on_value_change = [this](float value) {
+            formant_semitones_.store(value, std::memory_order_relaxed);
+        };
+    }
+
+    /**
+     * @brief 处理音频设备提供的一段单声道采样
+     * @param[in] input 单声道输入缓冲
+     * @param[out] output 单声道输出缓冲
+     * @param[in] frame_count 缓冲中的采样数
+     */
+    void processAudio(const float* input, float* output, std::size_t frame_count) {
+        const float pitch_ratio = detail::PsolaMath::semitonesToRatio(pitch_semitones_.load(std::memory_order_relaxed));
+        const float formant_ratio =
+            detail::PsolaMath::semitonesToRatio(formant_semitones_.load(std::memory_order_relaxed));
+
+        processor_.process(input, output, frame_count, pitch_ratio, formant_ratio);
+
+        float input_peak = 0.0f;
+        float output_peak = 0.0f;
+        for (std::size_t i = 0; i < frame_count; ++i) {
+            input_peak = std::max(input_peak, std::abs(input[i]));
+            output_peak = std::max(output_peak, std::abs(output[i]));
+        }
+
+        input_peak_.store(std::max(input_peak, input_peak_.load(std::memory_order_relaxed) * 0.82f),
+                          std::memory_order_relaxed);
+        output_peak_.store(std::max(output_peak, output_peak_.load(std::memory_order_relaxed) * 0.82f),
+                           std::memory_order_relaxed);
+        detected_pitch_hz_.store(processor_.detectedPitchHz(), std::memory_order_relaxed);
+        pitch_confidence_.store(processor_.pitchConfidence(), std::memory_order_relaxed);
+    }
+
+    /**
+     * @brief 绘制参数控制、检测状态与输入输出电平
+     * @param[in] audio_running 音频设备是否成功启动
+     */
+    void draw(bool audio_running) {
+        static constexpr Color kBackground{18, 20, 23, 255};
+        static constexpr Color kPanel{24, 26, 29, 255};
+        static constexpr Color kText{232, 233, 235, 255};
+        static constexpr Color kMuted{126, 132, 139, 255};
+        static constexpr Color kAccent{76, 201, 151, 255};
+        static constexpr Color kWarning{225, 172, 74, 255};
+
+        ClearBackground(kBackground);
+        DrawRectangle(0, 0, kWindowWidth, 72, kPanel);
+        DrawRectangle(0, 71, kWindowWidth, 1, Color{48, 52, 57, 255});
+        DrawText("TD-PSOLA", 24, 18, 25, kText);
+        DrawText("REAL-TIME VOICE PROCESSOR", 25, 48, 10, kMuted);
+
+        const Color status_color = audio_running ? kAccent : kWarning;
+        DrawCircle(445, 30, 5.0f, status_color);
+        DrawText(audio_running ? "AUDIO ONLINE" : "AUDIO OFFLINE", 458, 24, 12, status_color);
+
+        DrawRectangle(279, 105, 1, 128, Color{48, 52, 57, 255});
+        pitch_knob_.display();
+        formant_knob_.display();
+
+        const float detected_pitch = detected_pitch_hz_.load(std::memory_order_relaxed);
+        const float confidence = pitch_confidence_.load(std::memory_order_relaxed);
+        const std::string pitch_text =
+            detected_pitch > 0.0f ? std::format("F0  {:6.1f} Hz", detected_pitch) : std::string{"F0       -- Hz"};
+        DrawText(pitch_text.c_str(), 24, 264, 13, detected_pitch > 0.0f ? kText : kMuted);
+
+        drawMeter(184, 266, 116, input_peak_.load(std::memory_order_relaxed), "IN", kAccent);
+        drawMeter(326, 266, 116, output_peak_.load(std::memory_order_relaxed), "OUT", Color{91, 160, 225, 255});
+
+        const int confidence_width = static_cast<int>(72.0f * std::clamp(confidence, 0.0f, 1.0f));
+        DrawText("TRACK", 462, 264, 10, kMuted);
+        DrawRectangle(462, 280, 72, 3, Color{45, 48, 52, 255});
+        DrawRectangle(462, 280, confidence_width, 3, status_color);
+
+        input_peak_.store(input_peak_.load(std::memory_order_relaxed) * 0.96f, std::memory_order_relaxed);
+        output_peak_.store(output_peak_.load(std::memory_order_relaxed) * 0.96f, std::memory_order_relaxed);
+    }
+
+    /**
+     * @brief 响应 miniaudio 的全双工单声道数据请求
+     * @param[in] device 发起回调的音频设备
+     * @param[out] output_buffer 单声道浮点输出缓冲
+     * @param[in] input_buffer 单声道浮点输入缓冲
+     * @param[in] frame_count 本次请求的音频帧数
+     */
+    static void audioCallback(ma_device* device, void* output_buffer, const void* input_buffer, ma_uint32 frame_count) {
+        auto* output = static_cast<float*>(output_buffer);
+        const auto* input = static_cast<const float*>(input_buffer);
+        auto* demo = static_cast<PsolaDemo*>(device->pUserData);
+
+        if (output == nullptr) {
+            return;
+        }
+        if (input == nullptr || demo == nullptr) {
+            for (ma_uint32 i = 0; i < frame_count; ++i) {
+                output[i] = 0.0f;
+            }
+            return;
+        }
+
+        demo->processAudio(input, output, static_cast<std::size_t>(frame_count));
+    }
+private:
+    /**
+     * @brief 绘制一个紧凑的水平峰值电平表
+     * @param[in] x 电平表左侧坐标
+     * @param[in] y 电平表顶部坐标
+     * @param[in] width 电平表宽度
+     * @param[in] value 线性峰值幅度
+     * @param[in] label 电平表标签
+     * @param[in] color 填充颜色
+     */
+    static void drawMeter(int x, int y, int width, float value, const char* label, Color color) {
+        const float normalized = std::clamp(value, 0.0f, 1.0f);
+        const int bar_width = width - 24;
+        const int fill_width = static_cast<int>(static_cast<float>(bar_width) * normalized);
+        DrawText(label, x, y - 2, 10, Color{126, 132, 139, 255});
+        DrawRectangle(x + 24, y, bar_width, 7, Color{45, 48, 52, 255});
+        DrawRectangle(x + 24, y, fill_width, 7, color);
+    }
+
+    detail::RealtimePsola processor_;
+    Knob pitch_knob_;
+    Knob formant_knob_;
+    std::atomic<float> pitch_semitones_{0.0f};
+    std::atomic<float> formant_semitones_{0.0f};
+    std::atomic<float> detected_pitch_hz_{0.0f};
+    std::atomic<float> pitch_confidence_{0.0f};
+    std::atomic<float> input_peak_{0.0f};
+    std::atomic<float> output_peak_{0.0f};
+};
+
+} // namespace psola_rt2
+
 /**
- * @brief 启动实时 PSOLA 演示程序。
- * @return 正常退出时返回 0。
+ * @brief 启动实时单声道 PSOLA 演示程序
+ * @return 正常退出返回零，音频设备初始化失败时仍保留界面并返回零
  */
 int main() {
+    using namespace psola_rt2;
+
     SetConfigFlags(FLAG_MSAA_4X_HINT);
-    InitWindow(kWindowWidth, kWindowHeight, "Realtime PSOLA - Voiced/Unvoiced");
+    InitWindow(kWindowWidth, kWindowHeight, kWindowTitle);
     SetTargetFPS(60);
 
-    HannWindow::init();
-    s_psola.init(kSampleRate);
-    s_psola.pitch_scale_target_.store(1.0f, std::memory_order_relaxed);
-    s_psola.pitch_shift_semitones_.store(0.0f, std::memory_order_relaxed);
-    s_psola.formant_shift_.store(1.0f, std::memory_order_relaxed);
+    static PsolaDemo demo;
+    demo.init(kSampleRate);
 
     ma_device_config config = ma_device_config_init(ma_device_type_duplex);
     config.capture.format = ma_format_f32;
@@ -632,51 +720,33 @@ int main() {
     config.playback.format = ma_format_f32;
     config.playback.channels = 1;
     config.sampleRate = static_cast<ma_uint32>(kSampleRate);
-    config.dataCallback = maCallback;
-    config.pUserData = nullptr;
-    config.periodSizeInMilliseconds = 10;
+    config.dataCallback = PsolaDemo::audioCallback;
+    config.pUserData = &demo;
+    config.periodSizeInMilliseconds = 5;
 
-    ma_device device;
-    const bool audio_ok = ma_device_init(nullptr, &config, &device) == MA_SUCCESS;
-    if (audio_ok) {
-        ma_device_start(&device);
+    ma_device device{};
+    const ma_result init_result = ma_device_init(nullptr, &config, &device);
+    ma_result audio_result = init_result;
+    bool audio_running = false;
+    if (init_result == MA_SUCCESS) {
+        audio_result = ma_device_start(&device);
+        audio_running = audio_result == MA_SUCCESS;
     }
 
-    constexpr int kKnobWidth = 80;
-    constexpr int kKnobHeight = 82;
-    constexpr int kGap = 30;
-    int knob_x = (kWindowWidth - (2 * kKnobWidth + kGap)) / 2;
-    const int knob_y = (kWindowHeight - kKnobHeight) / 2 - 10;
-
-    Knob pitch_knob = makeKnob(knob_x, knob_y, kKnobWidth, kKnobHeight, "Pitch", -12.0f, 12.0f, 0.5f, 0.0f);
-    Knob formant_knob = makeKnob(knob_x, knob_y, kKnobWidth, kKnobHeight, "Formant", 0.5f, 2.0f, 0.05f, 1.0f);
-
-    pitch_knob.on_value_change = [](float value) {
-        s_psola.pitch_scale_target_.store(std::pow(2.0f, value / 12.0f), std::memory_order_relaxed);
-        s_psola.pitch_shift_semitones_.store(value, std::memory_order_relaxed);
-    };
-    pitch_knob.value_to_text_function = [](float value) -> std::string {
-        return value >= 0.0f ? TextFormat("+%.1f st", value) : TextFormat("%.1f st", value);
-    };
-    formant_knob.on_value_change = [](float value) { s_psola.formant_shift_.store(value, std::memory_order_relaxed); };
-    formant_knob.value_to_text_function = [](float value) -> std::string { return TextFormat("%.2fx", value); };
-
-    const float pitch_value = pitch_knob.get_value();
-    s_psola.pitch_scale_target_.store(std::pow(2.0f, pitch_value / 12.0f), std::memory_order_relaxed);
-    s_psola.pitch_shift_semitones_.store(pitch_value, std::memory_order_relaxed);
-    s_psola.formant_shift_.store(formant_knob.get_value(), std::memory_order_relaxed);
+    if (!audio_running) {
+        std::cout << std::format("miniaudio: device start failed ({})\n", static_cast<int>(audio_result));
+    }
 
     while (!WindowShouldClose()) {
         BeginDrawing();
-        ClearBackground(Color{10, 10, 12, 255});
-        pitch_knob.display();
-        formant_knob.display();
-        DrawText("Realtime PSOLA - normalized V/UV synthesis", 10, kWindowHeight - 24, 10, Color{80, 80, 90, 255});
+        demo.draw(audio_running);
         EndDrawing();
     }
 
-    if (audio_ok) {
-        ma_device_stop(&device);
+    if (init_result == MA_SUCCESS) {
+        if (audio_running) {
+            ma_device_stop(&device);
+        }
         ma_device_uninit(&device);
     }
     CloseWindow();
