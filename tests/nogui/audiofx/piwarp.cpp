@@ -346,10 +346,128 @@ static void Piwarp5() {
     file.save(qwqdsp_support::OutputFile("piwarp5.wav"));
 }
 
+// ------------------------------------------------------------
+// DFT每个取共轭 等价于 实数信号反向时间
+// ------------------------------------------------------------
+
+struct Piwarp6Class {
+    Piwarp6Class(int in_size, int out_size) {
+        window_.resize(in_size);
+        qwqdsp_window::BlackmanHarris::Window(window_, true);
+        buffer_.resize(in_size * 4);
+
+        in_size_ = in_size;
+        out_size_ = out_size;
+    }
+
+    void operator()(std::span<const float> in, std::span<float> out) noexcept {
+        int len = in.size();
+        for (int i = 0; i < in.size(); ++i) {
+            buffer_[i] = 2 * window_[i] * in[len - i - 1];
+        }
+
+        // 将 buffer_ 从 in_size_ 线性插值拉伸到 out_size_
+        for (int i = 0; i < in_size_; ++i) {
+            float pos = static_cast<float>(i) * (in_size_ - 1) / (out_size_ - 1);
+            int idx = static_cast<int>(pos);
+            float frac = pos - idx;
+            if (idx + 1 < in_size_) {
+                out[i] = buffer_[idx] * (1.0f - frac) + buffer_[idx + 1] * frac;
+            }
+            else {
+                out[i] = buffer_[idx];
+            }
+        }
+
+        for (int i = 0; i < in_size_; ++i) {
+            out[i] *= window_[i];
+        }
+    }
+
+    std::vector<float> window_;
+    std::vector<float> buffer_;
+    int in_size_{};
+    int out_size_{};
+};
+
+struct Piwarp6bClass {
+    Piwarp6bClass(int in_size, int out_size) {
+        window_.resize(in_size);
+        qwqdsp_window::BlackmanHarris::Window(window_, true);
+        buffer_.resize(in_size * 4);
+
+        in_size_ = in_size;
+        out_size_ = out_size;
+    }
+
+    void operator()(std::span<const float> in, std::span<float> out) noexcept {
+        int len = in.size();
+        for (int i = 0; i < in.size(); ++i) {
+            buffer_[i] = 2 * in[len - i - 1];
+        }
+
+        // 将 buffer_ 从 in_size_ 线性插值拉伸到 out_size_
+        for (int i = 0; i < in_size_; ++i) {
+            float pos = static_cast<float>(i) * (in_size_ - 1) / (out_size_ - 1);
+            int idx = static_cast<int>(pos);
+            float frac = pos - idx;
+            if (idx + 1 < in_size_) {
+                out[i] = buffer_[idx] * (1.0f - frac) + buffer_[idx + 1] * frac;
+            }
+            else {
+                out[i] = buffer_[idx];
+            }
+        }
+
+        for (int i = 0; i < in_size_; ++i) {
+            out[i] *= window_[i];
+        }
+    }
+
+    std::vector<float> window_;
+    std::vector<float> buffer_;
+    int in_size_{};
+    int out_size_{};
+};
+
+static void Piwarp6() {
+    // AudioFile<float> file{qwqdsp_support::InputFile("pwm.wav")};
+    // AudioFile<float> file{qwqdsp_support::SweepWav()};
+    AudioFile<float> file{qwqdsp_support::WormholeWav()};
+    auto& x_vec = file.samples.front();
+
+    constexpr int filter_banks = 51;
+    constexpr int len = (filter_banks - 1) * 4;
+    constexpr int out_size = len * 0.5f;
+
+    qwqdsp_segement::AnalyzeSynthsisOffline2 as;
+    as.SetInputSize(len);
+    as.SetOutputSize(len);
+
+    // R必须设置为弱COLA条件的倍数
+    // 增加子带采样率会导致梳妆滤波
+    // as.SetInputHop(len / 4);
+    // as.SetOutputHop(len / 4);
+    as.SetInputHop(filter_banks - 1);
+    as.SetOutputHop(filter_banks - 1);
+    as.Reset();
+
+    std::vector<float> y_vec;
+    Piwarp6Class piwarp4{len, out_size};
+    as.Process(x_vec, y_vec, piwarp4);
+
+    file.setNumSamplesPerChannel(y_vec.size());
+    // file.samples.emplace_back(std::move(y_vec));
+    file.samples.front() = std::move(y_vec);
+    file.setNumChannels(1);
+    file.save(qwqdsp_support::OutputFile("piwarp6.wav"));
+}
+
 int main() {
     Piwarp1();
     Piwarp2();
     Piwarp3();
     Piwarp4();
     Piwarp5();
+    Piwarp6();
 }
