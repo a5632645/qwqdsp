@@ -1,0 +1,10 @@
+# ------------------------------------------------------------
+# Filter
+# ------------------------------------------------------------
+add_qwqdsp_dsp_test(biquad biquad.cpp)
+add_qwqdsp_dsp_test(fir_design fir_design.cpp)
+add_qwqdsp_dsp_test(minimum_phase_fir minimum_phase_fir.cpp)
+add_qwqdsp_dsp_test(paralle_allpass paralle_allpass.cpp)
+add_qwqdsp_dsp_test(reverse_iir reverse_iir.cpp)
+add_qwqdsp_dsp_test(residual_chebyshev residual_chebyshev.cpp)
+add_qwqdsp_dsp_test(any_hilbert any_hilbert.cpp)
