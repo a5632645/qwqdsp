@@ -21,7 +21,6 @@ struct BlackmanHarrisThreeTerm {
         }
         else {
             for (size_t n = 0; n < x.size(); ++n) {
-                const float t = n / (L - 1.0f);
                 x[n] = Get<false>(n, L);
             }
         }
@@ -36,14 +35,12 @@ struct BlackmanHarrisThreeTerm {
         }
         else {
             for (size_t n = 0; n < x.size(); ++n) {
-                const float t = n / (L - 1.0f);
                 x[n] *= Get<false>(n, L);
             }
         }
     }
 
     static void DWindow(std::span<float> x) noexcept {
-        constexpr float a0 = 0.4243801f;
         constexpr float a1 = 0.4973406f;
         constexpr float a2 = 0.0782793f;
         constexpr float twopi = std::numbers::pi_v<float> * 2;
@@ -56,7 +53,7 @@ struct BlackmanHarrisThreeTerm {
     }
 private:
     template <bool period>
-    static float Get(int n, int L) noexcept {
+    static float Get(size_t n, size_t L) noexcept {
         constexpr float a0 = 0.4243801f;
         constexpr float a1 = 0.4973406f;
         constexpr float a2 = 0.0782793f;

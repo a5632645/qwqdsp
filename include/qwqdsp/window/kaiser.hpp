@@ -24,7 +24,7 @@ struct Kaiser {
                 auto t = static_cast<float>(i) / static_cast<float>(N);
                 t = 2 * t - 1;
                 auto arg = std::sqrt(1.0f - t * t);
-                window[i] = qwqdsp_cephes::Bessel::i0(beta * arg) * down;
+                window[i] = static_cast<float>(qwqdsp_cephes::Bessel::i0(beta * arg) * down);
             }
         }
         else {
@@ -33,7 +33,7 @@ struct Kaiser {
                 auto t = static_cast<float>(i) / (static_cast<float>(N) - 1.0f);
                 t = 2 * t - 1;
                 auto arg = std::sqrt(1.0f - t * t);
-                window[i] = qwqdsp_cephes::Bessel::i0(beta * arg) * down;
+                window[i] = static_cast<float>(qwqdsp_cephes::Bessel::i0(beta * arg) * down);
             }
         }
     }
@@ -46,7 +46,7 @@ struct Kaiser {
                 auto t = static_cast<float>(i) / static_cast<float>(N);
                 t = 2 * t - 1;
                 auto arg = std::sqrt(1.0f - t * t);
-                x[i] *= qwqdsp_cephes::Bessel::i0(beta * arg) * down;
+                x[i] *= static_cast<float>(qwqdsp_cephes::Bessel::i0(beta * arg) * down);
             }
         }
         else {
@@ -55,7 +55,7 @@ struct Kaiser {
                 auto t = static_cast<float>(i) / (static_cast<float>(N) - 1.0f);
                 t = 2 * t - 1;
                 auto arg = std::sqrt(1.0f - t * t);
-                x[i] *= qwqdsp_cephes::Bessel::i0(beta * arg) * down;
+                x[i] *= static_cast<float>(qwqdsp_cephes::Bessel::i0(beta * arg) * down);
             }
         }
     }
@@ -73,21 +73,21 @@ struct Kaiser {
             t = 2 * t - 1;
 
             auto arg = std::sqrt(1.0f - t * t);
-            window[i] = qwqdsp_cephes::Bessel::i0(beta * arg) * down;
+            window[i] = static_cast<float>(qwqdsp_cephes::Bessel::i0(beta * arg) * down);
             if (i == 0) {
-                dwindow.front() =
+                dwindow.front() = static_cast<float>(
                     (qwqdsp_cephes::Bessel::i0(beta * std::sqrt(1.0f - (t + kTimeDelta) * (t + kTimeDelta))) * down
                      - window.front())
-                    / kTimeDelta;
+                    / kTimeDelta);
             }
             else if (i == N - 1) {
-                dwindow.back() =
+                dwindow.back() = static_cast<float>(
                     (qwqdsp_cephes::Bessel::i0(beta * std::sqrt(1.0f - (t - kTimeDelta) * (t - kTimeDelta))) * down
                      - window.back())
-                    / -kTimeDelta;
+                    / -kTimeDelta);
             }
             else {
-                dwindow[i] = qwqdsp_cephes::Bessel::i1(beta * arg) * beta * (-t / arg) * down;
+                dwindow[i] = static_cast<float>(qwqdsp_cephes::Bessel::i1(beta * arg) * beta * (-t / arg) * down);
             }
         }
     }

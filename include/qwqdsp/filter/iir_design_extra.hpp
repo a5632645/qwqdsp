@@ -40,7 +40,7 @@ public:
         assert(atten >= ripple);
 
         size_t const n = 2 * num_filter;
-        double first_pole = std::cos(pi * (n - 1.0) / (2.0 * n));
+        double first_pole = std::cos(pi * (static_cast<double>(n) - 1.0) / (2.0 * static_cast<double>(n)));
         first_pole = first_pole * first_pole;
 
         double scale = 0.0;
@@ -74,14 +74,14 @@ public:
         }
 
         double const eps = std::sqrt(std::pow(10.0, ripple / 10.0) - 1.0);
-        double const A = 1.0 / n * std::asinh(1.0 / eps);
+        double const A = 1.0 / static_cast<double>(n) * std::asinh(1.0 / eps);
         double const k_re = std::sinh(A);
         double const k_im = std::cosh(A);
 
         double gain = 1.0;
         size_t i = 0;
         for (size_t k = 1; k <= num_filter; ++k) {
-            double phi = (2.0 * k - 1.0) * pi / (2.0 * n);
+            double phi = (2.0 * static_cast<double>(k) - 1.0) * pi / (2.0 * static_cast<double>(n));
             if (even_pole_modify) {
                 auto pole = std::complex{-std::sin(phi) * k_re, std::cos(phi) * k_im};
                 ret[i].p = scale * std::sqrt((pole * pole + first_pole) / (1.0 - first_pole));
@@ -106,7 +106,7 @@ public:
         assert(ret.size() >= num_filter);
 
         size_t n = 2 * num_filter;
-        double first_pole = std::cos(pi * (n - 1.0) / (2.0 * n));
+        double first_pole = std::cos(pi * (static_cast<double>(n) - 1.0) / (2.0 * static_cast<double>(n)));
         first_pole = first_pole * first_pole;
 
         double scale = 0.0;
@@ -139,15 +139,16 @@ public:
 
         size_t i = 0;
         double eps = 1.0 / std::sqrt(std::pow(10.0, -ripple / 10.0) - 1.0);
-        double A = 1.0 / n * std::asinh(1.0 / eps);
+        double A = 1.0 / static_cast<double>(n) * std::asinh(1.0 / eps);
         double k_re = std::sinh(A);
         double k_im = std::cosh(A);
         double k = 1.0;
 
         // 最接近0的零点
-        double const first_zero = std::cos((n / 2.0 - 1.0 + 0.5) * std::numbers::pi_v<double> / n);
-        for (size_t k = 1; k <= num_filter; ++k) {
-            double phi = (2.0 * k - 1.0) * pi / (2.0 * n);
+        double const first_zero = std::cos(
+            (static_cast<double>(n) / 2.0 - 1.0 + 0.5) * std::numbers::pi_v<double> / static_cast<double>(n));
+        for (size_t kk = 1; kk <= num_filter; ++kk) {
+            double phi = (2.0 * static_cast<double>(kk) - 1.0) * pi / (2.0 * static_cast<double>(n));
             if (!even_order_modify) {
                 ret[i].z = scale / std::complex{0.0, std::cos(phi)};
                 ret[i].p = scale / std::complex{-std::sin(phi) * k_re, std::cos(phi) * k_im};
@@ -155,7 +156,7 @@ public:
             else {
                 auto pole = std::complex{-std::sin(phi) * k_re, std::cos(phi) * k_im};
                 ret[i].p = scale / std::sqrt((pole * pole + first_pole) / (1.0 - first_pole));
-                if (k != num_filter) {
+                if (kk != num_filter) {
                     // 最靠近0的切比雪夫多项式的零点被映射到0，所以零点在无穷远处不赋值
                     double const zero = std::cos(phi);
                     double const tt = std::sqrt(
@@ -177,11 +178,11 @@ private:
     static void ButterworthAtten(std::span<ZPK> ret, size_t num_filter, double square_epsi) {
         assert(ret.size() >= num_filter);
 
-        double const g = 1.0 / std::pow(square_epsi, 0.25 / num_filter);
+        double const g = 1.0 / std::pow(square_epsi, 0.25 / static_cast<double>(num_filter));
         size_t const n = 2 * num_filter;
         size_t i = 0;
         for (size_t k = 1; k <= num_filter; ++k) {
-            double phi = (2.0 * k - 1.0) * pi / (2.0 * n);
+            double phi = (2.0 * static_cast<double>(k) - 1.0) * pi / (2.0 * static_cast<double>(n));
             ret[i].p = g * std::complex{-std::sin(phi), std::cos(phi)};
             ret[i].k = 1.0;
             ++i;

@@ -56,7 +56,7 @@ struct RBJ {
             return kBiquadPassthrough;
         }
         else {
-            Lowpass(std::numbers::pi_v<float> / dicimate, std::numbers::sqrt2_v<float> / 2);
+            Lowpass(std::numbers::pi_v<float> / static_cast<float>(dicimate), std::numbers::sqrt2_v<float> / 2);
             return ToBiquadCoeff();
         }
     }

@@ -17,13 +17,13 @@ struct Lanczos {
         if (for_analyze_not_fir) {
             const size_t N = x.size();
             for (size_t i = 0; i < N; ++i) {
-                x[i] = Sinc(2.0 * i / N - 1.0f);
+                x[i] = Sinc(2.0f * static_cast<float>(i) / static_cast<float>(N) - 1.0f);
             }
         }
         else {
             const size_t N = x.size();
             for (size_t i = 0; i < N; ++i) {
-                x[i] = Sinc(2.0 * i / (N - 1.0f) - 1.0f);
+                x[i] = Sinc(2.0f * static_cast<float>(i) / static_cast<float>(N - 1) - 1.0f);
             }
         }
     }
@@ -32,13 +32,13 @@ struct Lanczos {
         if (for_analyze_not_fir) {
             const size_t N = x.size();
             for (size_t i = 0; i < N; ++i) {
-                x[i] *= Sinc(2.0 * i / N - 1.0f);
+                x[i] *= Sinc(2.0f * static_cast<float>(i) / static_cast<float>(N) - 1.0f);
             }
         }
         else {
             const size_t N = x.size();
             for (size_t i = 0; i < N; ++i) {
-                x[i] *= Sinc(2.0 * i / (N - 1.0f) - 1.0f);
+                x[i] *= Sinc(2.0f * static_cast<float>(i) / static_cast<float>(N - 1) - 1.0f);
             }
         }
     }
@@ -47,7 +47,7 @@ struct Lanczos {
         const size_t N = x.size();
         constexpr float pi = std::numbers::pi_v<float>;
         for (size_t i = 0; i < N; ++i) {
-            float t = 2.0f * i / N - 1.0f;
+            float t = 2.0f * static_cast<float>(i) / static_cast<float>(N) - 1.0f;
             if (t == 0.0f) {
                 x[i] = 0.0f;
             }

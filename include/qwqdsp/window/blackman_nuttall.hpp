@@ -21,7 +21,6 @@ struct BlackmanNuttall {
         }
         else {
             for (size_t n = 0; n < x.size(); ++n) {
-                const float t = n / (L - 1.0f);
                 x[n] = Get<false>(n, L);
             }
         }
@@ -36,14 +35,12 @@ struct BlackmanNuttall {
         }
         else {
             for (size_t n = 0; n < x.size(); ++n) {
-                const float t = n / (L - 1.0f);
                 x[n] *= Get<false>(n, L);
             }
         }
     }
 
     static void DWindow(std::span<float> x) noexcept {
-        constexpr float a0 = 0.3635819f;
         constexpr float a1 = 0.4891775f;
         constexpr float a2 = 0.1365995f;
         constexpr float a3 = 0.0106411f;
@@ -58,7 +55,7 @@ struct BlackmanNuttall {
     }
 private:
     template <bool period>
-    static float Get(int n, int L) noexcept {
+    static float Get(size_t n, size_t L) noexcept {
         constexpr float a0 = 0.3635819f;
         constexpr float a1 = 0.4891775f;
         constexpr float a2 = 0.1365995f;

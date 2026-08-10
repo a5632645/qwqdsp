@@ -16,13 +16,11 @@ struct Blackman {
         const size_t N = x.size();
         if (for_analyze_not_fir) {
             for (size_t n = 0; n < x.size(); ++n) {
-                const float t = n / static_cast<float>(N);
                 x[n] = Get<true>(n, N);
             }
         }
         else {
             for (size_t n = 0; n < x.size(); ++n) {
-                const float t = n / (N - 1.0f);
                 x[n] = Get<false>(n, N);
             }
         }
@@ -30,16 +28,13 @@ struct Blackman {
 
     static void ApplyWindow(std::span<float> x, bool for_analyze_not_fir) noexcept {
         const size_t N = x.size();
-        constexpr float twopi = std::numbers::pi_v<float> * 2;
         if (for_analyze_not_fir) {
             for (size_t n = 0; n < x.size(); ++n) {
-                const float t = n / static_cast<float>(N);
                 x[n] *= Get<true>(n, N);
             }
         }
         else {
             for (size_t n = 0; n < x.size(); ++n) {
-                const float t = n / (N - 1.0f);
                 x[n] *= Get<false>(n, N);
             }
         }
@@ -51,13 +46,13 @@ struct Blackman {
         constexpr float a1 = 0.496562f;
         constexpr float a2 = 0.076849f;
         for (size_t n = 0; n < N; ++n) {
-            const float t = static_cast<float>(n) / N;
+            const float t = static_cast<float>(n) / static_cast<float>(N);
             x[n] = a1 * twopi * std::sin(twopi * t) - a2 * twopi * 2 * std::sin(twopi * 2 * t);
         }
     }
 private:
     template <bool period>
-    static float Get(int n, int L) noexcept {
+    static float Get(size_t n, size_t L) noexcept {
         constexpr float a0 = 0.42659f;
         constexpr float a1 = 0.496562f;
         constexpr float a2 = 0.076849f;

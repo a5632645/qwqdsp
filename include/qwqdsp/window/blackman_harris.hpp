@@ -21,7 +21,6 @@ struct BlackmanHarris {
         }
         else {
             for (size_t n = 0; n < x.size(); ++n) {
-                const float t = n / (L - 1.0f);
                 x[n] = Get<false>(n, L);
             }
         }
@@ -36,7 +35,6 @@ struct BlackmanHarris {
         }
         else {
             for (size_t n = 0; n < x.size(); ++n) {
-                const float t = n / (L - 1.0f);
                 x[n] *= Get<false>(n, L);
             }
         }
@@ -57,7 +55,7 @@ struct BlackmanHarris {
     }
 private:
     template <bool period>
-    static float Get(int n, int L) noexcept {
+    static float Get(size_t n, size_t L) noexcept {
         constexpr float a0 = 0.35875f;
         constexpr float a1 = 0.48829f;
         constexpr float a2 = 0.14128f;
