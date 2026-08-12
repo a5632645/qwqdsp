@@ -251,7 +251,8 @@ static void Test3() {
 
         auto psd_modu = PowerSpectrum(modu_win);
         auto psd_carry = PowerSpectrum(carr_win);
-        auto out = WienerFilter(carr_buffer, psd_modu, psd_carry);
+        // auto out = WienerFilter(carr_buffer, psd_modu, psd_carry);
+        auto out = WienerFilter(carr_win, psd_modu, psd_carry);
         qwqdsp_window::Hann::ApplyWindow(out, true);
         for (int i = 0; i < block_size; ++i) {
             ola_buffer[i] += out[i];
