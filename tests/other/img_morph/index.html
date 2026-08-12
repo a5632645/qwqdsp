@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Image Morphing — 图像变形</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Image Morphing <span>Beier–Neely 特征线形变 · 中文示例</span></h1>
+  </header>
+
+  <main class="panels">
+    <section class="panel">
+      <h2>源图 (Source)</h2>
+      <div class="canvas-wrap"><canvas id="srcCanvas"></canvas></div>
+      <p class="hint">在此图拖拽画特征线，会自动在目标图生成对应线</p>
+    </section>
+
+    <section class="panel result">
+      <h2>结果 (Result) <span class="t-label">t = <span id="tLabel">0.50</span></span></h2>
+      <div class="canvas-wrap"><canvas id="resCanvas"></canvas></div>
+      <p class="hint">实时预览两图之间的中间帧</p>
+    </section>
+
+    <section class="panel">
+      <h2>目标图 (Target)</h2>
+      <div class="canvas-wrap"><canvas id="tgtCanvas"></canvas></div>
+      <p class="hint">拖动端点对齐到目标图上的对应特征</p>
+    </section>
+  </main>
+
+  <footer class="controls">
+    <fieldset>
+      <legend>示例</legend>
+      <button id="sample1">圆形 → 五角星</button>
+      <button id="sample2">笑脸 → 严肃脸</button>
+      <button id="sample3">圆形 → 三角形</button>
+    </fieldset>
+
+    <fieldset>
+      <legend>上传图片</legend>
+      <label>源图 <input type="file" id="srcFile" accept="image/*"></label>
+      <label>目标图 <input type="file" id="tgtFile" accept="image/*"></label>
+    </fieldset>
+
+    <fieldset>
+      <legend>过渡 (t)</legend>
+      <label class="row">
+        <input type="range" id="tSlider" min="0" max="100" value="50" step="1">
+        <button id="playBtn" type="button">播放</button>
+      </label>
+      <label>速度
+        <select id="speedSel">
+          <option value="0.5">0.5×</option>
+          <option value="1" selected>1×</option>
+          <option value="2">2×</option>
+          <option value="3">3×</option>
+        </select>
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>特征线</legend>
+      <span id="lineCount">特征线：0</span>
+      <button id="delBtn" type="button" disabled>删除所选</button>
+      <button id="clearBtn" type="button" disabled>清空全部</button>
+    </fieldset>
+
+    <p class="hint">
+      操作：在源图/目标图上拖拽画特征线（成对生成）→ 拖动端点对齐特征 → 拖滑块查看中间帧或点击播放。
+      单击线体选中，按 Del/Backspace 删除所选线，空格键播放/暂停。
+    </p>
+  </footer>
+
+  <script src="morph.js"></script>
+</body>
+</html>
