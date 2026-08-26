@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <deque>
 #include <numbers>
 #include <queue>
 #include <qwqdsp/spectral/real_fft.hpp>
@@ -39,6 +40,14 @@ public:
     /** 默认瞬态阈值：Flux 用 0.07，SuperFlux 用 0.03（ODF 尺度不同） */
     static constexpr float kDefaultFluxThreshold = 0.07f;
     static constexpr float kDefaultSuperFluxThreshold = 0.03f;
+    /** Flux 自适应阈值的近期 ODF 历史窗口（帧数） */
+    static constexpr size_t kFluxMedianWindow = 32;
+    /** Flux 瞬态判定：ODF > 中位数基线 × 该倍数 */
+    static constexpr float kFluxMultiplier = 4.0f;
+    /** Flux 瞬态后冷却帧数（避免连续重置打断 PGHI） */
+    static constexpr size_t kFluxCooldown = 6;
+    /** Flux 瞬态判定下限（中位数基线接近 0 时用绝对下限） */
+    static constexpr float kFluxMinOdf = 0.02f;
 
     void SetFrameSize(size_t n) noexcept {
         frame_size_ = n;
@@ -145,9 +154,40 @@ public:
 
             // ---- 瞬态检测 ----
             const float odf = ComputeOdf(curr_mag, fft_size, bins);
-            const bool is_transient = (i > 0) && (odf > transient_threshold_);
-            if (is_transient)
-                ++transient_frames;
+            bool is_transient = false;
+            if constexpr (Odf == OdfType::Flux) {
+                // Flux：自适应阈值（相对近期 ODF 中位数基线）+ 冷却。
+                // 线性幅度谱通量对扫频等持续频谱变化也持续响应，固定阈值
+                // 会把大多数帧判为瞬态、打断 PGHI；改为只对显著超过
+                // 局部基线的帧重置相位。
+                if (i > 0 && flux_cooldown_ == 0) {
+                    float baseline = 0.0f;
+                    if (!flux_hist_.empty()) {
+                        std::vector<float> hist(flux_hist_.begin(), flux_hist_.end());
+                        std::nth_element(hist.begin(), hist.begin() + hist.size() / 2, hist.end());
+                        baseline = hist[hist.size() / 2];
+                    }
+                    is_transient = odf > std::max(kFluxMultiplier * baseline, kFluxMinOdf);
+                }
+                if (is_transient) {
+                    flux_cooldown_ = kFluxCooldown;
+                    ++transient_frames;
+                }
+                if (flux_cooldown_ > 0)
+                    --flux_cooldown_;
+                // 更新历史：瞬态帧不推入，避免基线被异常高峰拉高
+                if (!is_transient) {
+                    flux_hist_.push_back(odf);
+                    if (flux_hist_.size() > kFluxMedianWindow)
+                        flux_hist_.pop_front();
+                }
+            }
+            else {
+                // SuperFlux：固定阈值（对数滤波器组 ODF 尺度稳定）
+                is_transient = (i > 0) && (odf > transient_threshold_);
+                if (is_transient)
+                    ++transient_frames;
+            }
 
             // ---- 相位决策 ----
             if (i == 0 || is_transient) {
@@ -207,6 +247,8 @@ public:
         output_.clear();
         band_cur_.clear();
         band_max_prev_.clear();
+        flux_hist_.clear();
+        flux_cooldown_ = 0;
     }
 
 private:
@@ -471,6 +513,10 @@ private:
     std::vector<size_t> band_count_;
     std::vector<float> band_cur_;
     std::vector<float> band_max_prev_;
+
+    // Flux 自适应瞬态状态（仅 OdfType::Flux 使用）
+    std::deque<float> flux_hist_; // 近期非瞬态帧 ODF（中位数基线）
+    size_t flux_cooldown_ = 0;
 };
 
 } // namespace qwqdsp_test
