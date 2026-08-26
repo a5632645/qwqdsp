@@ -10,32 +10,20 @@
 #include "baseline.hpp"
 #include "complex_domain.hpp"
 #include "fdk_attack.hpp"
-#include "hfc.hpp"
 #include "hpss.hpp"
-#include "kl_divergence.hpp"
-#include "modified_kl_divergence.hpp"
 #include "oneset_common.hpp"
 #include "opus_transient.hpp"
-#include "phase_deviation.hpp"
-#include "spec_diff.hpp"
 #include "spectral_flux.hpp"
 #include "superflux.hpp"
-#include "weighted_phase_deviation.hpp"
 
 using qwqdsp_test::BaselineTransientDetector;
 using qwqdsp_test::ComplexDomainDetector;
 using qwqdsp_test::FdkAttackDetector;
-using qwqdsp_test::HfcOnsetDetector;
 using qwqdsp_test::HpssPercussiveOnsetDetector;
-using qwqdsp_test::KlDivergenceOnsetDetector;
-using qwqdsp_test::ModifiedKlDivergenceOnsetDetector;
 using qwqdsp_test::OnsetResult;
 using qwqdsp_test::OpusTransientDetector;
-using qwqdsp_test::PhaseDeviationOnsetDetector;
-using qwqdsp_test::SpectralDifferenceOnsetDetector;
 using qwqdsp_test::SpectralFluxDetector;
 using qwqdsp_test::SuperFluxDetector;
-using qwqdsp_test::WeightedPhaseDeviationOnsetDetector;
 
 // ------------------------------------------------------------
 // 标记叠加
@@ -161,61 +149,7 @@ int main() {
             RunOnsetDetector("fdk", input_name, r, fs, x_vec);
         }
 
-        // 7. HFC 高频含量（aubio）
-        {
-            HfcOnsetDetector det;
-            det.SetFrameSize(2048);
-            det.SetHopSize(512);
-            auto r = det.Detect(x_vec, fs);
-            RunOnsetDetector("hfc", input_name, r, fs, x_vec);
-        }
-
-        // 8. 相位偏差（aubio）
-        {
-            PhaseDeviationOnsetDetector det;
-            det.SetFrameSize(2048);
-            det.SetHopSize(512);
-            auto r = det.Detect(x_vec, fs);
-            RunOnsetDetector("phasedev", input_name, r, fs, x_vec);
-        }
-
-        // 9. 加权相位偏差（aubio）
-        {
-            WeightedPhaseDeviationOnsetDetector det;
-            det.SetFrameSize(2048);
-            det.SetHopSize(512);
-            auto r = det.Detect(x_vec, fs);
-            RunOnsetDetector("wphasedev", input_name, r, fs, x_vec);
-        }
-
-        // 10. KL 散度（aubio）
-        {
-            KlDivergenceOnsetDetector det;
-            det.SetFrameSize(2048);
-            det.SetHopSize(512);
-            auto r = det.Detect(x_vec, fs);
-            RunOnsetDetector("kl", input_name, r, fs, x_vec);
-        }
-
-        // 11. 修正 KL 散度（aubio）
-        {
-            ModifiedKlDivergenceOnsetDetector det;
-            det.SetFrameSize(2048);
-            det.SetHopSize(512);
-            auto r = det.Detect(x_vec, fs);
-            RunOnsetDetector("mkl", input_name, r, fs, x_vec);
-        }
-
-        // 12. 谱差（aubio）
-        {
-            SpectralDifferenceOnsetDetector det;
-            det.SetFrameSize(2048);
-            det.SetHopSize(512);
-            auto r = det.Detect(x_vec, fs);
-            RunOnsetDetector("specdiff", input_name, r, fs, x_vec);
-        }
-
-        // 13. HPSS 打击乐分离（librosa）
+        // 7. HPSS 打击乐分离（librosa）
         {
             HpssPercussiveOnsetDetector det;
             det.SetFrameSize(2048);

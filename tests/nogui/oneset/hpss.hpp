@@ -5,7 +5,6 @@
 #include <span>
 #include <vector>
 
-#include "aubio_peak_pick.hpp"
 #include "oneset_common.hpp"
 
 namespace qwqdsp_test {
@@ -138,9 +137,8 @@ public:
             result.odf.push_back(perc_flux);
         }
 
-        detail::AubioPeakPicker picker;
-        picker.SetThreshold(0.3f); // 与 aubio specflux 同量级
-        result.onset_frames = picker.Pick(result.odf, hop, sample_rate);
+        // 峰值拾取（librosa 风格自适应阈值，delta 0.3 保持原灵敏度）
+        result.onset_frames = detail::PeakPick(result.odf, hop, sample_rate, 0.3f);
         for (size_t f : result.onset_frames)
             result.onset_samples.push_back(f * hop);
 
