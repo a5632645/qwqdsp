@@ -2,6 +2,7 @@
 #include "../interpolation.hpp"
 #include "../window/kaiser.hpp"
 #include <cassert>
+#include <numbers>
 #include <span>
 #include <vector>
 
@@ -15,12 +16,13 @@ public:
      */
     void Init(float source_fs, float target_fs, float atten, size_t kernel_len, size_t oversample) {
         assert(kernel_len % 2 == 1);
+        assert(source_fs > 0.0f && target_fs > 0.0f && atten > 0.0f && oversample > 0);
 
         phase_inc_ = source_fs / target_fs;
         kernel_len_ = kernel_len;
         oversample_plus1_ = oversample + 1;
 
-        size_t const lut_size = kernel_len + (kernel_len - 1) * oversample;
+        size_t const lut_size = (kernel_len - 1) * oversample_plus1_ + 1;
         kernel_.resize(lut_size + 1, 0.0f);
         float const beta = qwqdsp_window::Kaiser::Beta(atten);
         float const width = qwqdsp_window::Kaiser::MainLobeWidth(beta) * std::numbers::pi_v<float>
@@ -29,12 +31,7 @@ public:
         std::span kernel_block{kernel_.data(), lut_size};
         {
             float cutoff = 0.0f;
-            if (target_fs < source_fs) {
-                cutoff = std::numbers::pi_v<float> * target_fs / source_fs - width;
-            }
-            else {
-                cutoff = std::numbers::pi_v<float> - width;
-            }
+            cutoff = std::numbers::pi_v<float> * std::min(1.0f, target_fs / source_fs) * 0.97f;
 
             float const center = (static_cast<float>(kernel_block.size()) - 1.0f) / 2.0f;
             float const omega = cutoff / static_cast<float>(oversample_plus1_);
@@ -57,45 +54,27 @@ public:
     std::vector<float> Process(std::span<float> x) {
         std::vector<float> r;
 
-        float phase = 0.0f;
-        int const ikernel_len = static_cast<int>(kernel_len_);
-        int const xsize = static_cast<int>(x.size());
-        int const half_len = (static_cast<int>(kernel_len_) - 1) / 2;
-        int xrpos = -(static_cast<int>(kernel_len_) - 1) / 2;
-
-        while (xrpos < xsize - half_len) {
+        double position = 0.0;
+        int const half_len = static_cast<int>((kernel_len_ - 1) / 2);
+        while (position < static_cast<double>(x.size())) {
             float sum{};
-
-            if (phase == 0.0f) {
-                int const begin = std::max(0, -xrpos);
-                int const xibegin = std::max(0, xrpos);
-                int const len = std::min(ikernel_len, xsize - xibegin);
-                for (int i = begin; i < len; ++i) {
-                    size_t const krpos = static_cast<size_t>(i) * oversample_plus1_;
-                    float const kernel_v = kernel_[krpos];
-                    sum += kernel_v * x[static_cast<size_t>(xibegin + i)];
-                }
-            }
-            else {
-                float const frac = 1.0f - phase;
-                int const begin = std::max(0, -xrpos);
-                int const xibegin = std::max(0, xrpos + 1);
-                int const len = std::min(ikernel_len - 1, xsize - xibegin);
-                for (int i = begin; i < len; ++i) {
-                    float const krpos = static_cast<float>(static_cast<size_t>(i) * oversample_plus1_)
+            float weight_sum{};
+            int const base = static_cast<int>(std::floor(position));
+            float const frac = static_cast<float>(position - static_cast<double>(base));
+            for (int tap = -half_len; tap <= half_len; ++tap) {
+                int const index = base + tap;
+                if (index < 0 || index >= static_cast<int>(x.size())) continue;
+                float const table_pos = static_cast<float>(half_len - tap) * static_cast<float>(oversample_plus1_)
                                       + frac * static_cast<float>(oversample_plus1_);
-                    size_t const ikrpos = static_cast<size_t>(krpos);
-                    float const frac_krpos = krpos - std::floor(krpos);
-                    float const kernel_v =
-                        qwqdsp::Interpolation::Linear(kernel_[ikrpos], kernel_[ikrpos + 1], frac_krpos);
-                    sum += kernel_v * x[static_cast<size_t>(xibegin + i)];
-                }
+                size_t const table_index = std::min(static_cast<size_t>(table_pos), kernel_.size() - 2);
+                float const table_frac = table_pos - static_cast<float>(table_index);
+                float const weight =
+                    qwqdsp::Interpolation::Linear(kernel_[table_index], kernel_[table_index + 1], table_frac);
+                sum += weight * x[static_cast<size_t>(index)];
+                weight_sum += weight;
             }
-            r.push_back(sum);
-
-            phase += phase_inc_;
-            xrpos += static_cast<int>(std::floor(phase));
-            phase = phase - std::floor(phase);
+            r.push_back(std::abs(weight_sum) > 1.0e-12f ? sum / weight_sum : 0.0f);
+            position += static_cast<double>(phase_inc_);
         }
 
         return r;
