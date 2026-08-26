@@ -5,6 +5,7 @@
 #include <vector>
 #include <work_dir.hpp>
 
+#include "pitch_shift/phase_gradient_transient.hpp"
 #include "pitch_shift/phase_locked_vocoder.hpp"
 #include "pitch_shift/phase_vocoder2.hpp"
 #include "pitch_shift/phase_vocoder3.hpp"
@@ -12,6 +13,8 @@
 #include "pitch_shift/transient_vocoder.hpp"
 #include "pitch_shift/wsola.hpp"
 
+using qwqdsp_test::OdfType;
+using qwqdsp_test::PhaseGradientTransientVocoder;
 using qwqdsp_test::PhaseGradientVocoder;
 using qwqdsp_test::PhaseLockedVocoder;
 using qwqdsp_test::Psola;
@@ -237,6 +240,40 @@ static void ProcessTRV(const char* name, float kt, float kp) {
     std::cout << std::format("saved {}\n\n", name) << std::flush;
 }
 
+// ------------------------------------------------------------
+// Phase Gradient + Flux/SuperFlux 瞬态（PGHI 结合瞬态检测）
+// ------------------------------------------------------------
+/**
+ * @brief PGHI 相位声码器 + flux/superflux 瞬态检测（瞬态帧相位重置）。
+ *
+ * @tparam Odf 瞬态 ODF 类型（Flux 或 SuperFlux）
+ */
+template <qwqdsp_test::OdfType Odf>
+static void ProcessPGT(const char* name, float kt, float kp) {
+    auto wav_path = qwqdsp_support::SweepWav();
+    AudioFile<float> file{wav_path};
+    auto& x_vec = file.samples.front();
+
+    std::cout << std::format("{} (kt={:.2f}, kp={:.2f}): {} -> ", name, kt, kp, x_vec.size()) << std::flush;
+
+    PhaseGradientTransientVocoder<Odf> dsp;
+    dsp.SetFrameSize(4096);
+    dsp.SetOverSample(2);
+    dsp.SetTimeStretch(kt);
+    dsp.SetPitchShift(kp);
+    dsp.SetSampleRate(static_cast<float>(file.getSampleRate()));
+
+    auto out = dsp.Process(x_vec);
+    std::cout << std::format("{}\n", out.size()) << std::flush;
+
+    qwqdsp_support::AudioOps::Normalize(out);
+    file.setNumSamplesPerChannel(out.size());
+    file.samples[0] = out;
+    file.setNumChannels(1);
+    file.save(qwqdsp_support::OutputFile(name));
+    std::cout << std::format("saved {}\n\n", name) << std::flush;
+}
+
 int main() {
     RunWsolaTest();
 
@@ -257,6 +294,14 @@ int main() {
     ProcessTRV("trv_ts_1.5x.wav", 1.5f, 1.0f);
     ProcessTRV("trv_ps_1.5x.wav", 1.0f, 1.5f);
     ProcessTRV("trv_ts1.5_ps1.5.wav", 1.5f, 1.5f);
+
+    ProcessPGT<qwqdsp_test::OdfType::Flux>("pgt_flux_ts_1.5x.wav", 1.5f, 1.0f);
+    ProcessPGT<qwqdsp_test::OdfType::Flux>("pgt_flux_ps_1.5x.wav", 1.0f, 1.5f);
+    ProcessPGT<qwqdsp_test::OdfType::Flux>("pgt_flux_ts1.5_ps1.5.wav", 1.5f, 1.5f);
+
+    ProcessPGT<qwqdsp_test::OdfType::SuperFlux>("pgt_superflux_ts_1.5x.wav", 1.5f, 1.0f);
+    ProcessPGT<qwqdsp_test::OdfType::SuperFlux>("pgt_superflux_ps_1.5x.wav", 1.0f, 1.5f);
+    ProcessPGT<qwqdsp_test::OdfType::SuperFlux>("pgt_superflux_ts1.5_ps1.5.wav", 1.5f, 1.5f);
 
     std::cout << std::format("all done\n") << std::flush;
 }
