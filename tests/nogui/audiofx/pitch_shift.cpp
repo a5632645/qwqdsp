@@ -136,7 +136,7 @@ static void RunPsolaTest() {
 // ------------------------------------------------------------
 /** 本地相位梯度声码器：正常音频处理并保存 */
 static void ProcessPV2(const char* name, float kt, float kp) {
-    auto wav_path = qwqdsp_support::SweepWav();
+    auto wav_path = qwqdsp_support::InputFile("sine.wav");
     AudioFile<float> file{wav_path};
     auto& x_vec = file.samples.front();
 
@@ -164,7 +164,7 @@ static void ProcessPV2(const char* name, float kt, float kp) {
 // ------------------------------------------------------------
 /** 库版相位梯度声码器：正常音频处理并保存 */
 static void ProcessPV3(const char* name, float kt, float kp) {
-    auto wav_path = qwqdsp_support::SweepWav();
+    auto wav_path = qwqdsp_support::InputFile("sine.wav");
     AudioFile<float> file{wav_path};
     auto& x_vec = file.samples.front();
 
@@ -190,7 +190,7 @@ static void ProcessPV3(const char* name, float kt, float kp) {
  *        恢复谐波相位相干，消除普通声码器的 "phasiness"。
  */
 static void ProcessPVL(const char* name, float kt, float kp) {
-    auto wav_path = qwqdsp_support::SweepWav();
+    auto wav_path = qwqdsp_support::InputFile("sine.wav");
     AudioFile<float> file{wav_path};
     auto& x_vec = file.samples.front();
 
@@ -219,7 +219,7 @@ static void ProcessPVL(const char* name, float kt, float kp) {
  *        起始处重置相位保留攻击锐度。
  */
 static void ProcessTRV(const char* name, float kt, float kp) {
-    auto wav_path = qwqdsp_support::InputFile("drumloop.wav");
+    auto wav_path = qwqdsp_support::InputFile("sine.wav");
     AudioFile<float> file{wav_path};
     auto& x_vec = file.samples.front();
 
@@ -250,7 +250,7 @@ static void ProcessTRV(const char* name, float kt, float kp) {
  */
 template <qwqdsp_test::OdfType Odf>
 static void ProcessPGT(const char* name, float kt, float kp) {
-    auto wav_path = qwqdsp_support::SweepWav();
+    auto wav_path = qwqdsp_support::InputFile("sine.wav");
     AudioFile<float> file{wav_path};
     auto& x_vec = file.samples.front();
 
@@ -275,24 +275,24 @@ static void ProcessPGT(const char* name, float kt, float kp) {
 }
 
 int main() {
-    RunWsolaTest();
+    // RunWsolaTest();
 
-    RunPsolaTest();
+    // RunPsolaTest();
 
     ProcessPV2("PV2_ts_1.5x.wav", 1.5f, 1.0f);
-    ProcessPV2("PV2_ps_1.5x.wav", 1.0f, 1.5f);
+    ProcessPV2("PV2_ps_1.5x.wav", 1.0f, 2.0f);
     ProcessPV2("PV2_ts1.5_ps1.5.wav", 1.5f, 1.5f);
 
     ProcessPV3("PV3_ts_1.5x.wav", 1.5f, 1.0f);
-    ProcessPV3("PV3_ps_1.5x.wav", 1.0f, 1.5f);
+    ProcessPV3("PV3_ps_1.5x.wav", 1.0f, 2.0f);
     ProcessPV3("PV3_ts1.5_ps1.5.wav", 1.5f, 1.5f);
 
     ProcessPVL("pvl_ts_1.5x.wav", 1.5f, 1.0f);
-    ProcessPVL("pvl_ps_1.5x.wav", 1.0f, 1.5f);
+    ProcessPVL("pvl_ps_1.5x.wav", 1.0f, 2.0f);
     ProcessPVL("pvl_ts1.5_ps1.5.wav", 1.5f, 1.5f);
 
     ProcessTRV("trv_ts_1.5x.wav", 1.5f, 1.0f);
-    ProcessTRV("trv_ps_1.5x.wav", 1.0f, 1.5f);
+    ProcessTRV("trv_ps_1.5x.wav", 1.0f, 2.0f);
     ProcessTRV("trv_ts1.5_ps1.5.wav", 1.5f, 1.5f);
 
     ProcessPGT<qwqdsp_test::OdfType::Flux>("pgt_flux_ts_1.5x.wav", 1.5f, 1.0f);

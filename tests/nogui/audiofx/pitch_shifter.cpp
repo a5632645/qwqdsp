@@ -10,12 +10,12 @@
 // ------------------------------------------------------------
 
 static void PitchShift_Grain() {
-    auto wav_path = qwqdsp_support::WormholeWav();
+    auto wav_path = qwqdsp_support::InputFile("sine.wav");
     AudioFile<float> file{wav_path};
     auto& x_vec = file.samples.front();
 
     qwqdsp_fx::PitchShifter dsp;
-    dsp.SetPitchShift(7.0f);
+    dsp.SetPitchShift(12.0f);
     for (float& x : x_vec) {
         x = dsp.Tick(x);
     }
@@ -27,13 +27,13 @@ static void PitchShift_Grain() {
 }
 
 static void PitchShift_PhaseVocoder() {
-    auto wav_path = qwqdsp_support::WormholeWav();
+    auto wav_path = qwqdsp_support::InputFile("sine.wav");
     AudioFile<float> file{wav_path};
     auto& x_vec = file.samples.front();
     auto x2_vec = x_vec;
 
     qwqdsp_fx::PhaseVocoder dsp;
-    dsp.pitch_shift = 7.0f;
+    dsp.pitch_shift = 12.0f;
     dsp.Process(x_vec.data(), x2_vec.data(), x_vec.size());
 
     qwqdsp_support::AudioOps::Normalize(x_vec);
