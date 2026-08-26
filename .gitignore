@@ -2,3 +2,4 @@ build/
 raylib/
 tests/work_dir/output/
 *.asd
+__pycache__/
