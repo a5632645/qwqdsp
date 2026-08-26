@@ -5,15 +5,19 @@
 #include <vector>
 #include <work_dir.hpp>
 
+#include "pitch_shift/phase_locked_vocoder.hpp"
 #include "pitch_shift/phase_vocoder2.hpp"
 #include "pitch_shift/phase_vocoder3.hpp"
 #include "pitch_shift/psola.hpp"
+#include "pitch_shift/transient_vocoder.hpp"
 #include "pitch_shift/wsola.hpp"
 
 using qwqdsp_test::PhaseGradientVocoder;
+using qwqdsp_test::PhaseLockedVocoder;
 using qwqdsp_test::Psola;
 using qwqdsp_test::RunPhaseVocoder3;
 using qwqdsp_test::RunWsola;
+using qwqdsp_test::TransientVocoder;
 
 // ------------------------------------------------------------
 // WSOLA
@@ -153,39 +157,6 @@ static void ProcessPV2(const char* name, float kt, float kp) {
 }
 
 // ------------------------------------------------------------
-// Delta 测试
-// ------------------------------------------------------------
-/**
- * @brief 使用 delta（8192 处为 1.0）作为输入测试声码器。
- */
-static void TestDeltaPV2(const char* name, float kt, float kp) {
-    constexpr size_t kLen = 65536;
-    constexpr size_t kDeltaPos = 8192;
-    std::vector<float> x(kLen, 0.0f);
-    x[kDeltaPos] = 1.0f;
-
-    std::cout << std::format("{} (kt={:.2f}, kp={:.2f}): delta@{} -> ", name, kt, kp, kDeltaPos) << std::flush;
-
-    PhaseGradientVocoder dsp;
-    dsp.SetFrameSize(4096);
-    dsp.SetOverSample(2);
-    dsp.SetTimeStretch(kt);
-    dsp.SetPitchShift(kp);
-
-    auto out = dsp.Process(x);
-    std::cout << std::format("{}\n", out.size()) << std::flush;
-
-    qwqdsp_support::AudioOps::Normalize(out);
-    AudioFile<float> file;
-    file.setNumSamplesPerChannel(out.size());
-    file.samples.resize(1);
-    file.samples[0] = out;
-    file.setNumChannels(1);
-    file.save(qwqdsp_support::OutputFile(name));
-    std::cout << std::format("saved {}\n\n", name) << std::flush;
-}
-
-// ------------------------------------------------------------
 // Phase Vocoder 3（库版 PGHI + 离线分帧）
 // ------------------------------------------------------------
 /** 库版相位梯度声码器：正常音频处理并保存 */
@@ -208,24 +179,58 @@ static void ProcessPV3(const char* name, float kt, float kp) {
     std::cout << std::format("saved {}\n\n", name) << std::flush;
 }
 
+// ------------------------------------------------------------
+// Phase Locked Vocoder（相位锁定声码器）
+// ------------------------------------------------------------
 /**
- * @brief 使用 delta（8192 处为 1.0）作为输入测试库版声码器。
+ * @brief 相位锁定声码器（Laroche & Dolson identity phase locking），
+ *        恢复谐波相位相干，消除普通声码器的 "phasiness"。
  */
-static void TestDeltaPV3(const char* name, float kt, float kp) {
-    constexpr size_t kLen = 65536;
-    constexpr size_t kDeltaPos = 8192;
-    std::vector<float> x(kLen, 0.0f);
-    x[kDeltaPos] = 1.0f;
+static void ProcessPVL(const char* name, float kt, float kp) {
+    auto wav_path = qwqdsp_support::SweepWav();
+    AudioFile<float> file{wav_path};
+    auto& x_vec = file.samples.front();
 
-    std::cout << std::format("{} (kt={:.2f}, kp={:.2f}): delta@{} -> ", name, kt, kp, kDeltaPos) << std::flush;
+    std::cout << std::format("{} (kt={:.2f}, kp={:.2f}): {} -> ", name, kt, kp, x_vec.size()) << std::flush;
 
-    auto out = RunPhaseVocoder3(x, kt, kp);
+    PhaseLockedVocoder dsp;
+    dsp.SetTimeStretch(kt);
+    dsp.SetPitchShift(kp);
+
+    auto out = dsp.Process(x_vec);
     std::cout << std::format("{}\n", out.size()) << std::flush;
 
     qwqdsp_support::AudioOps::Normalize(out);
-    AudioFile<float> file;
     file.setNumSamplesPerChannel(out.size());
-    file.samples.resize(1);
+    file.samples[0] = out;
+    file.setNumChannels(1);
+    file.save(qwqdsp_support::OutputFile(name));
+    std::cout << std::format("saved {}\n\n", name) << std::flush;
+}
+
+// ------------------------------------------------------------
+// Transient Vocoder（瞬态感知声码器）
+// ------------------------------------------------------------
+/**
+ * @brief 瞬态感知相位锁定声码器（Röbel 2003），谱通量检测瞬态，
+ *        起始处重置相位保留攻击锐度。
+ */
+static void ProcessTRV(const char* name, float kt, float kp) {
+    auto wav_path = qwqdsp_support::InputFile("drumloop.wav");
+    AudioFile<float> file{wav_path};
+    auto& x_vec = file.samples.front();
+
+    std::cout << std::format("{} (kt={:.2f}, kp={:.2f}): {} -> ", name, kt, kp, x_vec.size()) << std::flush;
+
+    TransientVocoder dsp;
+    dsp.SetTimeStretch(kt);
+    dsp.SetPitchShift(kp);
+
+    auto out = dsp.Process(x_vec);
+    std::cout << std::format("{}\n", out.size()) << std::flush;
+
+    qwqdsp_support::AudioOps::Normalize(out);
+    file.setNumSamplesPerChannel(out.size());
     file.samples[0] = out;
     file.setNumChannels(1);
     file.save(qwqdsp_support::OutputFile(name));
@@ -241,17 +246,17 @@ int main() {
     ProcessPV2("PV2_ps_1.5x.wav", 1.0f, 1.5f);
     ProcessPV2("PV2_ts1.5_ps1.5.wav", 1.5f, 1.5f);
 
-    TestDeltaPV2("PV2_delta_identity.wav", 1.0f, 1.0f);
-    TestDeltaPV2("PV2_delta_ts1.5.wav", 1.5f, 1.0f);
-    TestDeltaPV2("PV2_delta_ps1.5.wav", 1.0f, 1.5f);
-
     ProcessPV3("PV3_ts_1.5x.wav", 1.5f, 1.0f);
     ProcessPV3("PV3_ps_1.5x.wav", 1.0f, 1.5f);
     ProcessPV3("PV3_ts1.5_ps1.5.wav", 1.5f, 1.5f);
 
-    TestDeltaPV3("PV3_delta_identity.wav", 1.0f, 1.0f);
-    TestDeltaPV3("PV3_delta_ts1.5.wav", 1.5f, 1.0f);
-    TestDeltaPV3("PV3_delta_ps1.5.wav", 1.0f, 1.5f);
+    ProcessPVL("pvl_ts_1.5x.wav", 1.5f, 1.0f);
+    ProcessPVL("pvl_ps_1.5x.wav", 1.0f, 1.5f);
+    ProcessPVL("pvl_ts1.5_ps1.5.wav", 1.5f, 1.5f);
+
+    ProcessTRV("trv_ts_1.5x.wav", 1.5f, 1.0f);
+    ProcessTRV("trv_ps_1.5x.wav", 1.0f, 1.5f);
+    ProcessTRV("trv_ts1.5_ps1.5.wav", 1.5f, 1.5f);
 
     std::cout << std::format("all done\n") << std::flush;
 }

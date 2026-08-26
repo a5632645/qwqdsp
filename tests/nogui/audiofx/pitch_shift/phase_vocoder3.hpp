@@ -6,27 +6,9 @@
 #include <span>
 #include <vector>
 
+#include "phase_locked_vocoder.hpp" // detail::LinearResample
+
 namespace qwqdsp_test {
-namespace detail {
-
-/** 线性重采样，ratio > 1 变长，< 1 变短 */
-static inline std::vector<float> LinearResample(std::span<const float> in, float ratio) {
-    const size_t out_len = static_cast<size_t>(std::round(static_cast<float>(in.size()) / ratio));
-    if (out_len < 2)
-        return {};
-    std::vector<float> out(out_len);
-    const float step = static_cast<float>(in.size() - 1) / static_cast<float>(out_len - 1);
-    for (size_t i = 0; i < out_len; ++i) {
-        const float pos = step * static_cast<float>(i);
-        const size_t idx = static_cast<size_t>(pos);
-        const float frac = pos - static_cast<float>(idx);
-        const size_t nxt = std::min(idx + 1, in.size() - 1);
-        out[i] = in[idx] + frac * (in[nxt] - in[idx]);
-    }
-    return out;
-}
-
-} // namespace detail
 
 // ------------------------------------------------------------
 // RunPhaseVocoder3
