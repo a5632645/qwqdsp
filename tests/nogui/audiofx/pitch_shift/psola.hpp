@@ -1,13 +1,15 @@
-#include <AudioFile.h>
+#pragma once
 #include <algorithm>
 #include <audio_ops.hpp>
 #include <cmath>
 #include <format>
 #include <iostream>
+#include <limits>
 #include <numbers>
 #include <span>
 #include <vector>
-#include <work_dir.hpp>
+
+namespace qwqdsp_test {
 
 // ------------------------------------------------------------
 // PSOLA — Pitch Synchronous Overlap and Add
@@ -75,6 +77,7 @@ struct Psola {
         qwqdsp_support::AudioOps::Normalize(output);
         return output;
     }
+
 private:
     // ------------------------------------------------------------
     // 音高标记检测
@@ -611,106 +614,4 @@ private:
     }
 };
 
-// ------------------------------------------------------------
-// 测试入口
-// ------------------------------------------------------------
-int main() {
-    const auto wav_path = qwqdsp_support::WormholeWav();
-    std::cout << std::format("loading {}\n", wav_path) << std::flush;
-
-    AudioFile<float> file{wav_path};
-    auto& x_vec = file.samples.front();
-    const float fs = file.getSampleRate();
-    std::cout << std::format("sample_rate={}, len={}\n", fs, x_vec.size()) << std::flush;
-
-    // --------------------------------------------------------
-    // 1. 仅音高偏移（共振峰不变）
-    // --------------------------------------------------------
-    {
-        Psola psola;
-        psola.sample_rate_ = fs;
-        psola.pitch_shift_semitones_ = 7.0f; // 升纯五度
-        psola.formant_shift_ = 1.0f;
-
-        auto out = psola.Process(x_vec);
-        std::cout << std::format("pitch_only: out_len={}\n", out.size()) << std::flush;
-
-        AudioFile<float> of;
-        of.setBitDepth(32);
-        of.setNumSamplesPerChannel(out.size());
-        of.samples[0] = out;
-        of.setNumChannels(1);
-        of.setSampleRate(static_cast<int>(fs));
-        of.save(qwqdsp_support::OutputFile("psola_pitch_only.wav"));
-        std::cout << "saved psola_pitch_only.wav\n" << std::flush;
-    }
-
-    // --------------------------------------------------------
-    // 2. 仅共振峰偏移（音高不变）
-    // --------------------------------------------------------
-    {
-        Psola psola;
-        psola.sample_rate_ = fs;
-        psola.pitch_shift_semitones_ = 0.0f; // 音高不变
-        psola.formant_shift_ = 1.3f;         // 共振峰升高 1.3 倍
-
-        auto out = psola.Process(x_vec);
-        std::cout << std::format("formant_only: out_len={}\n", out.size()) << std::flush;
-
-        AudioFile<float> of;
-        of.setBitDepth(32);
-        of.setNumSamplesPerChannel(out.size());
-        of.samples[0] = out;
-        of.setNumChannels(1);
-        of.setSampleRate(static_cast<int>(fs));
-        of.save(qwqdsp_support::OutputFile("psola_formant_only.wav"));
-        std::cout << "saved psola_formant_only.wav\n" << std::flush;
-    }
-
-    // --------------------------------------------------------
-    // 3. 音高升高 + 共振峰降低（变矮胖声音）
-    // --------------------------------------------------------
-    {
-        Psola psola;
-        psola.sample_rate_ = fs;
-        psola.pitch_shift_semitones_ = 5.0f; // 音高升
-        psola.formant_shift_ = 0.7f;         // 共振峰降低
-
-        auto out = psola.Process(x_vec);
-        std::cout << std::format("pitch_up_formant_down: out_len={}\n", out.size()) << std::flush;
-
-        AudioFile<float> of;
-        of.setBitDepth(32);
-        of.setNumSamplesPerChannel(out.size());
-        of.samples[0] = out;
-        of.setNumChannels(1);
-        of.setSampleRate(static_cast<int>(fs));
-        of.save(qwqdsp_support::OutputFile("psola_pitch_up_formant_down.wav"));
-        std::cout << "saved psola_pitch_up_formant_down.wav\n" << std::flush;
-    }
-
-    // --------------------------------------------------------
-    // 4. 音高降低 + 共振峰升高（花栗鼠效果反转）
-    // --------------------------------------------------------
-    {
-        Psola psola;
-        psola.sample_rate_ = fs;
-        psola.pitch_shift_semitones_ = -5.0f; // 音高降
-        psola.formant_shift_ = 1.4f;          // 共振峰升高
-
-        auto out = psola.Process(x_vec);
-        std::cout << std::format("pitch_down_formant_up: out_len={}\n", out.size()) << std::flush;
-
-        AudioFile<float> of;
-        of.setBitDepth(32);
-        of.setNumSamplesPerChannel(out.size());
-        of.samples[0] = out;
-        of.setNumChannels(1);
-        of.setSampleRate(static_cast<int>(fs));
-        of.save(qwqdsp_support::OutputFile("psola_pitch_down_formant_up.wav"));
-        std::cout << "saved psola_pitch_down_formant_up.wav\n" << std::flush;
-    }
-
-    std::cout << "done.\n" << std::flush;
-    return 0;
-}
+} // namespace qwqdsp_test

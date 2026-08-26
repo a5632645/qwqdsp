@@ -1,10 +1,13 @@
-#include <AudioFile.h>
-#include <audio_ops.hpp>
-#include <format>
-#include <iostream>
-#include <qwqdsp/fx/phase_vocoder2.hpp>
-#include <qwqdsp/window/helper.hpp>
-#include <work_dir.hpp>
+#pragma once
+#include <algorithm>
+#include <cmath>
+#include <numbers>
+#include <queue>
+#include <qwqdsp/spectral/real_fft.hpp>
+#include <span>
+#include <vector>
+
+namespace qwqdsp_test {
 
 // ------------------------------------------------------------
 // PhaseGradientVocoder
@@ -153,6 +156,7 @@ public:
         prev_phase_.clear();
         output_.clear();
     }
+
 private:
     static float WrapToPi(float x) noexcept {
         return x - 2.0f * std::numbers::pi_v<float> * std::round(x / (2.0f * std::numbers::pi_v<float>));
@@ -344,71 +348,4 @@ private:
     std::vector<float> output_;
 };
 
-static void Process(const char* name, float kt, float kp) {
-    auto wav_path = qwqdsp_support::SweepWav();
-    AudioFile<float> file{wav_path};
-    auto& x_vec = file.samples.front();
-
-    std::cout << std::format("{} (kt={:.2f}, kp={:.2f}): {} -> ", name, kt, kp, x_vec.size()) << std::flush;
-
-    PhaseGradientVocoder dsp;
-    dsp.SetFrameSize(4096);
-    dsp.SetOverSample(2);
-    dsp.SetTimeStretch(kt);
-    dsp.SetPitchShift(kp);
-
-    auto out = dsp.Process(x_vec);
-    std::cout << std::format("{}\n", out.size()) << std::flush;
-
-    qwqdsp_support::AudioOps::Normalize(out);
-    file.setNumSamplesPerChannel(out.size());
-    file.samples[0] = out;
-    file.setNumChannels(1);
-    file.save(qwqdsp_support::OutputFile(name));
-    std::cout << std::format("saved {}\n\n", name) << std::flush;
-}
-
-// ------------------------------------------------------------
-// Delta 测试
-// ------------------------------------------------------------
-/**
- * @brief 使用 delta 8192 处为 1.0）作为输入测试声码器。
- */
-static void TestDelta(const char* name, float kt, float kp) {
-    constexpr size_t kLen = 65536;
-    constexpr size_t kDeltaPos = 8192;
-    std::vector<float> x(kLen, 0.0f);
-    x[kDeltaPos] = 1.0f;
-
-    std::cout << std::format("{} (kt={:.2f}, kp={:.2f}): delta@{} -> ", name, kt, kp, kDeltaPos) << std::flush;
-
-    PhaseGradientVocoder dsp;
-    dsp.SetFrameSize(4096);
-    dsp.SetOverSample(2);
-    dsp.SetTimeStretch(kt);
-    dsp.SetPitchShift(kp);
-
-    auto out = dsp.Process(x);
-    std::cout << std::format("{}\n", out.size()) << std::flush;
-
-    qwqdsp_support::AudioOps::Normalize(out);
-    AudioFile<float> file;
-    file.setNumSamplesPerChannel(out.size());
-    file.samples.resize(1);
-    file.samples[0] = out;
-    file.setNumChannels(1);
-    file.save(qwqdsp_support::OutputFile(name));
-    std::cout << std::format("saved {}\n\n", name) << std::flush;
-}
-
-int main() {
-    Process("PV2_ts_1.5x.wav", 1.5f, 1.0f);
-    Process("PV2_ps_1.5x.wav", 1.0f, 1.5f);
-    Process("PV2_ts1.5_ps1.5.wav", 1.5f, 1.5f);
-
-    TestDelta("PV2_delta_identity.wav", 1.0f, 1.0f);
-    TestDelta("PV2_delta_ts1.5.wav", 1.5f, 1.0f);
-    TestDelta("PV2_delta_ps1.5.wav", 1.0f, 1.5f);
-
-    std::cout << std::format("all done\n") << std::flush;
-}
+} // namespace qwqdsp_test
