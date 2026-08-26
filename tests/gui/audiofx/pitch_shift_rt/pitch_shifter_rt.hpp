@@ -8,6 +8,8 @@
 #include <numbers>
 
 #include <qwqdsp/spectral/real_fft.hpp>
+#include <qwqdsp/window/blackman_harris_3term.hpp>
+#include <qwqdsp/window/blackman_harris.hpp>
 
 namespace pitch_shift_rt {
 
@@ -34,7 +36,7 @@ static inline float wrapToPi(float phase) noexcept {
 /**
  * @brief 使用固定容量缓冲的实时频域移调器
  *
- * 处理器采用 2048 点 STFT 和四倍重叠。可变分析 hop 完成时间拉伸，
+ * 处理器采用 2048 点 STFT 和八倍重叠。可变分析 hop 完成时间拉伸，
  * 固定合成 hop 保证 COLA，随后对连续 OLA 信号流式重采样完成移调。
  * 五种模式只切换相位传播和瞬态处理策略。初始化完成后音频处理路径
  * 不进行动态内存分配。
@@ -42,7 +44,7 @@ static inline float wrapToPi(float phase) noexcept {
 class RealtimePitchShifter {
 public:
     static constexpr std::size_t kFrameSize = 2048;
-    static constexpr std::size_t kHopSize = 512;
+    static constexpr std::size_t kHopSize = 256;
     static constexpr std::size_t kNumBins = kFrameSize / 2 + 1;
 
     /**
@@ -52,11 +54,7 @@ public:
     void init(float sample_rate) {
         sample_rate_ = sample_rate;
         fft_.Init(kFrameSize);
-        for (std::size_t i = 0; i < kFrameSize; ++i) {
-            const float phase = std::numbers::pi_v<float> * static_cast<float>(i) / static_cast<float>(kFrameSize);
-            const float sine = std::sin(phase);
-            window_[i] = std::sqrt(8.0f / 3.0f) * sine * sine;
-        }
+        qwqdsp_window::BlackmanHarris::Window(window_, true);
         buildSuperFluxFilterBank();
         reset();
     }
@@ -156,7 +154,8 @@ private:
     static constexpr std::size_t kHeapCapacity = kNumBins * 2;
     static constexpr std::size_t kMaxSuperFluxBands = 256;
     static constexpr std::size_t kMaxSuperFluxWeights = kNumBins * 3;
-    static constexpr float kOlaGain = 0.25f;
+    // 八倍重叠下周期三项 Blackman-Harris 窗平方和为常数。
+    static constexpr float kOlaGain = 0.4073837f;
 
     struct HeapItem {
         float magnitude = 0.0f;
