@@ -8,10 +8,21 @@
 #include <numbers>
 
 #include <qwqdsp/spectral/real_fft.hpp>
+#include <qwqdsp/window/hann.hpp>
 #include <qwqdsp/window/blackman_harris_3term.hpp>
 #include <qwqdsp/window/blackman_harris.hpp>
 
 namespace pitch_shift_rt {
+
+enum class WindowType { Hann, BlackmanHarrisThreeTerm, BlackmanHarris };
+
+namespace detail {
+template <WindowType kType> struct WindowTraits;
+template <> struct WindowTraits<WindowType::Hann> { static constexpr std::size_t kOverlap = 4; static constexpr float kOlaGain = 2.0f / 3.0f; using Type = qwqdsp_window::Hann; };
+template <> struct WindowTraits<WindowType::BlackmanHarrisThreeTerm> { static constexpr std::size_t kOverlap = 6; static constexpr float kOlaGain = 0.5431781f; using Type = qwqdsp_window::BlackmanHarrisThreeTerm; };
+template <> struct WindowTraits<WindowType::BlackmanHarris> { static constexpr std::size_t kOverlap = 8; static constexpr float kOlaGain = 0.4845649f; using Type = qwqdsp_window::BlackmanHarris; };
+constexpr std::size_t nextPowerOfTwo(std::size_t value) noexcept { std::size_t result = 1; while (result < value) result <<= 1; return result; }
+}
 
 /**
  * @brief 实时移调器使用的相位重建算法
@@ -41,10 +52,11 @@ static inline float wrapToPi(float phase) noexcept {
  * 五种模式只切换相位传播和瞬态处理策略。初始化完成后音频处理路径
  * 不进行动态内存分配。
  */
+template <WindowType kWindowType = WindowType::Hann, std::size_t kHopSize = 512>
 class RealtimePitchShifter {
 public:
-    static constexpr std::size_t kFrameSize = 2048;
-    static constexpr std::size_t kHopSize = 256;
+    static constexpr std::size_t kWindowSize = kHopSize * detail::WindowTraits<kWindowType>::kOverlap;
+    static constexpr std::size_t kFrameSize = detail::nextPowerOfTwo(kWindowSize * 2);
     static constexpr std::size_t kNumBins = kFrameSize / 2 + 1;
 
     /**
@@ -54,7 +66,7 @@ public:
     void init(float sample_rate) {
         sample_rate_ = sample_rate;
         fft_.Init(kFrameSize);
-        qwqdsp_window::BlackmanHarris::Window(window_, true);
+        detail::WindowTraits<kWindowType>::Type::Window(window_, true);
         buildSuperFluxFilterBank();
         reset();
     }
@@ -119,11 +131,11 @@ public:
 
         for (std::size_t i = 0; i < frame_count; ++i) {
             input_ring_[input_write_] = input[i];
-            input_write_ = (input_write_ + 1) % kFrameSize;
-            collected_samples_ = std::min(collected_samples_ + 1, kFrameSize);
+            input_write_ = (input_write_ + 1) % kWindowSize;
+            collected_samples_ = std::min(collected_samples_ + 1, kWindowSize);
             ++samples_since_frame_;
 
-            if (!analysis_started_ && collected_samples_ == kFrameSize) {
+            if (!analysis_started_ && collected_samples_ == kWindowSize) {
                 processFrame(kHopSize);
                 analysis_started_ = true;
                 samples_since_frame_ = 0;
@@ -146,7 +158,7 @@ public:
      * @return 零移调延迟采样数
      */
     static constexpr std::size_t latencySamples() noexcept {
-        return kFrameSize - 1;
+        return kWindowSize - 1;
     }
 private:
     static constexpr std::size_t kSynthesisRingSize = kFrameSize * 16;
@@ -155,7 +167,7 @@ private:
     static constexpr std::size_t kMaxSuperFluxBands = 256;
     static constexpr std::size_t kMaxSuperFluxWeights = kNumBins * 3;
     // 八倍重叠下周期三项 Blackman-Harris 窗平方和为常数。
-    static constexpr float kOlaGain = 0.4073837f;
+    static constexpr float kOlaGain = detail::WindowTraits<kWindowType>::kOlaGain;
 
     struct HeapItem {
         float magnitude = 0.0f;
@@ -188,16 +200,21 @@ private:
 
         const bool uses_pghi = algorithm_ == Algorithm::Pghi || algorithm_ == Algorithm::PghiFlux
                             || algorithm_ == Algorithm::PghiSuperFlux;
+        fft_input_.fill(0.0f);
         if (uses_pghi) {
-            constexpr std::size_t kHalfFrame = kFrameSize / 2;
-            for (std::size_t i = 0; i < kHalfFrame; ++i) {
-                fft_input_[i] = input_ring_[(input_write_ + kHalfFrame + i) % kFrameSize] * window_[kHalfFrame + i];
-                fft_input_[kHalfFrame + i] = input_ring_[(input_write_ + i) % kFrameSize] * window_[i];
+            constexpr std::size_t kHalfWindow = kWindowSize / 2;
+            for (std::size_t i = 0; i < kHalfWindow; ++i) {
+                fft_input_[i] = input_ring_[(input_write_ + kHalfWindow + i) % kWindowSize]
+                              * window_[kHalfWindow + i];
+            }
+            const std::size_t pad = kFrameSize - kHalfWindow;
+            for (std::size_t i = 0; i < kHalfWindow; ++i) {
+                fft_input_[pad + i] = input_ring_[(input_write_ + i) % kWindowSize] * window_[i];
             }
         }
         else {
-            for (std::size_t i = 0; i < kFrameSize; ++i) {
-                fft_input_[i] = input_ring_[(input_write_ + i) % kFrameSize] * window_[i];
+            for (std::size_t i = 0; i < kWindowSize; ++i) {
+                fft_input_[i] = input_ring_[(input_write_ + i) % kWindowSize] * window_[i];
             }
         }
         fft_.FFT(fft_input_.data(), fft_output_.data());
@@ -238,10 +255,16 @@ private:
 
         synthesizeSpectrum();
         fft_.IFFT(fft_output_.data(), fft_input_.data());
-        for (std::size_t i = 0; i < kFrameSize; ++i) {
+        constexpr std::size_t kHalfWindow = kWindowSize / 2;
+        for (std::size_t i = 0; i < kHalfWindow; ++i) {
             const std::size_t index = static_cast<std::size_t>((synthesis_frame_start_ + i) % kSynthesisRingSize);
-            const std::size_t source = uses_pghi ? (i + kFrameSize / 2) % kFrameSize : i;
+            const std::size_t source = uses_pghi ? kFrameSize - kHalfWindow + i : i;
             synthesis_ring_[index] += fft_input_[source] * window_[i] * kOlaGain;
+        }
+        for (std::size_t i = 0; i < kHalfWindow; ++i) {
+            const std::size_t index = static_cast<std::size_t>((synthesis_frame_start_ + kHalfWindow + i) % kSynthesisRingSize);
+            const std::size_t source = uses_pghi ? i : kHalfWindow + i;
+            synthesis_ring_[index] += fft_input_[source] * window_[kHalfWindow + i] * kOlaGain;
         }
         // 新合成帧在 hop 边界处的窗值为零，因此该边界样本已完整可读。
         synthesis_available_ = synthesis_frame_start_ + kHopSize + 1;
@@ -574,8 +597,8 @@ private:
     bool first_frame_ = true;
 
     qwqdsp_spectral::RealFFT fft_;
-    std::array<float, kFrameSize> window_{};
-    std::array<float, kFrameSize> input_ring_{};
+    std::array<float, kWindowSize> window_{};
+    std::array<float, kWindowSize> input_ring_{};
     std::array<float, kSynthesisRingSize> synthesis_ring_{};
     std::array<float, kFrameSize> fft_input_{};
     std::array<float, kFrameSize + 2> fft_output_{};

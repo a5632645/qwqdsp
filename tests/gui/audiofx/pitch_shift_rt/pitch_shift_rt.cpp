@@ -132,7 +132,7 @@ private:
         }
     }
 
-    RealtimePitchShifter processor_;
+    RealtimePitchShifter<WindowType::BlackmanHarrisThreeTerm, 512> processor_;
     Knob pitch_knob_;
     std::atomic<float> pitch_shift_{0.0f};
     std::atomic<int> algorithm_{0};
