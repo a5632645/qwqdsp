@@ -10,16 +10,18 @@
 #include "raylib.h"
 #include "slider.hpp"
 
+#include "peak_map_pitch_shifter_rt.hpp"
 #include "pitch_shifter_rt.hpp"
+#include "autocorrelation_delay_pitch_shifter_rt.hpp"
 
 namespace pitch_shift_rt {
 
 static constexpr float kSampleRate = 48000.0f;
-static constexpr int kWindowWidth = 760;
-static constexpr int kWindowHeight = 260;
-static constexpr const char* kWindowTitle = "Spectral Pitch Shifter - Real-time";
-static constexpr std::array<const char*, 5> kAlgorithmNames{"PGHI", "PGHI + Flux", "PGHI + SuperFlux", "Phase Lock",
-                                                            "Transient Vocoder"};
+static constexpr int kWindowWidth = 900;
+static constexpr int kWindowHeight = 300;
+static constexpr const char* kWindowTitle = "Pitch Shifter - Real-time";
+static constexpr std::array<const char*, 7> kAlgorithmNames{"PGHI", "PGHI+Flux", "PGHI+SFlux", "PhaseLock",
+                                                             "Transient", "PeakMap", "AutoCorr Delay"};
 
 class PitchShiftDemo {
 public:
@@ -27,8 +29,10 @@ public:
      * @brief 初始化实时处理器和音高旋钮
      */
     void init() {
-        processor_.init(kSampleRate);
-        pitch_knob_.set_bound((kWindowWidth - 92) / 2, 126, 92, 98)
+        spectral_.init(kSampleRate);
+        peak_map_.init(kSampleRate);
+        autocorrelation_.init(kSampleRate);
+        pitch_knob_.set_bound((kWindowWidth - 92) / 2, 158, 92, 98)
             .set_title("Pitch Shift")
             .set_range(-12.0f, 12.0f, 1.0f, 0.0f)
             .set_value(0.0f)
@@ -48,9 +52,23 @@ public:
      * @param[in] frame_count 缓冲中的采样数
      */
     void processAudio(const float* input, float* output, std::size_t frame_count) {
-        processor_.setAlgorithm(static_cast<Algorithm>(algorithm_.load(std::memory_order_relaxed)));
-        processor_.setPitchShift(pitch_shift_.load(std::memory_order_relaxed));
-        processor_.process(input, output, frame_count);
+        const int algorithm = algorithm_.load(std::memory_order_relaxed);
+        const float semitones = pitch_shift_.load(std::memory_order_relaxed);
+        if (algorithm == 5) {
+            // PeakMap：峰域映射相位声码器
+            peak_map_.setPitchShift(semitones);
+            peak_map_.process(input, output, frame_count);
+        }
+        else if (algorithm == 6) {
+            autocorrelation_.setPitchShift(semitones);
+            autocorrelation_.process(input, output, frame_count);
+        }
+        else {
+            // 频谱类算法（0-4）：先时间拉伸再重采样
+            spectral_.setAlgorithm(static_cast<Algorithm>(algorithm));
+            spectral_.setPitchShift(semitones);
+            spectral_.process(input, output, frame_count);
+        }
     }
 
     /**
@@ -68,7 +86,7 @@ public:
         ClearBackground(kBackground);
         DrawRectangle(0, 0, kWindowWidth, 64, kPanel);
         DrawRectangle(0, 63, kWindowWidth, 1, Color{48, 52, 57, 255});
-        DrawText("SPECTRAL PITCH SHIFTER", 22, 15, 23, kText);
+        DrawText("PITCH SHIFTER", 22, 15, 23, kText);
         DrawText("REAL-TIME / MONO", 23, 42, 10, kMuted);
 
         const Color status_color = audio_running ? kAccent : kWarning;
@@ -76,6 +94,7 @@ public:
         DrawText(audio_running ? "AUDIO ONLINE" : "AUDIO OFFLINE", kWindowWidth - 114, 24, 12, status_color);
 
         drawAlgorithmSelector();
+        drawWindowModeSelector();
         pitch_knob_.display();
         DrawText("right click: reset", kWindowWidth - 118, kWindowHeight - 17, 10, kMuted);
     }
@@ -106,7 +125,7 @@ private:
         constexpr float kTop = 82.0f;
         constexpr float kGap = 5.0f;
         constexpr float kHeight = 31.0f;
-        constexpr float kWidth = (static_cast<float>(kWindowWidth) - 2.0f * kLeft - 4.0f * kGap) / 5.0f;
+        constexpr float kWidth = (static_cast<float>(kWindowWidth) - 2.0f * kLeft - 6.0f * kGap) / 7.0f;
         const Vector2 mouse = GetMousePosition();
         const int selected = algorithm_.load(std::memory_order_relaxed);
 
@@ -132,10 +151,63 @@ private:
         }
     }
 
-    RealtimePitchShifter<WindowType::BlackmanHarrisThreeTerm, 512> processor_;
+    /**
+     * @brief 绘制 Pitcher WSOLA 的窗口模式选择行（S/M/L）。
+     *
+     * 仅当选中的算法为 Pitcher 时启用，其余算法下置灰。
+     */
+    void drawWindowModeSelector() {
+        static constexpr Color kText{232, 233, 235, 255};
+        static constexpr Color kMuted{126, 132, 139, 255};
+        constexpr float kLeft = 20.0f;
+        constexpr float kTop = 121.0f;
+        constexpr float kGap = 6.0f;
+        constexpr float kWidth = 40.0f;
+        constexpr float kHeight = 22.0f;
+        constexpr std::array<const char*, 3> kModeNames{"S", "M", "L"};
+        constexpr const char* kModeDescriptions[3]{"drums", "general", "vocals"};
+
+        const int selected_algorithm = algorithm_.load(std::memory_order_relaxed);
+        const int selected_mode = window_mode_.load(std::memory_order_relaxed);
+        const bool enabled = selected_algorithm == 5;
+        const Vector2 mouse = GetMousePosition();
+
+        DrawText("Pitcher window", static_cast<int>(kLeft), static_cast<int>(kTop + 5), 12, enabled ? kText : kMuted);
+
+        float x = kLeft + 120.0f;
+        for (std::size_t i = 0; i < kModeNames.size(); ++i) {
+            const Rectangle bounds{x, kTop, kWidth, kHeight};
+            const bool hovered = enabled && CheckCollisionPointRec(mouse, bounds);
+            const bool active = enabled && selected_mode == static_cast<int>(i);
+            const Color border = hovered ? Color{190, 194, 198, 255} : Color{75, 80, 85, 255};
+            const Color text =
+                active ? Color{18, 20, 23, 255} : (enabled ? Color{178, 182, 187, 255} : Color{90, 94, 99, 255});
+            if (active) {
+                DrawRectangleRec(bounds, Color{232, 233, 235, 255});
+            }
+            else {
+                DrawRectangleLinesEx(bounds, 1.0f, border);
+            }
+            const int font_size = 12;
+            const int text_width = MeasureText(kModeNames[i], font_size);
+            DrawText(kModeNames[i], static_cast<int>(bounds.x + (bounds.width - text_width) * 0.5f),
+                     static_cast<int>(bounds.y + 5.0f), font_size, text);
+            if (hovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                window_mode_.store(static_cast<int>(i), std::memory_order_relaxed);
+            }
+            DrawText(kModeDescriptions[i], static_cast<int>(x + kWidth + 6.0f), static_cast<int>(kTop + 5.0f), 10,
+                     enabled ? kMuted : Color{60, 64, 69, 255});
+            x += kWidth + kGap;
+        }
+    }
+
+    RealtimePitchShifter<WindowType::BlackmanHarrisThreeTerm, 512> spectral_;
+    RealtimePeakMapPitchShifter<> peak_map_;
+    AutocorrelationDelayPitchShifter autocorrelation_;
     Knob pitch_knob_;
     std::atomic<float> pitch_shift_{0.0f};
     std::atomic<int> algorithm_{0};
+    std::atomic<int> window_mode_{1}; // kMedium
 };
 
 } // namespace pitch_shift_rt

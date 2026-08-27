@@ -5,18 +5,22 @@
 #include <vector>
 #include <work_dir.hpp>
 
+#include "pitch_shift/peak_map_pitch_shifter.hpp"
 #include "pitch_shift/phase_gradient_transient.hpp"
 #include "pitch_shift/phase_locked_vocoder.hpp"
 #include "pitch_shift/phase_vocoder2.hpp"
 #include "pitch_shift/phase_vocoder3.hpp"
+#include "pitch_shift/pitcher_wsola.hpp"
 #include "pitch_shift/psola.hpp"
 #include "pitch_shift/transient_vocoder.hpp"
 #include "pitch_shift/wsola.hpp"
 
 using qwqdsp_test::OdfType;
+using qwqdsp_test::PeakMapPitchShifter;
 using qwqdsp_test::PhaseGradientTransientVocoder;
 using qwqdsp_test::PhaseGradientVocoder;
 using qwqdsp_test::PhaseLockedVocoder;
+using qwqdsp_test::PitcherWsola;
 using qwqdsp_test::Psola;
 using qwqdsp_test::RunPhaseVocoder3;
 using qwqdsp_test::RunWsola;
@@ -274,6 +278,62 @@ static void ProcessPGT(const char* name, float kt, float kp) {
     std::cout << std::format("saved {}\n\n", name) << std::flush;
 }
 
+// ------------------------------------------------------------
+// PitcherWsola（WSOLA 音高移位器，移植自 qdelay Pitcher）
+// ------------------------------------------------------------
+/**
+ * @brief WSOLA 环形缓冲音高移位器：半音输入，输出等长信号。
+ */
+static void ProcessPitcher(const char* name, float semitones, PitcherWsola::WindowMode mode) {
+    auto wav_path = qwqdsp_support::InputFile("sine.wav");
+    AudioFile<float> file{wav_path};
+    auto& x_vec = file.samples.front();
+
+    std::cout << std::format("{} (semitones={:.1f}): {} -> ", name, semitones, x_vec.size()) << std::flush;
+
+    PitcherWsola dsp;
+    dsp.SetWindowMode(mode);
+    dsp.SetSemitones(semitones);
+
+    auto out = dsp.Process(x_vec);
+    std::cout << std::format("{}\n", out.size()) << std::flush;
+
+    qwqdsp_support::AudioOps::Normalize(out);
+    file.setNumSamplesPerChannel(out.size());
+    file.samples[0] = out;
+    file.setNumChannels(1);
+    file.save(qwqdsp_support::OutputFile(name));
+    std::cout << std::format("saved {}\n\n", name) << std::flush;
+}
+
+// ------------------------------------------------------------
+// PeakMapPitchShifter（峰域映射 + Phase Lock 音高移位器）
+// ------------------------------------------------------------
+/**
+ * @brief 峰域映射音高移位器（参考 pitch_quantizer4）：按 kp 比例移动谱峰。
+ */
+static void ProcessPMS(const char* name, float kp) {
+    auto wav_path = qwqdsp_support::InputFile("sine.wav");
+    AudioFile<float> file{wav_path};
+    auto& x_vec = file.samples.front();
+
+    std::cout << std::format("{} (kp={:.2f}): {} -> ", name, kp, x_vec.size()) << std::flush;
+
+    PeakMapPitchShifter dsp;
+    dsp.Init(static_cast<float>(file.getSampleRate()), 512, 2048);
+    dsp.SetPitchShift(kp);
+
+    auto out = dsp.Process(x_vec);
+    std::cout << std::format("{}\n", out.size()) << std::flush;
+
+    qwqdsp_support::AudioOps::Normalize(out);
+    file.setNumSamplesPerChannel(out.size());
+    file.samples[0] = out;
+    file.setNumChannels(1);
+    file.save(qwqdsp_support::OutputFile(name));
+    std::cout << std::format("saved {}\n\n", name) << std::flush;
+}
+
 int main() {
     // RunWsolaTest();
 
@@ -302,6 +362,14 @@ int main() {
     ProcessPGT<qwqdsp_test::OdfType::SuperFlux>("pgt_superflux_ts_1.5x.wav", 1.5f, 1.0f);
     ProcessPGT<qwqdsp_test::OdfType::SuperFlux>("pgt_superflux_ps_1.5x.wav", 1.0f, 1.5f);
     ProcessPGT<qwqdsp_test::OdfType::SuperFlux>("pgt_superflux_ts1.5_ps1.5.wav", 1.5f, 1.5f);
+
+    ProcessPitcher("pitcher_up7_kmedium.wav", 7.0f, PitcherWsola::WindowMode::kMedium);
+    ProcessPitcher("pitcher_down5_kmedium.wav", -5.0f, PitcherWsola::WindowMode::kMedium);
+    ProcessPitcher("pitcher_up12_klarge.wav", 12.0f, PitcherWsola::WindowMode::kLarge);
+
+    ProcessPMS("pms_ps_1.5x.wav", 1.5f);
+    ProcessPMS("pms_ps_2.0x.wav", 2.0f);
+    ProcessPMS("pms_ps_0.5x.wav", 0.5f);
 
     std::cout << std::format("all done\n") << std::flush;
 }
