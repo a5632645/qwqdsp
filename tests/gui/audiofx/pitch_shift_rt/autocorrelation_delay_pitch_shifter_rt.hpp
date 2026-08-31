@@ -9,26 +9,26 @@
 namespace pitch_shift_rt {
 
 /**
- * @brief 基于自相关周期估计和可变延迟线的实时移调器。
+ * @brief 基于互相关对齐的延迟线 WSOLA 实时移调器。
  *
- * 输入逐采样写入环形延迟线，读头以移调比例倍速前进产生音高移动。
- * 处理器周期性搜索归一化自相关并估计基频周期；当读头与写头的距离越出
- * 上下限时，用双读头交叉淡化切换到自相关对齐的最佳位置，避免跳变咔哒声。
- * 所有缓冲均为固定容量，适合音频回调线程。
+ * 机制与 PitcherWsola 相同：
+ *   输入逐采样写入环形延迟线；单个读头以 (1+speed) 倍速前进产生音高移动
+ *   （read_head1_ 即当前延迟，每样本 -= speed）。
+ *   升调时延迟收缩，降至下界（交叉淡化长度）触发跳转，读头跳到延迟线上界
+ *   （固定目标位置）；降调时延迟增长，超过上界触发跳转，读头跳回目标位置。
+ *   跳转前将源段（src）与目标段（target）各 512 采样做互相关，找到两段波形
+ *   的最佳对齐偏移 cmax，新读头置于 target - cmax，再以 512 采样交叉淡化
+ *   从旧读头平滑过渡到新读头，避免跳变咔哒与内容重播。
+ *   固定容量环形缓冲，适合音频回调线程。延迟线容量决定可处理的最低频率
+ *   （约采样率/延迟线大小）。
  */
 class AutocorrelationDelayPitchShifter {
 public:
-    static constexpr std::size_t kBufferSize = 16384;      ///< 延迟线容量（采样）
-    static constexpr std::size_t kAnalysisSize = 1024;     ///< 周期分析窗口
-    static constexpr std::size_t kAnalysisHop = 128;       ///< 周期分析间隔
-    static constexpr std::size_t kMinLag = 20;             ///< 自相关最小滞后
-    static constexpr std::size_t kMaxLag = 1000;           ///< 自相关最大滞后
-    static constexpr std::size_t kJumpCorrSize = 128;      ///< 跳转相关窗上限
-    static constexpr std::size_t kFadeMax = 1024;          ///< 交叉淡化最大长度
-    static constexpr std::size_t kFadeSafety = 16;         ///< 淡化期间读头安全余量
-    static constexpr std::size_t kMaxJumpDistance = 4096;  ///< 跳转距离上限
-    static constexpr std::size_t kInitialDelay = 1800;     ///< 升调启动延迟（首个跳转须在分析就绪后）
-    static constexpr float kPeriodThreshold = 0.5f;        ///< 周期峰显著阈值
+    static constexpr std::size_t kBufferSize = 4096; ///< 环形延迟线容量（采样）
+    static constexpr std::size_t kCrossFade = 512;   ///< 交叉淡化长度（也即互相关块大小）
+    static constexpr std::size_t kTargetDelay = 2048; ///< 跳转目标延迟（缓冲中心，淡化两侧空间充足）
+    static constexpr std::size_t kMinDelay = kCrossFade;      ///< 升调触发下界
+    static constexpr std::size_t kMaxDelay = kBufferSize - kCrossFade; ///< 降调触发上界
 
     /** @brief 初始化采样率并清空处理状态。 */
     void init(float sample_rate) noexcept {
@@ -39,30 +39,20 @@ public:
     /** @brief 设置移调半音数，范围限制为 +/-12。 */
     void setPitchShift(float semitones) noexcept {
         if (!std::isfinite(semitones)) return;
-        target_ratio_ = std::exp2(std::clamp(semitones, -12.0f, 12.0f) / 12.0f);
+        target_speed_ = std::exp2(std::clamp(semitones, -12.0f, 12.0f) / 12.0f) - 1.0f;
     }
 
-    /** @brief 清空延迟线、自相关窗口和交叉淡化状态（保留移调设置）。 */
+    /** @brief 清空延迟线与交叉淡化状态（保留移调设置）。 */
     void reset() noexcept {
         buffer_.fill(0.0f);
         write_pos_ = 0;
-        written_ = 0;
-        sample_count_ = 0;
-        analysis_counter_ = 0;
-        period_ = std::clamp(sample_rate_ / 300.0f,
-                             static_cast<float>(kMinLag), static_cast<float>(kMaxLag));
-        current_ratio_ = target_ratio_;
-        read_b_active_ = false;
+        read_head1_ = static_cast<float>(kTargetDelay);
+        read_head2_ = -1.0f;
+        speed_ = target_speed_;
+        fade_ = false;
         fade_progress_ = 1.0f;
-        fade_len_ = 1.0f;
-        read_b_ = 0.0f;
-        // 初始延迟按移调方向选择：升调预留延迟收缩空间，保证首个跳转发生在
-        // 周期分析就绪之后；降调从最小延迟开始增长。
-        const float initial_age = (target_ratio_ >= 1.0f)
-            ? static_cast<float>(kInitialDelay)
-            : minimumDelay();
-        read_a_ = std::fmod(static_cast<float>(kBufferSize) - initial_age,
-                            static_cast<float>(kBufferSize));
+        fade_len_ = static_cast<float>(kCrossFade);
+        out_sample_ = 0.0f;
     }
 
     /**
@@ -78,234 +68,185 @@ public:
             return;
         }
         for (std::size_t i = 0; i < frame_count; ++i) {
-            buffer_[write_pos_] = input[i];
-            write_pos_ = (write_pos_ + 1) % kBufferSize;
-            written_ = std::min(written_ + 1, kBufferSize);
-            sample_count_ = std::min(sample_count_ + 1, kAnalysisSize);
-            if (++analysis_counter_ >= kAnalysisHop && sample_count_ == kAnalysisSize) {
-                analysis_counter_ = 0;
-                estimatePeriod();
-            }
-            current_ratio_ += 0.02f * (target_ratio_ - current_ratio_);
-            const float ratio = current_ratio_;
-
-            read_a_ = std::fmod(read_a_ + ratio, static_cast<float>(kBufferSize));
-            if (read_b_active_) {
-                read_b_ = std::fmod(read_b_ + ratio, static_cast<float>(kBufferSize));
-                fade_progress_ = std::min(1.0f, fade_progress_ + 1.0f / fade_len_);
-            }
-
-            // 读头到写头（下一写槽）的距离，即当前延迟
-            const float age = std::fmod(
-                static_cast<float>(write_pos_) + static_cast<float>(kBufferSize) - read_a_,
-                static_cast<float>(kBufferSize));
-
-            if (!read_b_active_) {
-                if (ratio > 1.0f && age < minimumDelay()) {
-                    if (canStartJump(age, true)) startJump(true, age);
-                } else if (ratio < 1.0f && age > maximumDelay()) {
-                    if (canStartJump(age, false)) startJump(false, age);
-                }
-            }
-
-            const float a = interpolate(read_a_);
-            if (!read_b_active_) {
-                output[i] = a;
-                continue;
-            }
-            const float b = interpolate(read_b_);
-            // 等功率（余弦）交叉淡化：A/B 相位不完全一致时线性淡化会产生
-            // 幅度凹陷与边带；余弦曲线保持总能量恒定，拼接伪影更小。
-            const float t = std::min(1.0f, fade_progress_);
-            const float w = 0.5f - 0.5f * std::cos(t * static_cast<float>(std::numbers::pi));
-            output[i] = a * (1.0f - w) + b * w;
-            if (fade_progress_ >= 1.0f) {
-                read_a_ = read_b_;
-                read_b_active_ = false;
-            }
+            update(input[i]);
+            output[i] = out_sample_;
         }
     }
 
     /** @brief 返回近似稳态延迟（采样）。 */
-    static constexpr std::size_t latencySamples() noexcept { return kInitialDelay; }
+    static constexpr std::size_t latencySamples() noexcept { return kBufferSize / 2; }
 
 private:
     // ------------------------------------------------------------
-    // 延迟上下限
+    // 读头与跳转
     // ------------------------------------------------------------
 
-    /** @brief 相关窗长度：高音区随周期缩小，保证窗口不越过写头。 */
-    float corrWindowSize() const noexcept {
-        return std::clamp(period_ * 1.5f, 64.0f, static_cast<float>(kJumpCorrSize));
-    }
+    void update(float sample) noexcept {
+        // 速度平滑（慢 EMA，与 PitcherWsola 一致，避免速度抖动影响拼接）
+        speed_ += 0.001f * (target_speed_ - speed_);
 
-    /**
-     * @brief 触发升调跳转的最小延迟。
-     *
-     * 必须为交叉淡化预留空间：淡化期间读头延迟以 (ratio-1) 速率收缩，
-     * 结束时的延迟不能低于相关窗下限，否则下一次跳转无法启动。因此
-     * 触发延迟 = 窗下限 + 约半个拼接间隔（淡化时长）。
-     */
-    float minimumDelay() const noexcept {
-        const float win_floor = corrWindowSize() + static_cast<float>(kFadeSafety) + 1.0f;
-        const float fade_room = std::min(period_ * 0.5f, 96.0f);
-        return std::max(std::clamp(period_ * 1.25f, 48.0f, 600.0f),
-                        win_floor + fade_room);
-    }
+        // 读头前进（延迟变化）
+        read_head1_ -= speed_;
 
-    /** @brief 触发降调跳转的最大延迟。 */
-    float maximumDelay() const noexcept {
-        return std::clamp(period_ * 3.0f, 160.0f, 3000.0f);
-    }
+        // 写入新样本
+        buffer_[write_pos_] = sample;
+        write_pos_ = (write_pos_ + 1) % kBufferSize;
 
-    /**
-     * @brief 判断当前延迟是否满足跳转条件。
-     *
-     * 要求周期分析已就绪、源窗全部位于已写入历史内。
-     * 注意触发条件 age < minimumDelay() 与这里的下限不能互相矛盾：
-     * minimumDelay() 恒大于此处下限，保证触发区间非空。
-     */
-    bool canStartJump(float age, bool pitch_up) const noexcept {
-        if (sample_count_ != kAnalysisSize) return false;
-        // 源相关窗 [current, current+win) 必须全部为已写入数据
-        const float win_floor = corrWindowSize() + 1.0f;
-        if (age < win_floor) return false;
-        if (static_cast<float>(written_) < age + 1.0f) return false;
-        const float min_delay = minimumDelay();
-        const float max_delay = maximumDelay();
-        // 落点延迟上限（升调取带顶，降调取最大延迟）必须在已写历史内
-        const float max_candidate_age = pitch_up ? min_delay + period_ : max_delay;
-        return static_cast<float>(written_) >=
-               max_candidate_age + static_cast<float>(kFadeSafety);
-    }
+        const float l1 = readInterp(read_head1_);
 
-    /** @brief 开始一次双读头交叉淡化跳转。 */
-    void startJump(bool pitch_up, float age) noexcept {
-        const std::size_t current = static_cast<std::size_t>(read_a_);
-        // 跳转距离 = 平滑周期估计（固定重叠长度自相关 + 正确符号的抛物线细化，
-        // 峰位置无偏差，收敛到真实输入周期）。逐拼接距离偏差会在输出相位上
-        // 累积，表现为频率偏移与低频 FM 边带，因此直接用周期估计而非相关细化
-        // 的抖动值。
-        const float jump_d = std::clamp(period_, static_cast<float>(kMinLag),
-                                        static_cast<float>(kMaxJumpDistance));
-        // 升调向旧数据跳（增大延迟），降调向写头方向跳（减小延迟）。
-        // 基准必须用带小数部分的 read_a_：相关搜索在整数网格上进行，若以
-        // 截断后的整数位置为基准，落点与读头实际相位会差一个分数采样，
-        // 每次拼接都会引入系统性相位偏差（频率漂移 + 调制伪影）。
-        const float offset = pitch_up ? -jump_d : jump_d;
-        read_b_ = std::fmod(read_a_ + offset + static_cast<float>(kBufferSize),
-                            static_cast<float>(kBufferSize));
-        read_b_active_ = true;
-        fade_progress_ = 0.0f;
-        fade_len_ = computeFadeLength(pitch_up, age, jump_d);
-    }
-
-    /**
-     * @brief 计算交叉淡化长度。
-     *
-     * 淡化时长覆盖整个拼接间隔（period/(ratio-1)），充分平滑跳转的残余
-     * 相位步进；升调时还必须保证淡出读头在淡化结束前不低于相关窗下限
-     * （由触发延迟预留保证）。
-     */
-    float computeFadeLength(bool pitch_up, float age, float jump_d) const noexcept {
-        const float ratio = current_ratio_;
-        const float speed = std::max(0.05f, std::fabs(ratio - 1.0f));
-        float len = period_ / speed;
-        len = std::clamp(len, 16.0f, static_cast<float>(kFadeMax));
-        if (pitch_up && ratio > 1.0f) {
-            const float win_floor = corrWindowSize() + static_cast<float>(kFadeSafety) + 1.0f;
-            const float max_a = (age - win_floor) / speed;
-            const float max_b = (age + jump_d - static_cast<float>(kFadeSafety)) / speed;
-            len = std::min(len, std::min(max_a, max_b));
-        }
-        return std::max(1.0f, len);
-    }
-
-    // ------------------------------------------------------------
-    // 周期估计
-    // ------------------------------------------------------------
-
-    /**
-     * @brief 计算归一化自相关（窗口为最近 kAnalysisSize 个采样）。
-     *
-     * 所有滞后共用相同的重叠长度（最近 512 个采样），避免 (N-lag) 因子
-     * 使抛物线峰位置偏向低滞后——否则周期估计会有约 -0.3 采样偏差，导致
-     * 跳转距离偏离真实周期，产生频率漂移与 FM 边带。
-     */
-    float autocorrScore(std::size_t lag) const noexcept {
-        constexpr std::size_t kOverlap = 512;
-        float corr = 0.0f, e0 = 0.0f, e1 = 0.0f;
-        const std::size_t end = kAnalysisSize;
-        for (std::size_t i = end - kOverlap; i < end; ++i) {
-            const float a = buffer_[(write_pos_ + kBufferSize - kAnalysisSize + i) % kBufferSize];
-            const float b = buffer_[(write_pos_ + kBufferSize - kAnalysisSize + i - lag) % kBufferSize];
-            corr += a * b;
-            e0 += a * a;
-            e1 += b * b;
-        }
-        return corr / std::sqrt(e0 * e1 + 1.0e-12f);
-    }
-
-    /**
-     * @brief 升序扫描自相关，取首个超过阈值且为局部极大的滞后作为基频周期。
-     *
-     * 优先选择第一个显著峰，避免将正弦波锁到二次谐波；无显著峰（静音/噪声）
-     * 时保持原估计。峰位置用抛物线拟合细化到亚采样精度。
-     */
-    void estimatePeriod() noexcept {
-        float prev = autocorrScore(kMinLag - 1);
-        for (std::size_t lag = kMinLag; lag <= kMaxLag; ++lag) {
-            const float cur = autocorrScore(lag);
-            const float next = autocorrScore(lag + 1);
-            if (cur > kPeriodThreshold && cur >= prev && cur >= next) {
-                const float denom = prev - 2.0f * cur + next;
-                float frac = 0.0f;
-                if (std::fabs(denom) > 1.0e-9f) {
-                    frac = std::clamp(0.5f * (prev - next) / denom, -0.5f, 0.5f);
-                }
-                const float refined = static_cast<float>(lag) + frac;
-                period_ = std::clamp(0.5f * period_ + 0.5f * refined,
-                                     static_cast<float>(kMinLag), static_cast<float>(kMaxLag));
-                return;
+        if (fade_) {
+            // 交叉淡化中：两路读头都前进（对照 PitcherWsola），
+            // fade 结束读头1 接管读头2 位置。
+            const float l2 = readInterp(read_head2_);
+            read_head2_ -= speed_;
+            fade_progress_ += 1.0f / fade_len_;
+            const float t = std::min(1.0f, fade_progress_);
+            // 余弦权重：w 从 0→1，从 l2（新位置）淡到 l1（旧位置），
+            // fade 结束读头1 接管读头2（与 PitcherWsola 一致）。
+            const float w = 0.5f - 0.5f * std::cos(t * static_cast<float>(std::numbers::pi));
+            out_sample_ = l1 * w + l2 * (1.0f - w);
+            if (fade_progress_ >= 1.0f) {
+                read_head1_ = read_head2_;
+                fade_ = false;
             }
-            prev = cur;
+        }
+        else {
+            bool crit;
+            if (speed_ <= 0.0f) {
+                // 降调：延迟增长，越过上界时跳回中心
+                crit = read_head1_ >= static_cast<float>(kMaxDelay);
+            }
+            else {
+                // 升调：延迟收缩，降至下界时跳回中心。触发点取 2×kMinDelay，
+                // 保证 fade 期间读头1 从触发点继续收缩 kCrossFade 采样后仍
+                // 高于 0（不读到未来数据）。
+                crit = read_head1_ <= static_cast<float>(kMinDelay) * 2.0f;
+            }
+            if (crit) {
+                // 互相关找目标段相对源段的最佳对齐偏移（高精度）
+                copySegment(mem1_.data(), static_cast<int>(read_head1_));
+                copySegment(mem2_.data(), static_cast<int>(kTargetDelay));
+                const float cmax = computeMaxAcfPosition();
+                // 新读头置于目标位置减去对齐偏移，使拼接处波形连续
+                read_head2_ = static_cast<float>(kTargetDelay) - cmax;
+                // 淡化时长 = kCrossFade/|speed|（与 PitcherWsola 一致）：
+                // fade 期间读头移动恰好 kCrossFade 采样，之后有稳态段。
+                // 升调 fade 长度同时受读头1 剩余空间限制（不越 0）。
+                const float speed_abs = std::max(0.05f, std::fabs(speed_));
+                fade_len_ = std::floor(static_cast<float>(kCrossFade) / speed_abs);
+                if (speed_ > 0.0f) {
+                    // fade 期间读头1 从触发点(1024)收缩，不能越过 0
+                    fade_len_ = std::min(fade_len_,
+                                         std::floor(static_cast<float>(kMinDelay) * 2.0f / speed_abs));
+                }
+                fade_len_ = std::clamp(fade_len_, 16.0f, static_cast<float>(kBufferSize) / 2.0f);
+                fade_progress_ = 0.0f;
+                fade_ = true;
+            }
+            out_sample_ = l1;
         }
     }
 
+    /** @brief 将延迟线上延迟为 delay 的 kCrossFade 个采样复制到 dst。 */
+    void copySegment(float* dst, int delay) const noexcept {
+        int pos = write_pos_ - delay;
+        while (pos < 0) pos += static_cast<int>(kBufferSize);
+        pos %= static_cast<int>(kBufferSize);
+        for (std::size_t i = 0; i < kCrossFade; ++i) {
+            dst[i] = buffer_[(pos + static_cast<int>(i)) % kBufferSize];
+        }
+    }
+
+    /**
+     * @brief 高精度互相关：计算跳转对齐偏移 cmax。
+     *
+     * 对偏移 o ∈ [0, kCrossFade)，计算源段 mem1_ 与目标段 mem2_ 平移 o 的
+     * 归一化互相关。取"第一个超过阈值 0.9 的显著局部峰"（避免谐波），
+     * 抛物线细化到亚采样（限制 ±0.5 采样）。
+     */
+    float computeMaxAcfPosition() const noexcept {
+        constexpr std::size_t kSearch = kCrossFade;
+        constexpr float kPeakThresh = 0.9f;
+        std::array<float, kCrossFade> scores{};
+        for (std::size_t o = 0; o < kSearch; ++o) {
+            float acc = 0.0f, e1 = 1.0e-9f, e2 = 1.0e-9f;
+            for (std::size_t i = 0; i + o < kCrossFade; ++i) {
+                const float a = mem1_[i];
+                const float b = mem2_[i + o];
+                acc += a * b;
+                e1 += a * a;
+                e2 += b * b;
+            }
+            scores[o] = acc / std::sqrt(e1 * e2);
+        }
+        // 从 0 向上扫，找第一个显著局部极大峰（互相关峰 o）
+        std::size_t best_o = 0;
+        for (std::size_t o = 1; o + 1 < kSearch; ++o) {
+            const float s = scores[o];
+            if (s >= kPeakThresh && s >= scores[o - 1] && s >= scores[o + 1]) {
+                best_o = o;
+                break;
+            }
+        }
+        if (best_o == 0) {
+            // 无显著峰（非周期段）：用全局最高分
+            for (std::size_t o = 1; o < kSearch; ++o) {
+                if (scores[o] > scores[best_o]) best_o = o;
+            }
+        }
+        // 抛物线亚采样细化（限制 ±0.5 采样）
+        float best_f = static_cast<float>(best_o);
+        if (best_o > 0 && best_o + 1 < kSearch) {
+            const float s_lo = scores[best_o - 1];
+            const float s_hi = scores[best_o + 1];
+            const float s_mid = scores[best_o];
+            const float denom = s_lo - 2.0f * s_mid + s_hi;
+            if (std::fabs(denom) > 1.0e-9f) {
+                const float frac = 0.5f * (s_lo - s_hi) / denom;
+                if (std::fabs(frac) < 0.5f) {
+                    best_f = static_cast<float>(best_o) + frac;
+                }
+            }
+        }
+        return best_f;
+    }
+
     // ------------------------------------------------------------
-    // 插值与状态
+    // 插值
     // ------------------------------------------------------------
 
-    /** @brief 4 点 Catmull-Rom 插值读取延迟线。 */
-    float interpolate(float position) const noexcept {
-        const auto i = static_cast<std::size_t>(position);
-        const std::size_t i0 = (i + kBufferSize - 1) % kBufferSize;
-        const std::size_t i2 = (i + 1) % kBufferSize;
-        const std::size_t i3 = (i + 2) % kBufferSize;
-        const float t = position - std::floor(position);
+    /** @brief 4 点 Catmull-Rom 插值读取延迟线（dtime 为延迟）。 */
+    float readInterp(float dtime) const noexcept {
+        float read_pos = static_cast<float>(write_pos_) - dtime;
+        while (read_pos < 0.0f) read_pos += static_cast<float>(kBufferSize);
+        while (read_pos >= static_cast<float>(kBufferSize)) read_pos -= static_cast<float>(kBufferSize);
+        const auto i1 = static_cast<std::size_t>(std::floor(read_pos));
+        const float t = read_pos - std::floor(read_pos);
+        const auto i0 = (i1 + kBufferSize - 1) % kBufferSize;
+        const auto i2 = (i1 + 1) % kBufferSize;
+        const auto i3 = (i1 + 2) % kBufferSize;
         const float t2 = t * t;
         const float t3 = t2 * t;
         const float a0 = -0.5f * t3 + t2 - 0.5f * t;
         const float a1 = 1.5f * t3 - 2.5f * t2 + 1.0f;
         const float a2 = -1.5f * t3 + 2.0f * t2 + 0.5f * t;
         const float a3 = 0.5f * t3 - 0.5f * t2;
-        return a0 * buffer_[i0] + a1 * buffer_[i] + a2 * buffer_[i2] + a3 * buffer_[i3];
+        return a0 * buffer_[i0] + a1 * buffer_[i1] + a2 * buffer_[i2] + a3 * buffer_[i3];
     }
 
     float sample_rate_ = 48000.0f;
     std::array<float, kBufferSize> buffer_{};
+    std::array<float, kCrossFade> mem1_{};
+    std::array<float, kCrossFade> mem2_{};
     std::size_t write_pos_ = 0;
-    std::size_t written_ = 0;
-    std::size_t sample_count_ = 0;
-    std::size_t analysis_counter_ = 0;
-    float period_ = 160.0f;
-    float target_ratio_ = 1.0f;
-    float current_ratio_ = 1.0f;
-    float read_a_ = 0.0f;
-    float read_b_ = 0.0f;
-    bool read_b_active_ = false;
+    float read_head1_ = 0.0f;  ///< 主读头（当前延迟，采样）
+    float read_head2_ = -1.0f; ///< 交叉淡化读头（新位置，采样）
+    float speed_ = 0.0f;       ///< 读头速度偏移（ratio - 1）
+    float target_speed_ = 0.0f;///< 目标速度偏移
+    bool fade_ = false;
     float fade_progress_ = 1.0f;
-    float fade_len_ = 1.0f;
+    float fade_len_ = static_cast<float>(kCrossFade);
+    float out_sample_ = 0.0f;
 };
 
 } // namespace pitch_shift_rt
