@@ -39,7 +39,7 @@ static constexpr float kNcBandwidthScale = 1.0f;
 
 // ── 频谱图显示 ──
 static constexpr float kDbFloor = -72.0f;
-static constexpr float kWindowLessDbFloor = -100.0f;
+static constexpr float kWindowLessDbFloor = -96.0f;
 static constexpr float kFreqMin = 20.0f;
 static constexpr float kFreqMax = 20000.0f;
 static constexpr float kMinWeight = 0.3f;
