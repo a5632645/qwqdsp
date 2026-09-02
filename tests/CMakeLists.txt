@@ -62,3 +62,8 @@ add_subdirectory(nogui)
 
 # ----- GUI 测试 -----
 add_subdirectory(gui)
+
+# ----- Lab（依赖 raylib 的可执行实验/演示，如 playing） -----
+if(QWQDSP_USE_RAYLIB)
+    add_subdirectory(lab)
+endif()
