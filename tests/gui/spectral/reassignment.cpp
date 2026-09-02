@@ -17,6 +17,7 @@
 #include "reassignment/tf_phase_vocoder_reassignment_frame_conv.hpp"
 #include "reassignment/nc_reassignment_frame.hpp"
 #include "reassignment/nc_time_reassignment_frame.hpp"
+#include "reassignment/windowless_nc_frame.hpp"
 #include "reassignment/tf_reassignment_frame.hpp"
 #include "reassignment/time_reassignment_frame.hpp"
 #include <qwqdsp/colormap/colormap.hpp>
@@ -33,9 +34,12 @@ static constexpr int kZeroPadSimple = 4;
 static constexpr int kZeroPadFull = 1;
 // ── NC 方法 ──
 static constexpr int kNcZeroPad = 2;
+// ── Windowless NC：NC bin 带宽缩放系数（>1 带宽更宽/分辨率更低，<1 相反）──
+static constexpr float kNcBandwidthScale = 1.0f;
 
 // ── 频谱图显示 ──
 static constexpr float kDbFloor = -72.0f;
+static constexpr float kWindowLessDbFloor = -100.0f;
 static constexpr float kFreqMin = 20.0f;
 static constexpr float kFreqMax = 20000.0f;
 static constexpr float kMinWeight = 0.3f;
@@ -77,6 +81,7 @@ enum class FrameType : int {
     kTfDerivativeConv,
     kNcMethod,
     kNcTimeMethod,
+    kWindowlessNc,
     kCount
 };
 
@@ -95,6 +100,7 @@ static constexpr const char* kFrameNames[] = {
     "Derivative + Convergence",
     "NC Method",
     "NC Time",
+    "Windowless NC",
 };
 static_assert(std::size(kFrameNames) == static_cast<int>(FrameType::kCount));
 
@@ -110,6 +116,7 @@ static TfPhaseVocoderReassignmentFrameConv<ColorMap, kMinWeight> f_pv_conv;
 static TfDerivativeReassignmentFrameConv<ColorMap, kMinWeight> f_deriv_conv;
 static NcReassignmentFrame<ColorMap> f_nc;
 static NcTimeReassignmentFrame<ColorMap> f_nc_time;
+static WindowlessNcFrame<ColorMap> f_windowless;
 
 static SpectrogramColumn column_;
 static ScrollingImage image_;
@@ -160,6 +167,9 @@ extern "C" void MaCaptureCallback(ma_device* pDevice, void* pOutput, const void*
             break;
         case FrameType::kNcTimeMethod:
             column_.ProcessAudio({src, frameCount}, f_nc_time, push);
+            break;
+        case FrameType::kWindowlessNc:
+            column_.ProcessAudio({src, frameCount}, f_windowless, push);
             break;
         default:
             break;
@@ -237,6 +247,8 @@ int main(void) {
     f_deriv_conv.Init(kSampleRate, kFftSize, kHopSize, kZeroPadFull, kCanvasH, kFreqMin, kFreqMax, kDbFloor);
     f_nc.Init(kSampleRate, kFftSize, kNcZeroPad, kCanvasH, kFreqMin, kFreqMax, kDbFloor);
     f_nc_time.Init(kSampleRate, kFftSize, kHopSize, kNcZeroPad, kCanvasH, kFreqMin, kFreqMax, kDbFloor);
+    f_windowless.Init(kSampleRate, kFftSize, kHopSize, kNcZeroPad, kCanvasH, kFreqMin, kFreqMax, kWindowLessDbFloor,
+                      kNcBandwidthScale);
     image_.Init(kImageWidth, kCanvasH);
 
     // ── 主循环 ──
@@ -256,6 +268,9 @@ int main(void) {
         }
         else if (ch == '=') {
             g_frame_type = FrameType::kNcTimeMethod;
+        }
+        else if (ch == '\\') {
+            g_frame_type = FrameType::kWindowlessNc;
         }
 
         BeginDrawing();
@@ -290,8 +305,8 @@ int main(void) {
             // 0 1 2 3
             // 4 5 6
             // 7 8 9
-            // 10 11
-            constexpr int kCountPerRow[] = {4, 3, 3, 2};
+            // 10 11 12
+            constexpr int kCountPerRow[] = {4, 3, 3, 3};
             int idx = 0;
             for (int row = 0; row < 4; ++row) {
                 for (int col = 0; col < kCountPerRow[row]; ++col, ++idx) {
@@ -303,8 +318,10 @@ int main(void) {
                         key = '0';
                     else if (idx == 10)
                         key = '-';
-                    else
+                    else if (idx == 11)
                         key = '=';
+                    else
+                        key = '\\';
                     snprintf(buf, sizeof(buf), "%c:%s", key, kFrameNames[idx]);
                     int x = kCanvasX + col * kCellW;
                     int y = kCanvasY + kCanvasH + 4 + row * kRowH;
