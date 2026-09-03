@@ -39,7 +39,6 @@ static constexpr float kNcBandwidthScale = 1.0f;
 
 // ── 频谱图显示 ──
 static constexpr float kDbFloor = -72.0f;
-static constexpr float kWindowLessDbFloor = -96.0f;
 static constexpr float kFreqMin = 20.0f;
 static constexpr float kFreqMax = 20000.0f;
 static constexpr float kMinWeight = 0.3f;
@@ -247,7 +246,7 @@ int main(void) {
     f_deriv_conv.Init(kSampleRate, kFftSize, kHopSize, kZeroPadFull, kCanvasH, kFreqMin, kFreqMax, kDbFloor);
     f_nc.Init(kSampleRate, kFftSize, kNcZeroPad, kCanvasH, kFreqMin, kFreqMax, kDbFloor);
     f_nc_time.Init(kSampleRate, kFftSize, kHopSize, kNcZeroPad, kCanvasH, kFreqMin, kFreqMax, kDbFloor);
-    f_windowless.Init(kSampleRate, kFftSize, kHopSize, kNcZeroPad, kCanvasH, kFreqMin, kFreqMax, kWindowLessDbFloor,
+    f_windowless.Init(kSampleRate, kFftSize, kHopSize, kNcZeroPad, kCanvasH, kFreqMin, kFreqMax, kDbFloor,
                       kNcBandwidthScale);
     image_.Init(kImageWidth, kCanvasH);
 

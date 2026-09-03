@@ -33,7 +33,7 @@ struct WindowlessNcFrame {
     /**
      * @brief 每个 NC bin 的硬件描述与滑动 DFT 状态
      */
-    struct Bin {
+        struct Bin {
         float f_center{};        // 中心频率(Hz)
         float f_left{};          // 左分量参考频率
         float f_right{};         // 右分量参考频率
@@ -41,6 +41,8 @@ struct WindowlessNcFrame {
         std::complex<float> Wl{}, WNr_l{};   // 左分量旋转因子 W 与 W^N
         std::complex<float> Wr{}, WNr_r{};   // 右分量旋转因子 W 与 W^N
         std::complex<float> acc_l{}, acc_r{}; // 左右分量滑动 DFT 累加器
+        float smoothed_gain{};   // 一阶 IIR 平滑后的线性增益(非 dB)；EMA 在增益域线性作用
+        float alpha{};           // 每 hop 的 EMA 系数
     };
 
     /**
@@ -58,6 +60,11 @@ struct WindowlessNcFrame {
      *                       带宽 = 相邻像素频率差 × 此系数：
      *                       > 1 带宽更宽 → 窗长 N 更短 → 频率分辨率更低、时间响应更快；
      *                       < 1 带宽更窄 → 窗长 N 更长 → 频率分辨率更高、时间响应更慢。
+     *
+     * 说明：不施加统一平滑。滑动 DFT 的窗长 N 本身已是 FIR 时间平滑(分辨率 ≈ N/F_S)，
+     * 图像输出采样间隔为 hop/F_S。只有当 N < hop 时箱的时间分辨率才低于图像采样率，
+     * 才可能产生时间混叠。因此逐箱自适应：tau_k = max(N_k, hopSize)，使得每个箱的
+     * 有效时间分辨率 ≥ 图像采样间隔；N ≥ hop 的箱 tau=N_k，几乎不叠加额外平滑。
      */
     void Init(int sampleRate, int fftSize, int hopSize, int zeroPad, int outputHeight, float freqMin, float freqMax,
               float dbFloor, float bandwidthScale = 1.0f) noexcept {
@@ -116,6 +123,18 @@ struct WindowlessNcFrame {
             b.WNr_l = std::polar(1.0f, -2.0f * std::numbers::pi_v<float> * b.f_left * b.N / sampleRate);
             b.WNr_r = std::polar(1.0f, -2.0f * std::numbers::pi_v<float> * b.f_right * b.N / sampleRate);
 
+            // 防混叠 IIR：仅对窗长比图像采样间隔短的箱(N < hop)生效。
+            // 低频(N >= hop)箱自身窗长已是足够的时间平滑(FIR，分辨率≈N/Fs)，
+            // 若再叠加 EMA 会把低频_涂宽_(N 越大惯性越大，瞬态拖尾)。
+            // 故: N >= hop -> alpha = 1 (EMA 旁路, 输出原始瞬时值)；
+            //     N <  hop -> tau = hop, alpha = 1-e^(-hop/hop)=~0.632,
+            //                时间常数 = 图像采样间隔，恰好补足防混叠。
+            const float alpha = (b.N < hopSize_)
+                ? 1.0f - std::exp(-1.0f)   // 1 - e^-1 ≈ 0.632, tau = hop
+                : 1.0f;                    // 旁路: 直接输出瞬时值
+            b.alpha = alpha;
+            b.smoothed_gain = 0.0f;
+
             maxN = std::max(maxN, b.N);
             bins_[y] = b;
         }
@@ -153,19 +172,22 @@ struct WindowlessNcFrame {
             ++n_;
         }
 
-        // ── 输出当前时刻各 bin 的 NC dB 值 ──
+        // ── 输出当前时刻各 bin 的 NC 值：EMA 在增益域线性平滑，再转 dB ──
+        // 为何对 gain 而不是 dB：dB 对数压缩后，不同幅度段的等效斜率不同，若在 dB 域
+        // 平滑，会令快速变化被不均匀地夸大/削弱。对线性增益做一阶 IIR(EMA)，
+        // 再映射回 dB，可使显示颜色随幅度线性过渡。
         constexpr float kEps = 1e-18f;
         const int n_bins = static_cast<int>(bins_.size());
         for (int i = 0; i < n_bins; ++i) {
-            const Bin& b = bins_[i];
+            Bin& b = bins_[i];
             float ncSum = -(b.acc_l.real() * b.acc_r.real() + b.acc_l.imag() * b.acc_r.imag());
-            if (ncSum < 0.0f) {
-                binDb_[i] = dbFloor_;
-            } else {
-                float nc = std::sqrt(ncSum + kEps) / static_cast<float>(b.N);  // 归一化 ÷N
-                binDb_[i] = 20.0f * std::log10(nc);
-            }
-            binDb_[i] = std::clamp(binDb_[i], dbFloor_, 0.0f);
+            // 线性增益（归一化 ÷N）；ncSum<0 视为无能量，增益=0
+            float gain = (ncSum > 0.0f) ? std::sqrt(ncSum + kEps) / static_cast<float>(b.N) : 0.0f;
+            // EMA 在增益域: g += alpha * (g_new - g)；alpha=1 时完全旁路(输出瞬时值)
+            b.smoothed_gain += b.alpha * (gain - b.smoothed_gain);
+            // 映射回 dB 并夹到 [dbFloor, 0]
+            float db = (b.smoothed_gain > 0.0f) ? 20.0f * std::log10(b.smoothed_gain) : dbFloor_;
+            binDb_[i] = std::clamp(db, dbFloor_, 0.0f);
         }
 
         // ── 每行对应一个 bin（一一映射），直接上色 ──
