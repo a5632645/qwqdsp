@@ -143,7 +143,8 @@ struct WindowlessNcFrame {
             // 无需 if 分支判断(分离位置在初始化即确定)。
             if (b.N < hopSize_) {
                 // b.alpha = 1.0f - std::exp(-1.0f / static_cast<float>(hopSize_));  // 样本级, tau=hop
-                b.alpha = 1.0f - qwqdsp_misc::ExpSmoother::ComputeSmoothFactor2(hopSize_, 4);  // 样本级, tau=hop
+                // b.alpha = 1.0f - qwqdsp_misc::ExpSmoother::ComputeSmoothFactor2(hopSize_, 4);  // 样本级, tau=hop
+                b.alpha = 1.0f;
                 b.smoothed_gain = 0.0f;
                 bins_ema_.push_back(b);
             } else {
