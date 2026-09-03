@@ -10,6 +10,7 @@
 #include "miniaudio.h"
 
 #include "qwqdsp/convert.hpp"
+#include "qwqdsp/colormap/resonator.hpp"
 #include "qwqdsp/filter/rbj.hpp"
 #include "qwqdsp/filter/biquad.hpp"
 #include "qwqdsp/oscillator/vic_sine_osc.hpp"
@@ -386,37 +387,12 @@ extern "C" void MaCaptureCallback(ma_device* pDevice, void* pOutput,
 
 // ============================================================
 //  频谱图颜色映射  (Black → Blue → Cyan → Green → Yellow → Red)
+//  已提取为 qwqdsp/colormap/resonator.hpp 中的 ResistorMap 表
 // ============================================================
-struct ColorStop { float pos; Color color; };
-
-static const ColorStop kColorStops[] = {
-    { 0.00f, Color{  0,   0,   0, 255 } },
-    { 0.15f, Color{  0,   0,  80, 255 } },
-    { 0.30f, Color{  0,  60, 180, 255 } },
-    { 0.45f, Color{  0, 180, 255, 255 } },
-    { 0.60f, Color{  0, 240,  80, 255 } },
-    { 0.75f, Color{180, 255,   0, 255 } },
-    { 0.88f, Color{255, 180,   0, 255 } },
-    { 1.00f, Color{255,  40,  40, 255 } },
-};
-
 static Color MapDbToColor(float db) {
     float t = std::clamp((db - kMinDisplayDb) / (-kMinDisplayDb), 0.0f, 1.0f);
-
-    for (int i = 0; i < (int)std::size(kColorStops) - 1; ++i) {
-        auto& a = kColorStops[i];
-        auto& b = kColorStops[i + 1];
-        if (t >= a.pos && t <= b.pos) {
-            float s = (t - a.pos) / (b.pos - a.pos);
-            return Color{
-                (unsigned char)(a.color.r + s * (b.color.r - a.color.r)),
-                (unsigned char)(a.color.g + s * (b.color.g - a.color.g)),
-                (unsigned char)(a.color.b + s * (b.color.b - a.color.b)),
-                255,
-            };
-        }
-    }
-    return kColorStops[std::size(kColorStops) - 1].color;
+    auto rgb = qwqdsp_colormap::Resonator::Map(t);
+    return Color{rgb[0], rgb[1], rgb[2], 255};
 }
 
 // ============================================================

@@ -62,7 +62,7 @@ static const Color kGridColor = {50, 50, 50, 255};
 static const Color kTextColor = {180, 180, 180, 255};
 static const Color kBgColor = {20, 20, 20, 255};
 
-using ColorMap = ColormapAdapter<qwqdsp_colormap::Magma>;
+using ColorMap = ColormapAdapter<qwqdsp_colormap::Resonator>;
 
 // ----------------------------------------
 // 全局状态

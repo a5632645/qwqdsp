@@ -4,5 +4,6 @@
 #include "jet.hpp"
 #include "magma.hpp"
 #include "parula.hpp"
+#include "resonator.hpp"
 #include "turbo.hpp"
 #include "viridis.hpp"
