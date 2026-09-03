@@ -2,7 +2,8 @@
 
 本文件夹是用 Python 复现论文 **《Window Function-less DFT with Reduced Noise
 and Latency for Real-Time Music Analysis》**（arXiv:2410.07982v3，Biesinger 等，
-京都大学）的算法实现，输入一个 `.wav`，输出一张上/下双面板的频谱对比图。
+京都大学）的算法实现，输入一个 `.wav`，输出一张上/下双面板的频谱对比图，
+并附一个针对「时间重分配」有效性的对照实验。
 
 ## 论文核心行为
 
@@ -23,8 +24,9 @@ and Latency for Real-Time Music Analysis》**（arXiv:2410.07982v3，Biesinger �
 | `nc_dft.py` | 算法核心：bin 构造、NC 幅度计算(FFT 卷积等价)、时间抽取与 IIR 平滑 |
 | `run.py` | 驱动脚本：读 wav → 上(Blackman-Harris STFT)/下(NC) 双面板对比图 |
 | `run_sliding_dft.py` | 改进版：用**递归滑动 DFT** 逐样本流式计算，输出**无需相位校正**(式8) |
-| `output/` | 生成的图片 |
-| `Window Function-less DFT*` | 论文 HTML 与 Fig.4 参考图（仅作对照） |
+| `verify_time_reassignment.py` | 对照实验：验证「时间重分配」对低频瞬态是否真的聚焦(见下文) |
+| `output/` | 生成的图片(已 gitignore，本地生成) |
+| `Window Function-less DFT*` | 论文 HTML 与 Fig.4 参考图(已 gitignore，本地对照) |
 
 `nc_dft.py` 中每个公式都标注了论文对应的编号（(1)(5)(6)(7)(8)），方便对照。
 
@@ -57,6 +59,9 @@ python run.py path/to/any.wav --out output/any.png
 # 递归滑动 DFT 版(无相位校正)
 python run_sliding_dft.py           # 默认 drumloop.wav → output/drumloop_sliding.png
 python run_sliding_dft.py sine --out output/sine_sliding.png
+
+# 时间重分配有效性对照实验
+python verify_time_reassignment.py  # → output/tr_plain_vs_reassign.png
 ```
 
 参数 `<wav>` 若在 `../work_dir/input/` 下，可直接写文件名（可省略 `.wav`），
@@ -74,3 +79,17 @@ Python 3.11+，`numpy`、`scipy`、`soundfile`、`matplotlib`。
   STFT 同频带但边缘有扩散和伪影。
 - `sweep.wav`（扫频）：NC 输出一根跟随扫频的细线；STFT 带更粗且有窗函数条纹。
 - `drumloop.wav`（鼓点）：STFT 有丰富宽带瞬态，NC 主要对低频鼓点响应。
+
+## 时间重分配验证结论
+
+`verify_time_reassignment.py` 构造一颗 60Hz 低频瞬态，对比「plain(无时间重分配)」
+与「reassign(用左右两 DFT 分量交叉相位 `arg(X_R·conj(X_L))` 算群延迟，再折算成
+整数列偏移写入持久缓冲)」两种频谱：
+
+- **plain**：一个轮廓清晰的连续脉冲块，能量集中在其真实 onset 附近。
+- **reassign**：连续块被撕成多条竖直细条，低频出现空隙，高频冒出伪影。
+
+**结论**：群延迟偏移的时间重分配对低频瞬态**不聚焦，反而引入伪影**。原因是
+windowless NC 是逐箱滑动 DFT，左右分量交叉相位算出的群延迟不稳定、多成分下
+被错误地分数列，而非聚焦到真实时刻。因此该方案**未采用**——C++ 侧的
+`WindowlessNcTimeFrame` 已被移除，仅保留本实验作为证据。

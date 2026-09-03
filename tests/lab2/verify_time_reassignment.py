@@ -3,27 +3,33 @@
 verify_time_reassignment.py
 ===========================
 
-验证 windowless NC 的「时间重分配」是否真能聚焦低频瞬态。
+【历史实验】验证 windowless NC 的「时间重分配」对低频瞬态是否真的聚焦。
 
 背景
 ----
-C++ 的 WindowlessNcTimeFrame 用左右两 DFT 分量交叉相位算群延迟：
+曾为 windowless NC 设计了时间重分配(TimeReassignment)版本，用左右两 DFT 分量
+交叉相位算群延迟：
     cross = X_R · conj(X_L),  gd = 0.5 - arg(cross)/(2π)
 然后把能量按 gd 折算成列偏移写入图像缓冲。
 
-本脚本在 lab2 里做一个**可读图**的对照实验（人 + AI 都能看图判断）：
+本脚本做**可读图**的对照实验（人 + AI 都能看图判断）：
   用一颗清晰短促的低频鼓击(60Hz, 阻尼包络)作为输入，
   分别算：
     (a) plain      —— 无时间重分配(直接输出每帧 NC gain)
     (b) reassign   —— 时间重分配(群延迟 → 整数列偏移，写入持久缓冲)
-  输出两个时间-频率图到 output/，供对比观察低频瞬态是否被聚焦。
+  输出对比图，判断低频瞬态是否被聚焦。
+
+结论
+----
+实验显示 reassign 不聚焦，反而把连续脉冲块撕成竖条、低频出现空隙、高频冒伪影，
+因此该方案**已放弃**——C++ 侧的 WindowlessNcTimeFrame 已被移除，本脚本仅作为
+证据保留。
 
 用法
 ----
     python verify_time_reassignment.py
 输出:
     output/tr_plain_vs_reassign.png   (上=plain, 下=reassign)
-    output/tr_plain.png / tr_reassign.png  (各自独立图)
 """
 from __future__ import annotations
 

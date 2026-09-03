@@ -15,13 +15,13 @@
 
 - **C++20** 或更高版本。
 
-| 依赖 | 开关 | 外部链接方式 | 作用 |
-|------|------|-------------|------|
-| **Eigen3** | `QWQDSP_USE_EIGEN=ON` | `target_link_libraries(qwqdsp INTERFACE eigen)` | 定义 `QWQDSP_HAVE_EIGEN`，启用 `rls_filter`、`swift_f0` 等 |
-| **Intel IPP** | `QWQDSP_USE_IPP=ON` | `target_link_libraries(qwqdsp INTERFACE IPP::ipps)` | 定义 `QWQDSP_HAVE_IPP`，替换 Ooura FFT 为 IPP 后端 |
-| **Apple Accelerate** | `QWQDSP_USE_ACCELERATE=ON` | `target_link_libraries(qwqdsp INTERFACE "-framework Accelerate")` | 定义 `QWQDSP_HAVE_ACCELERATE`，macOS 上替换 Ooura FFT 为 vDSP 后端 |
-| **SIMDe** | `QWQDSP_USE_SIMDE=ON` | `target_link_libraries(qwqdsp INTERFACE simde)` | 定义 `QWQDSP_HAVE_SIMDE`，非 x86 平台模拟 SIMD |
-| **raylib** | `QWQDSP_USE_RAYLIB=ON` | `add_subdirectory(raylib)` | 构建 GUI 测试和 `playing` 可执行程序 |
+| 依赖 | 开关 | 说明 |
+|------|------|------|
+| **Eigen3** | `QWQDSP_HAVE_EIGEN`（由外部定义） | 启用 `rls_filter`、`swift_f0` 等（外部提供 Eigen 并负责 include） |
+| **Intel IPP** | `QWQDSP_HAVE_IPP`（由外部定义） | 替换 Ooura FFT 为 IPP 后端（外部提供 IPP 并链接） |
+| **Apple Accelerate** | `QWQDSP_HAVE_ACCELERATE`（由外部定义） | macOS 上替换 Ooura FFT 为 vDSP 后端（外部链接 Accelerate） |
+| **SIMDe** | `QWQDSP_HAVE_SIMDE`（由外部定义） | 非 x86 平台模拟 SIMD（头文件直接 include `<x86/avx2.h>` / `<x86/sse4.1.h>`） |
+| **raylib** | `QWQDSP_USE_RAYLIB=ON` | 构建 raylib 依赖的 GUI 测试（`tests/gui`）与 `tests/lab` 实验（playing）；raylib 由外部提供 |
 
 ---
 
@@ -49,16 +49,23 @@
 | 文件 | 说明 |
 |------|------|
 | [`auto_notch.cpp`](tests/nogui/audiofx/auto_notch.cpp) | FIR 房间脉冲响应 + FFT 啸叫检测 + 自适应陷波抑制 |
-| [`wiener_filter.cpp`](tests/nogui/audiofx/wiener_filter.cpp) |维纳滤波去噪和vocoder(?) |
+| [`wiener_filter.cpp`](tests/nogui/audiofx/wiener_filter.cpp) | 维纳滤波去噪、噪声信号处理及 Wiener vocoder 实验 |
 | [`convolution.cpp`](tests/nogui/audiofx/convolution.cpp) | UniformConvolution 分块卷积正确性验证 |
 | [`conv_feedback.cpp`](tests/nogui/audiofx/conv_feedback.cpp) | 均匀卷积 + 反馈环路构成的梳状/混响效果 |
 | [`conv_feedback2.cpp`](tests/nogui/audiofx/conv_feedback2.cpp) | 反馈卷积的另一种变体实现 |
 | [`freq_shifter.cpp`](tests/nogui/audiofx/freq_shifter.cpp) | 频率移动，有无抗混叠对比 |
-| [`resample.cpp`](tests/nogui/audiofx/resample.cpp) | 扫频重采样至 96 kHz，测试FIR/IIR/多相 重采样 |
-| [`reverb.cpp`](tests/nogui/audiofx/reverb.cpp) | C 风格 FDN 混响 |
+| [`resample.cpp`](tests/nogui/audiofx/resample.cpp) | 扫频重采样至 88.2 kHz，测试 FIR/IIR/多相 重采样 |
+| [`reverb/reverb.cpp`](tests/nogui/audiofx/reverb/reverb.cpp) | C 风格 FDN 混响 |
 | [`oversample.cpp`](tests/nogui/audiofx/oversample.cpp) | 过采样对代数波形塑形器的失真抑制效果对比 |
 | [`piwarp.cpp`](tests/nogui/audiofx/piwarp.cpp) | 重新实现piwarp的效果!(STFT滤波器组/时间反向/时间拉伸反向) |
 | [`piwarp5_comb.cpp`](tests/nogui/audiofx/piwarp5_comb.cpp) | Piwarp5 (Kaiser 窗+帧内反转) len/beta 参数矩阵 comb 扫描 |
+| [`autocorrelation_delay_pitch_shifter_test.cpp`](tests/nogui/audiofx/autocorrelation_delay_pitch_shifter_test.cpp) | 自相关延迟音高移位器测试（CMake target `autocorrelation_pitch_shift_rt`） |
+| [`pitch_quantizers.cpp`](tests/nogui/audiofx/pitch_quantizers.cpp) | 音高量化器实验（CMake target `pitch_quantizers`） |
+| [`pitch_shifter.cpp`](tests/nogui/audiofx/pitch_shifter.cpp) | 峰值映射、相位声码器、WSOLA 等音高移位实现 |
+| [`pitch_shift.cpp`](tests/nogui/audiofx/pitch_shift.cpp) | WSOLA / PSOLA / Phase Vocoder 等多种移调算法 |
+| [`pitch_quantize/`](tests/nogui/audiofx/pitch_quantize/) | 多个音高量化器实现（`pitch_quantizer1..6.hpp`、`scale_helper.hpp`、`pitch_quantizers.md`） |
+| [`pitch_shift/`](tests/nogui/audiofx/pitch_shift/) | 移调算法头文件（`wsola.hpp`、`psola.hpp`、`phase_vocoder2.hpp`、`peak_map_pitch_shifter.hpp` 等） |
+| [`reverb/`](tests/nogui/audiofx/reverb/) | 多种混响实现（`conv_noise.cpp`、`spectral_reverb.cpp`、`stretch_reverb.cpp`、`velvet_noise.cpp`） |
 
 ### 📊 频谱处理示例 (Spectral Demos)
 
@@ -78,8 +85,7 @@
 | 文件 | 说明 |
 |------|------|
 | [`dsf.cpp`](tests/nogui/synth/dsf.cpp) | DSFCorrect 复现 BLIT 论文波形 |
-| [`stupid_resynthsis.cpp`](tests/nogui/synth/stupid_resynthsis.cpp) | 简单的重新合成测试 |
-| [`wsola.cpp`](tests/nogui/synth/wsola.cpp) | WSOLA |
+| [`stupid_resynthsis.cpp`](tests/nogui/synth/stupid_resynthsis.cpp) | 频谱分析后基于正弦振荡器重新合成（输出 `wormhole_resynthsis.wav`） |
 
 ### ✅ Cephes 数学验证 (Cephes Math Verification)
 
@@ -99,6 +105,17 @@
 |------|------|
 | [`interpolations.cpp`](tests/gui/interpolations.cpp) | 拖拽控制点实时对比四种插值曲线 |
 | [`auto_notch_rt.cpp`](tests/gui/auto_notch_rt.cpp) | 实时啸叫检测与自适应陷波 |
+| [`waveform2.cpp`](tests/gui/waveform2.cpp) | 零交叉触发实时波形显示（带时基旋钮） |
+| [`voicing/`](tests/gui/voicing/) | 声带/清浊音检测（`simple_voicing_detection.cpp`、`rms_tracker.hpp`、`subband_voicing_detector.hpp`） |
+
+### 🧪 Lab 实验 (Raylib Demos)
+
+`tests/lab/`
+
+| 文件 | 说明 |
+|------|------|
+| [`playing.cpp`](tests/lab/playing.cpp) | 实时 PGHI 音高移调 demo：瞬态检测（None / Flux / SuperFlux / Vocoder / DSPark）+ bypass + 音高旋钮 + 波形/瞬态可视化（raylib + miniaudio + slider） |
+| [`CMakeLists.txt`](tests/lab/CMakeLists.txt) | Lab 构建配置，定义 `playing` 可执行目标 |
 
 ### 🔊 GUI 音频效果 (GUI Audio FX)
 
@@ -109,6 +126,11 @@
 | [`echo.cpp`](tests/gui/audiofx/echo.cpp) | 立体声回声效果（预延迟/回声时间/Repeat/高低通滤波） |
 | [`filters.cpp`](tests/gui/audiofx/filters.cpp) | 多种滤波器（SVF / Ladder / Sallen-Key / OTA） |
 | [`filters2.cpp`](tests/gui/audiofx/filters2.cpp) | 过采样 + 非线性滤波器 |
+| [`reverb.cpp`](tests/gui/audiofx/reverb.cpp) | 立体声实时混响 |
+| [`formant_shifter.cpp`](tests/gui/audiofx/formant_shifter.cpp) | 颗粒共振峰移位 |
+| [`pitch_quantize_rt.cpp`](tests/gui/audiofx/pitch_quantize_rt.cpp) | 实时音高量化 |
+| [`psola_rt.cpp`](tests/gui/audiofx/psola_rt.cpp) | 实时 PSOLA 移调 |
+| [`pitch_shift_rt/`](tests/gui/audiofx/pitch_shift_rt/) | 实时 PGHI/移调 GUI（`pitch_shift_rt.cpp` 及 `pitch_shifter_rt.hpp`、`peak_map_pitch_shifter_rt.hpp` 等） |
 
 ### 📈 频谱分析 (Spectral)
 `tests/gui/spectral/`
@@ -119,10 +141,11 @@
 | [`polyphase_filter_bank_view2.cpp`](tests/gui/spectral/polyphase_filter_bank_view2.cpp) | 余弦调制分析滤波器组（M=256，DCT-IV） |
 | [`resonate_bank.cpp`](tests/gui/spectral/resonate_bank.cpp) | AVX Float256 加速谐振器组（最多 1024） |
 | [`spectrum3.cpp`](tests/gui/spectral/spectrum3.cpp) | 1/12 倍频程平滑频谱分析仪（4096 点 FFT） |
-| [`spectrum/`](tests/gui/spectral/spectrum/) | LED 条形图频谱分析仪（25 bin，嵌入式 C 移植） |
-| [`spectrum2/`](tests/gui/spectral/spectrum2/) | Mel 滤波器组频谱分析仪（81 bin + 32 频带） |
 | [`spectrum4.cpp`](tests/gui/spectral/spectrum4.cpp) | 粗略的多分辨率频谱分析仪 |
-| [`reassignment.cpp`](tests/gui/spectral/reassignment.cpp) | 实时频谱重分配(`最强是时间频率重分配+收敛指示器`)时频图 |
+| [`reassignment.cpp`](tests/gui/spectral/reassignment.cpp) | 实时频谱重分配时频图，支持 13 种方法（频谱重分配 / 相位声码器 / 导数窗 / NC / Windowless NC 等，`1-9/0/-/=`/`\` 切换） |
+| [`reassignment/`](tests/gui/spectral/reassignment/) | 频谱重分配的帧处理器（`spectrogram_frame.hpp`、`tf_*_reassignment_frame.hpp`、`nc_reassignment_frame.hpp`、`windowless_nc_frame.hpp`、`scrolling_image.hpp` 等头文件） |
+| [`spectrum/`](tests/gui/spectral/spectrum/) | LED 条形图频谱分析仪（25 bin，嵌入式 C 移植；含 `spectrum_driver.cpp/.h`、`psd_spectrum.py`、`psd_to_led.py`） |
+| [`spectrum2/`](tests/gui/spectral/spectrum2/) | Mel 滤波器组频谱分析仪（81 bin + 32 频带；含 `spectrum.cpp` 与 `spectrum_driver.cpp/.h`） |
 
 ### 🎛️ 合成器 (Synth)
 `tests/gui/synth/`
@@ -132,7 +155,7 @@
 | [`formant_filter.cpp`](tests/gui/synth/formant_filter.cpp) | DSF 共振峰合成器 |
 | [`blit.cpp`](tests/gui/synth/blit.cpp) | BLIT 振荡器 8 波形实时演示 |
 | [`polyblep.cpp`](tests/gui/synth/polyblep.cpp) | PolyBLEP 振荡器 9 波形（含硬同步）演示 |
-| [`noise.cpp`](tests/gui/synth/noise.cpp) | 噪声（白/粉红/布朗/点击）演示 |
+| [`noise.cpp`](tests/gui/synth/noise.cpp) | 噪声演示（白/粉红/高清粉红/布朗/两种点击/阶梯） |
 
 ---
 
@@ -161,6 +184,10 @@
 | [`reassignment_low.ipynb`](notebooks/reassignment_low.ipynb) | 时间-频率重分配方法在低频的实现 |
 | [`sst.ipynb`](notebooks/sst.ipynb) | ssqueezepy 库的 STFT/CWT 时频分析演示 |
 | [`tpt_filter.ipynb`](notebooks/tpt_filter.ipynb) | SymPy 推导 TPT 滤波器（SVF/Sallen-Key/梯形）差分方程 |
+| [`window_compare.ipynb`](notebooks/window_compare.ipynb) | 窗函数对比 |
+| [`burg_lpc/`](notebooks/burg_lpc/) | Burg LPC 系列（`burg_compare.ipynb`、`burg_variants_440hz.ipynb`、`burg_variants_fixed_vocoder.ipynb`、`recursive_burg_study.ipynb`、`recursive_burg_variants.ipynb`、`recursive_burg_vocoder.ipynb`） |
+| [`deconvolution/`](notebooks/deconvolution/) | 反卷积系列（`basic.ipynb`、`basic_img.ipynb`、`blind_img.ipynb`、`blind_img_l0.ipynb`、`tv_audio.ipynb`、`Total Variation.ipynb`） |
+| [`psychoacoustic/`](notebooks/psychoacoustic/) | 心理声学系列（`1.freq_axis.ipynb`、`2.loundness.ipynb`、`3.mask.ipynb`、`4.binaural.ipynb`） |
 
 ---
 
@@ -174,6 +201,21 @@
 | [`interpolation4.hpp`](include/qwqdsp/interpolation4.hpp) | 备用插值算法 — `Interpolation4` |
 | [`algebraic_waveshaper.hpp`](include/qwqdsp/algebraic_waveshaper.hpp) | 代数波形塑形器 — `AlgebraicWaveshaper` |
 | [`adsr_envelope.hpp`](include/qwqdsp/adsr_envelope.hpp) | ADSR 包络发生器 — `AdsrEnvelope` |
+
+### 🎨 色彩映射模块 (Colormap Modules)
+
+`include/qwqdsp/colormap/`（matplotlib 256 项 RGB 8-bit 表 + `Map(float t)` 映射）
+
+| 文件 | 说明 |
+|------|------|
+| [`magma.hpp`](include/qwqdsp/colormap/magma.hpp) | `Magma` matplotlib 色带 |
+| [`jet.hpp`](include/qwqdsp/colormap/jet.hpp) | `Jet` matplotlib 色带 |
+| [`parula.hpp`](include/qwqdsp/colormap/parula.hpp) | `Parula` matplotlib 色带 |
+| [`viridis.hpp`](include/qwqdsp/colormap/viridis.hpp) | `Viridis` matplotlib 色带 |
+| [`turbo.hpp`](include/qwqdsp/colormap/turbo.hpp) | `Turbo` matplotlib 色带 |
+| [`gnuplot2.hpp`](include/qwqdsp/colormap/gnuplot2.hpp) | `Gnuplot2` matplotlib 色带 |
+| [`gray.hpp`](include/qwqdsp/colormap/gray.hpp) | `Gray` matplotlib 色带 |
+| [`resonator.hpp`](include/qwqdsp/colormap/resonator.hpp) | `Resonator` 自定义色带（黑→蓝→青→绿→黄→红，提取自 resonate_bank.cpp） |
 
 ### 🎛️ 滤波器模块 (Filter Modules)
 
@@ -232,7 +274,7 @@
 | [`dsf_correct.hpp`](include/qwqdsp/oscillator/dsf_correct.hpp) | `DSFCorrect` 修正 DSF 振荡器<br>`DSFCorrectComplex` 复数修正版本 |
 | [`elliptic_sine_osc.hpp`](include/qwqdsp/oscillator/elliptic_sine_osc.hpp) | `EllipticSineOsc` 椭圆正弦振荡器 |
 | [`mcf_sine_osc.hpp`](include/qwqdsp/oscillator/mcf_sine_osc.hpp) | `MCFSineOsc` MCF 正弦振荡器<br>`FullMCFSineOsc` 完整的正交 MCF 振荡器 |
-| [`noise.hpp`](include/qwqdsp/oscillator/noise.hpp) | `WhiteNoise` 白噪声<br>`PinkNoise` 粉红噪声<br>`BrownNoise` 布朗噪声<br>`Clicks` 点击噪声 |
+| [`noise.hpp`](include/qwqdsp/oscillator/noise.hpp) | `WhiteNoise` 白噪声<br>`PinkNoise` 粉红噪声<br>`PinkNoiseHQ` 高清粉红噪声<br>`BrownNoise` 布朗噪声<br>`Clicks` / `Clicks2` 点击噪声<br>`Stair` 阶梯噪声 |
 | [`polyblep.hpp`](include/qwqdsp/oscillator/polyblep.hpp) | `PolyBlep` 多项式 BLEP 振荡器 |
 | [`polyblep_sync.hpp`](include/qwqdsp/oscillator/polyblep_sync.hpp) | `PolyBlepSync` 硬同步 BLEP 振荡器 |
 | [`raw_oscillor.hpp`](include/qwqdsp/oscillator/raw_oscillor.hpp) | `RawOscillor` 基础波形生成振荡器 |
@@ -266,7 +308,9 @@
 | [`limiter.hpp`](include/qwqdsp/fx/limiter.hpp) | `SimpleLimiter` 峰值保持前视限制器 |
 | [`oversample.hpp`](include/qwqdsp/fx/oversample.hpp) | `Oversample` 多级半带过采样/降采样器 |
 | [`pitch_shifter.hpp`](include/qwqdsp/fx/pitch_shifter.hpp) | `PitchShifter` 环形缓冲音高移位器 |
-| [`pitch_shifter2.hpp`](include/qwqdsp/fx/pitch_shifter2.hpp) | `PhaseVocoder` 相位声码器音高移位 |
+| [`pitch_shifter2.hpp`](include/qwqdsp/fx/pitch_shifter2.hpp) | `PhaseGradientVocoder` 相位梯度声码器音高移位（PGHI） |
+| [`phase_vocoder2.hpp`](include/qwqdsp/fx/phase_vocoder2.hpp) | `PhaseGradientVocoder` 相位梯度声码器（PGHI 核心实现） |
+| [`resample_coeffs.h`](include/qwqdsp/fx/resample_coeffs.h) | 带限合成重采样系数（`FastCoeffs` / `BestCoeffs` / `MedianCoeffs`） |
 | [`plate_reverb.hpp`](include/qwqdsp/fx/plate_reverb.hpp) | `PlateReverb` Dattorro 板式混响 |
 | [`polyphase_resample_fir.hpp`](include/qwqdsp/fx/polyphase_resample_fir.hpp) | `PolyphaseDownsamplerFir` 多相下采样 FIR<br>`PolyphaseUpsamplerFir` 多相上采样 FIR |
 | [`resample.hpp`](include/qwqdsp/fx/resample.hpp) | `Resample` 重采样器 |
@@ -344,11 +388,13 @@
 
 | 文件 | 说明 |
 |------|------|
-| [`fast_yin.hpp`](include/qwqdsp/pitch/fast_yin.hpp) | `FastYin` 快速 YIN 基音检测 |
-| [`helmholtz.hpp`](include/qwqdsp/pitch/helmholtz.hpp) | `Helmholtz` Helmholtz 基音检测 |
 | [`mpm.hpp`](include/qwqdsp/pitch/mpm.hpp) | `MPM` McLeod Pitch Method 基音检测 |
 | [`pitch.hpp`](include/qwqdsp/pitch/pitch.hpp) | `Pitch` 基音数据结构（pitch_hz / non_period_ratio） |
 | [`yin.hpp`](include/qwqdsp/pitch/yin.hpp) | `Yin` YIN 基音检测 |
+| [`pmpm.hpp`](include/qwqdsp/pitch/pmpm.hpp) | `Pmpm` 概率 MPM 基音检测 |
+| [`pyin.hpp`](include/qwqdsp/pitch/pyin.hpp) | `Pyin` 概率 YIN 基音检测 |
+| [`swift_f0.hpp`](include/qwqdsp/pitch/swift_f0.hpp) | `SwiftF0Inference` Swift F0 基音检测 |
+| [`simple_voicing_detector.hpp`](include/qwqdsp/pitch/simple_voicing_detector.hpp) | `SimpleVoicingDetector` 简易有声/无声检测 |
 
 ### 🔢 Cephes 数学函数模块 (Cephes Math Functions)
 
@@ -366,6 +412,6 @@
 | [`ampd_peak.hpp`](include/qwqdsp/misc/ampd_peak.hpp) | `AMPDPeakFinding` 自动多尺度峰值检测 |
 | [`crossover.hpp`](include/qwqdsp/misc/crossover.hpp) | `CrossoverGain` 增益渐变分频<br>`CrossoverPower` 功率渐变分频 |
 | [`envelope_follower.hpp`](include/qwqdsp/misc/envelope_follower.hpp) | `EnevelopeFollower` 包络跟随器 |
-| [`integrator.hpp`](include/qwqdsp/misc/integrator.hpp) | `IntegratorNaive` 朴素积分器<br>`IntegratorNaiveLeak` 泄漏积分器<br>`IntegratorTrapezoidal` 梯形积分器 |
+| [`integrator.hpp`](include/qwqdsp/misc/integrator.hpp) | `IntegratorNaive` 朴素积分器<br>`IntegratorNaiveLeak` 泄漏积分器<br>`IntegratorTrapezoidal` 梯形积分器<br>`IntegratorTrapezoidalLeak` 泄漏梯形积分器 |
 | [`peakfind.hpp`](include/qwqdsp/misc/peakfind.hpp) | `PeakFinding` 峰值查找 |
-| [`smoother.hpp`](include/qwqdsp/misc/smoother.hpp) | `ExpSmoother` 指数平滑器<br>`ConstantTimeSmoother` 恒定时长平滑器 |
+| [`smoother.hpp`](include/qwqdsp/misc/smoother.hpp) | `ExpSmoother` 指数平滑器<br>`ConstantTimeSmoother` 恒定时长平滑器<br>`ContantValueSmoother` 恒定值平滑器 |
