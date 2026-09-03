@@ -48,6 +48,15 @@ public:
         }
     }
 
+    static float ComputeSmoothFactor2(float samples, float close_ratio) noexcept {
+        if (samples < 1.0f) {
+            return 0.0f;
+        }
+        else {
+            return std::pow(10.0f, -close_ratio / samples);
+        }
+    }
+
     float Tick() noexcept {
         now_ = target_ + a_ * (now_ - target_);
         return now_;
