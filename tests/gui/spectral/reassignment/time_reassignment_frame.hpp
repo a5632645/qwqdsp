@@ -46,8 +46,29 @@ struct TimeReassignmentFrame {
         X_h_.resize(binSize_);
         X_pf_.resize(binSize_);
 
-        col_buf_.resize(subColumns_ * outputHeight_, 0.0f);
+        // 缓冲在原始 FFT bin 网格上行数 = binSize_（每个 FFT bin 一行），宽度 = 子列数
+        col_buf_.resize(subColumns_ * binSize_, 0.0f);
+        colMax_.resize(outputHeight_);
         column_.resize(outputHeight_);
+        rowToBinLo_.resize(outputHeight_);
+        rowToBinHi_.resize(outputHeight_);
+
+        // ── 预计算每个频率像素行 y 覆盖的 FFT bin 区间 [k_lo, k_hi] ──
+        // 像素 y 覆盖 [f_bot, f_top)（y 越小频率越高）；FFT bin k 覆盖 [k·bin_hz, (k+1)·bin_hz]
+        const float bin_hz_i = static_cast<float>(sampleRate_) / static_cast<float>(fftLen_);
+        const float log_step_i = (logMax_ - logMin_) / static_cast<float>(outputHeight_);
+        for (int y = 0; y < outputHeight_; ++y) {
+            float f_top = std::pow(10.0f, logMax_ - static_cast<float>(y) * log_step_i);
+            float f_bot = std::pow(10.0f, logMax_ - static_cast<float>(y + 1) * log_step_i);
+            int k_top = static_cast<int>(std::round(f_top / bin_hz_i));
+            int k_bot = static_cast<int>(std::round(f_bot / bin_hz_i));
+            int k_lo = std::min(k_top, k_bot);
+            int k_hi = std::max(k_top, k_bot);
+            rowToBinLo_[y] = std::clamp(k_lo, 0, binSize_ - 1);
+            rowToBinHi_[y] = std::clamp(k_hi, 0, binSize_ - 1);
+            if (rowToBinLo_[y] > rowToBinHi_[y])
+                std::swap(rowToBinLo_[y], rowToBinHi_[y]);
+        }
     }
 
     void Process(std::span<const float> /*raw_frame*/, std::span<const float> /*window*/,
@@ -61,7 +82,7 @@ struct TimeReassignmentFrame {
         std::copy(X_h_.begin(), X_h_.end() - 1, X_pf_.begin() + 1);
         X_pf_.front() = {};
 
-        // ── 3. 遍历每个 bin: 时间重分配 + 2D 分布 ──
+        // ── 3. 遍历每个 bin: 时间重分配（水平子列），行 = 原始 FFT bin k ──
         const float bin_hz = static_cast<float>(sampleRate_) / static_cast<float>(fftLen_);
 
         for (int k = 0; k < binSize_; ++k) {
@@ -77,63 +98,46 @@ struct TimeReassignmentFrame {
             arg_f = std::fmod(arg_f, 1.0f);
             float group_delay = 0.5f - arg_f; // (-0.5, 0.5]
 
-            // ── Y 范围: bin k 覆盖 [k·bin_hz, (k+1)·bin_hz] ──
-            float f_low = static_cast<float>(k) * bin_hz;
-            float f_high = static_cast<float>(k + 1) * bin_hz;
-            if (f_high < freqMin_ || f_low > freqMax_)
-                continue;
-            f_low = std::max(f_low, freqMin_);
-            f_high = std::min(f_high, freqMax_);
-
-            float n_low = (std::log10(f_low) - logMin_) / (logMax_ - logMin_);
-            float n_high = (std::log10(f_high) - logMin_) / (logMax_ - logMin_);
-            float y_top = static_cast<float>(outputHeight_ - 1) * (1.0f - n_high);
-            float y_bot = static_cast<float>(outputHeight_ - 1) * (1.0f - n_low);
-            y_top = std::clamp(y_top, 0.0f, static_cast<float>(outputHeight_ - 1));
-            y_bot = std::clamp(y_bot, 0.0f, static_cast<float>(outputHeight_ - 1));
-
-            int y0_idx = static_cast<int>(std::floor(y_top));
-            int y1_idx = static_cast<int>(std::floor(y_bot));
-
-            // ── 水平位置 ──
+            // ── 水平位置（子列）——行 = 原始 FFT bin k，不做垂直 Y 分布 ──
             float c_pos = (group_delay + 0.5f) * subColScale_;
             c_pos = std::clamp(c_pos, 0.0f, static_cast<float>(subColumns_ - 0.01f));
             int c_idx = static_cast<int>(std::floor(c_pos));
             float c_frac = c_pos - static_cast<float>(c_idx);
             bool c_last = (c_idx >= subColumns_ - 1);
 
-            // ── 按频率区间比例分布到各 Y 行 ──
-            for (int y = y0_idx; y <= y1_idx; ++y) {
-                if (y < 0 || y >= outputHeight_)
-                    continue;
-                float row_y0 = std::max(static_cast<float>(y), y_top);
-                float row_y1 = std::min(static_cast<float>(y + 1), y_bot);
-                float y_weight = (row_y1 - row_y0);
-
-                float energy = mag_lin * y_weight;
-
-                if (c_last) {
-                    col_buf_[c_idx * outputHeight_ + y] += energy;
-                }
-                else {
-                    col_buf_[c_idx * outputHeight_ + y] += energy * (1.0f - c_frac);
-                    col_buf_[(c_idx + 1) * outputHeight_ + y] += energy * c_frac;
-                }
+            if (c_last) {
+                col_buf_[c_idx * binSize_ + k] += mag_lin;
+            }
+            else {
+                col_buf_[c_idx * binSize_ + k] += mag_lin * (1.0f - c_frac);
+                col_buf_[(c_idx + 1) * binSize_ + k] += mag_lin * c_frac;
             }
         }
 
-        // ── 4. 弹出最旧子列 → dB → Color ──
+        // ── 4. 弹出最旧子列（原始 FFT 网格）→ max-hold 映射频率网格 → Color ──
         constexpr float kEps = 1e-12f;
+        const int subColStride = binSize_;
+
+        std::fill(colMax_.begin(), colMax_.end(), dbFloor_);
         for (int y = 0; y < outputHeight_; ++y) {
-            float dB = 20.0f * std::log10(col_buf_[y] + kEps);
+            const int k_lo = rowToBinLo_[y];
+            const int k_hi = rowToBinHi_[y];
+            float best = dbFloor_;
+            for (int k = k_lo; k <= k_hi; ++k) {
+                const float v = col_buf_[k];   // 第 0 个子列、FFT bin k
+                if (v > best)
+                    best = v;
+            }
+            float dB = 20.0f * std::log10(best + kEps);
             dB = std::clamp(dB, dbFloor_, 0.0f);
             int idx = static_cast<int>((dB - dbFloor_) / (-dbFloor_) * 255.0f);
             idx = std::clamp(idx, 0, 255);
             column_[y] = Colormap::kTable[idx];
         }
 
-        std::move(col_buf_.begin() + outputHeight_, col_buf_.end(), col_buf_.begin());
-        std::fill(col_buf_.begin() + (subColumns_ - 1) * outputHeight_, col_buf_.end(), 0.0f);
+        // 左移一个子列并清空最后一列
+        std::move(col_buf_.begin() + subColStride, col_buf_.end(), col_buf_.begin());
+        std::fill(col_buf_.end() - subColStride, col_buf_.end(), 0.0f);
     }
 
     std::span<const Color> GetColumn() const noexcept {
@@ -151,6 +155,9 @@ private:
     qwqdsp_spectral::RealFftAdv fft_;
     std::vector<float> fft_in_;
     std::vector<std::complex<float>> X_h_, X_pf_;
-    std::vector<float> col_buf_; // [subCol * outputHeight + y]
+    std::vector<float> col_buf_;   // [subCol * binSize_ + k]，原始 FFT bin 网格，行 = FFT bin
+    std::vector<float> colMax_;    // [outputHeight_]，频率网格每行 max dB
     std::vector<Color> column_;
+    std::vector<int> rowToBinLo_;  // [outputHeight_]，每行覆盖的 FFT bin 区间下界
+    std::vector<int> rowToBinHi_;  // [outputHeight_]，每行覆盖的 FFT bin 区间上界
 };

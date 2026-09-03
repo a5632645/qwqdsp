@@ -75,16 +75,16 @@ struct SpectrogramFrame {
 
         // ── Pass 2 — 高频 max-hold ──
         for (int y = 0; y < crossoverY_; ++y) {
-            // 像素 y 覆盖 [f_top, f_bot)
+            // 像素 y 覆盖 [f_bot, f_top)（y 越小频率越高，故 f_top > f_bot，对应 bin_bot < bin_top）
             float f_top = std::pow(10.0f, log_max_ - static_cast<float>(y) * log_step);
             float f_bot = std::pow(10.0f, log_max_ - static_cast<float>(y + 1) * log_step);
             int bin_top = static_cast<int>(std::round(f_top / bin_spacing));
             int bin_bot = static_cast<int>(std::round(f_bot / bin_spacing));
             bin_top = std::clamp(bin_top, 0, bin_size_ - 1);
-            bin_bot = std::clamp(bin_bot, bin_top, bin_size_ - 1);
+            bin_bot = std::clamp(bin_bot, 0, bin_top);
 
             float maxDb = -1e12f;
-            for (int b = bin_top; b <= bin_bot; ++b) {
+            for (int b = bin_bot; b <= bin_top; ++b) {
                 float dB = 20.0f * std::log10(gain_[b] + 1e-12f);
                 if (dB > maxDb)
                     maxDb = dB;

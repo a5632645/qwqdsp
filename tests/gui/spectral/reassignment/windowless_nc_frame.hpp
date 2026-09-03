@@ -83,6 +83,11 @@ struct WindowlessNcFrame {
         logMin_ = std::log10(freqMin);
         logMax_ = std::log10(freqMax);
 
+        // 幅度归一化：NC 前向公式 gain = sqrt(ncSum)/N 对幅度 A 的纯音，
+        // 稳态增益 ≈ A/π（推导：ncSum ≈ (A/2)²·cos(π/N)·N²/2，gain ≈ A/π）。
+        // 乘 π 让纯音峰值回到 ≈ 0 dB（与其他算法刻度一致），避免整体偏低 ~10 dB。
+        gainNorm_ = static_cast<float>(std::numbers::pi_v<double>);
+
         // 低音窗长上限(论文 IV-A 节)
         const int maxWindowSamples = std::max(8, static_cast<int>(kMaxWindowS * sampleRate));
 
@@ -181,6 +186,7 @@ struct WindowlessNcFrame {
                 b.acc_r = b.Wr * b.acc_r + s - old * b.WNr_r;
                 double ncSum = -(b.acc_l.real() * b.acc_r.real() + b.acc_l.imag() * b.acc_r.imag());
                 float gain = (ncSum > 0.0) ? static_cast<float>(std::sqrt(ncSum + kEpsSample) / b.N) : 0.0f;
+                gain *= gainNorm_;   // 幅度归一化(乘 π)，使纯音峰值回到 ≈0 dB
                 b.smoothed_gain += b.alpha * (gain - b.smoothed_gain);   // 每样本 EMA
             }
             // ── 旁路箱(N >= hop)：窗长自身已带限，只更新滑动 DFT 累加器 ──
@@ -206,6 +212,7 @@ struct WindowlessNcFrame {
         for (Bin& b : bins_bypass_) {
             double ncSum = -(b.acc_l.real() * b.acc_r.real() + b.acc_l.imag() * b.acc_r.imag());
             float gain = (ncSum > 0.0) ? static_cast<float>(std::sqrt(ncSum + kEps) / b.N) : 0.0f;
+            gain *= gainNorm_;   // 幅度归一化(乘 π)，使纯音峰值回到 ≈0 dB
             float db = (gain > 0.0f) ? 20.0f * std::log10(gain) : dbFloor_;
             binDb_[b.row] = std::clamp(db, dbFloor_, 0.0f);
         }
@@ -235,6 +242,7 @@ private:
     int ringSize_{};
     int n_{};                                          // 已处理的样本计数
     float freqMin_{}, freqMax_{}, logMin_{}, logMax_{}, dbFloor_{};
+    float gainNorm_{};                                 // 幅度归一化系数(乘 π，使纯音峰值 ≈0 dB)
 
     std::vector<Bin> bins_ema_;                       // N<hop 箱：每样本 EMA 抗混叠
     std::vector<Bin> bins_bypass_;                    // N>=hop 箱：旁路(窗长自身带限)

@@ -29,7 +29,7 @@ static constexpr int kHopSize = kFftSize / 16;
 
 // ── zeroPad ──
 // 简单类（标准谱图/时间重分配）：较大 zeroPad 提升频率分辨率
-static constexpr int kZeroPadSimple = 4;
+static constexpr int kZeroPadSimple = 2;
 // 全 TF 类（子列缓冲已提供时间精度）
 static constexpr int kZeroPadFull = 1;
 // ── NC 方法 ──
@@ -245,8 +245,8 @@ int main(void) {
     f_deriv_pk.Init(kSampleRate, kFftSize, kHopSize, kZeroPadFull, kCanvasH, kFreqMin, kFreqMax, kDbFloor);
     f_pv_conv.Init(kSampleRate, kFftSize, kHopSize, kZeroPadFull, kCanvasH, kFreqMin, kFreqMax, kDbFloor);
     f_deriv_conv.Init(kSampleRate, kFftSize, kHopSize, kZeroPadFull, kCanvasH, kFreqMin, kFreqMax, kDbFloor);
-    f_nc.Init(kSampleRate, kFftSize, kNcZeroPad, kCanvasH, kFreqMin, kFreqMax, kDbFloor);
-    f_nc_time.Init(kSampleRate, kFftSize, kHopSize, kNcZeroPad, kCanvasH, kFreqMin, kFreqMax, kDbFloor);
+    f_nc.Init(kSampleRate, kFftSize, kNcZeroPad, kCanvasH, kFreqMin, kFreqMax, kWindowLessNcDbFloor);
+    f_nc_time.Init(kSampleRate, kFftSize, kHopSize, kNcZeroPad, kCanvasH, kFreqMin, kFreqMax, kWindowLessNcDbFloor);
     f_windowless.Init(kSampleRate, kFftSize, kHopSize, kNcZeroPad, kCanvasH, kFreqMin, kFreqMax, kWindowLessNcDbFloor,
                       kNcBandwidthScale);
     image_.Init(kImageWidth, kCanvasH);
