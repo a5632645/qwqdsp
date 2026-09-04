@@ -9,6 +9,7 @@
 #include "interpolation.hpp"
 #include "interpolation/interpolation.hpp"
 #include "interpolation4.hpp"
+#include "minimax_sine.hpp"
 #include "misc/misc.hpp"
 #include "oscillator/oscillator.hpp"
 #include "pitch/pitch_pch.hpp"
