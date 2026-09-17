@@ -6,6 +6,7 @@ if(QWQDSP_USE_RAYLIB)
     add_qwqdsp_gui_test(interpolations interpolations.cpp)
     add_qwqdsp_gui_test(auto_notch_rt auto_notch_rt.cpp)
     add_qwqdsp_gui_test(waveform2 waveform2.cpp)
+    add_qwqdsp_gui_test(iir_design iir_design.cpp NO_MINIAUDIO)
 
     add_subdirectory(audiofx)
     add_subdirectory(spectral)

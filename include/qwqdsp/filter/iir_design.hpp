@@ -17,15 +17,30 @@ struct IIRDesign {
         double k;
     };
 
+    /**
+     * @brief 复数按实数等比缩放
+     * @param a 被缩放的复数
+     * @param b 缩放系数
+     * @return a * b
+     */
     static std::complex<double> ScaleComplex(const std::complex<double>& a, double b) {
         return {a.real() * b, a.imag() * b};
     }
 
     // --------------------------------------------------------------------------------
     // 原型滤波器
+    //
+    // 所有原型都是模拟低通原型, 每个 ZPK 对应一个二阶节(一对共轭极点),
+    // 因此阶数 = 2 * num_filter(总是偶数)。原型的 "1rad/sec" 是模拟角频率,
+    // 要得到数字滤波器还需要经过 ProtyleTo* 映射与 Bilinear 离散化。
     // --------------------------------------------------------------------------------
+
     /**
-     * @brief (-3.01)dB at (1)rad/sec
+     * @brief 巴特沃斯原型, 通带最平坦, (1)rad/sec 处 -3.01dB, 直流增益 0dB
+     * @param ret 输出的零极点节, 至少 num_filter 个
+     * @param num_filter 极点对数, 阶数 = 2 * num_filter
+     * @note 零点全在无穷远处, 调用前请保证 ret[i].z 为空
+     * @note 逐节 k = 1
      */
     static void Butterworth(std::span<ZPK> ret, size_t num_filter) {
         assert(ret.size() >= num_filter);
@@ -41,8 +56,14 @@ struct IIRDesign {
     }
 
     /**
-     * @brief (-ripple)dB at (1)rad/sec
-     * @param ripple >0 dB
+     * @brief 切比雪夫 I 型原型, 通带等波纹, (1)rad/sec 处 -ripple dB
+     * @param ret 输出的零极点节, 至少 num_filter 个
+     * @param num_filter 极点对数, 阶数 = 2 * num_filter
+     * @param ripple 通带纹波(dB, >0), 通带在 0dB 与 -ripple dB 之间等波纹
+     * @param even_pole_modify 偶数阶修正(见 @ref 链接): 把通带参考电平从 -ripple dB
+     *        抬到 0dB(直流增益 1), 通带变成 [0, -ripple]dB; (1)rad/sec 处仍是 -ripple dB
+     * @note 零点全在无穷远处, 调用前请保证 ret[i].z 为空
+     * @note 逐节 k = |p|^2; 不修正时 section 0 再除以 sqrt(1 + eps^2)
      * @ref https://en.wikipedia.org/wiki/Chebyshev_filter
      */
     static void Chebyshev1(std::span<ZPK> ret, size_t num_filter, double ripple, bool even_pole_modify) {
@@ -68,12 +89,25 @@ struct IIRDesign {
             ret[i].k = std::norm(ret[i].p);
             ++i;
         }
-        ret[0].k /= std::sqrt(1.0f + eps * eps);
+        if (!even_pole_modify) {
+            ret[0].k /= std::sqrt(1.0f + eps * eps);
+        }
     }
 
     /**
-     * @brief (-3.01)dB at (1)rad/sec
-     * @param ripple <0 dB
+     * @brief 切比雪夫 II 型(逆切比雪夫)原型, 通带最平坦, 阻带等波纹
+     *
+     * (1)rad/sec 处 -3.01dB, 直流增益 0dB, 阻带等波纹深度为 -ripple dB。
+     * 形状与 scipy/MATLAB 的 cheby2 相同, 区别只是归一化位置: 这里把 -3.01dB 点
+     * 放在 (1)rad/sec, 而 scipy 的 Wn 是阻带边沿(第一瓣峰值处)。
+     *
+     * @param ret 输出的零极点节, 至少 num_filter 个
+     * @param num_filter 极点对数, 阶数 = 2 * num_filter
+     * @param ripple 阻带衰减(dB, <0, 例如 -40), 注意与 Chebyshev1 的正的通带纹波相反
+     * @param even_order_modify 偶数阶修正: 让最后一对极点不再有有限零点
+     * @note 零点在虚轴上(有限频率)
+     * @note 阻带第一个等波纹峰值在模拟角频率 cosh(acosh(sqrt(S))/n) rad/sec 处,
+     *       其中 S = 10^(-ripple/10) - 1, n = 2 * num_filter
      * @ref https://en.wikipedia.org/wiki/Chebyshev_filter
      * @ref https://en.wikipedia.org/wiki/Chebyshev_nodes#Even_order_modified_Chebyshev_nodes
      */
@@ -224,8 +258,18 @@ struct IIRDesign {
     // qwqfixme 椭圆滤波器的通带有点偏差
     //          偶数极点零点修改
     /**
-     * @param amp_passband >0 dB
-     * @param amp_stopband >0 dB
+     * @brief 椭圆(考尔)原型, 通带与阻带都等波纹
+     *
+     * 通带边沿在 (1)rad/sec 且增益为 -db_passband dB, 直流增益也是 -db_passband dB;
+     * 阻带边沿在 (1)rad/sec 的 1/k 倍处(k 是椭圆模数, 由阶数与两个纹波决定),
+     * 从那里起等波纹深度为 -db_stopband dB。相同阶数下过渡带最陡。
+     *
+     * @param ret 输出的零极点节, 至少 num_filter 个
+     * @param num_filter 极点对数, 阶数 = 2 * num_filter
+     * @param db_passband 通带纹波(dB, >0), 通带边沿电平
+     * @param db_stopband 阻带衰减(dB, >0), 需要大于 db_passband
+     * @note 零点在虚轴上(有限频率)
+     * @warning 通带内存在高于 0dB 的凸起(见上方 qwqfixme)
      * @ref Orfanidis lecture notes on Elliptic Filter Design.pdf
      */
     static void Elliptic(std::span<ZPK> ret, size_t num_filter, double db_passband, double db_stopband) {
@@ -273,7 +317,13 @@ struct IIRDesign {
     // 滤波器映射
     // --------------------------------------------------------------------------------
     /**
-     * @param omega 模拟角频率
+     * @brief 原型 -> 低通: 极点与零点整体乘以 omega
+     * @param analog 被就地修改的原型节
+     * @param num_filter 参与的极点对数, 只处理前 num_filter 节
+     * @param omega 目标通带边沿的模拟角频率(rad/sec)
+     * @note 原型 (1)rad/sec 处的边沿被搬到 omega
+     * @note 无有限零点(零点在无穷远)的节 k 乘 omega^2, 有零点的节 k 不变,
+     *       这样直流增益与原型相同
      */
     static void ProtyleToLowpass(std::span<ZPK> analog, size_t num_filter, double omega) {
         assert(analog.size() >= num_filter);
@@ -293,7 +343,12 @@ struct IIRDesign {
     }
 
     /**
-     * @param omega 模拟角频率
+     * @brief 原型 -> 高通: 做 s -> omega/s 的频率反转
+     * @param protyle 被就地修改的原型节
+     * @param num_filter 参与的极点对数, 只处理前 num_filter 节
+     * @param omega 目标通带边沿的模拟角频率(rad/sec)
+     * @note 极点为 omega/p; 原型有有限零点时零点变成 omega/z, 否则在原点补一个零点
+     * @note k 按 1/|p|^2(有零点时再乘 |z|^2) 归一化, 使高频增益与原型直流增益相同
      */
     static void ProtyleToHighpass(std::span<ZPK> protyle, size_t num_filter, double omega) {
         assert(protyle.size() >= num_filter);
@@ -316,7 +371,18 @@ struct IIRDesign {
     }
 
     /**
-     * @note num_filter将会x2
+     * @brief 原型 -> 带通, 用中心频率与 Q 指定带宽
+     *
+     * 做 u = (s^2 + wo^2) / (s * bw) 的映射(bw = wo / Q), 原型 (1)rad/sec 处的边沿
+     * 变成 s^2 - bw*s + wo^2 = 0 的两个根, 两个边沿的几何平均是 wo、差是 bw。
+     *
+     * @param protyle 被就地修改的原型节
+     * @param num_filter 原型极点对数, 处理前 num_filter 节
+     * @param wo 带通中心角频率(rad/sec), 两个边沿的几何平均
+     * @param Q 中心频率 / 带宽, 需要 > 0
+     * @note 节数会翻倍: 结果写入 [0, num_filter) 与 [num_filter, 2*num_filter) 两半,
+     *       因此 protyle 至少要有 2 * num_filter 个元素
+     * @note 无零点的原型节会拆成"原点零点"与"无穷远零点"两半
      */
     static void ProtyleToBandpass(std::span<ZPK> protyle, size_t num_filter, double wo, double Q) {
         assert(protyle.size() >= num_filter * 2);
@@ -353,7 +419,14 @@ struct IIRDesign {
     }
 
     /**
-     * @note num_filter将会x2
+     * @brief 原型 -> 带通, 用两个边沿频率指定带宽
+     * @param protyle 被就地修改的原型节
+     * @param num_filter 原型极点对数, 处理前 num_filter 节
+     * @param w1 低边沿的模拟角频率(rad/sec), w1 < w2
+     * @param w2 高边沿的模拟角频率(rad/sec)
+     * @note 带宽取 bw = w2 - w1; 节数翻倍, protyle 至少要有 2 * num_filter 个元素
+     * @note 与 ProtyleToBandpass(wo, Q) 的区别是这里直接给两个边沿,
+     *       且两半节的 k 都取 sqrt(原型节 k)
      */
     static void ProtyleToBandpass2(std::span<ZPK> protyle, size_t num_filter, double w1, double w2) {
         assert(protyle.size() >= num_filter * 2);
@@ -386,13 +459,24 @@ struct IIRDesign {
     }
 
     /**
-     * @note num_filter将会x2
+     * @brief 原型 -> 带阻, 用中心频率与 Q 指定带宽
+     *
+     * 先做原型 -> 高通(bw = wo / Q), 再做高通 -> 带阻; 原型 (1)rad/sec 处的边沿
+     * 变成 s^2 - bw*s + wo^2 = 0 的两个根, 两个边沿的几何平均是 wo、差是 bw。
+     *
+     * @param protyle 被就地修改的原型节
+     * @param num_filter 原型极点对数, 处理前 num_filter 节
+     * @param wo 带阻中心角频率(rad/sec), 也是陷波零点所在频率
+     * @param Q 中心频率 / 带宽, 需要 > 0
+     * @note 节数会翻倍: 结果写入 [0, num_filter) 与 [num_filter, 2*num_filter) 两半,
+     *       因此 protyle 至少要有 2 * num_filter 个元素
      */
     static void ProtyleToBandstop(std::span<ZPK> protyle, size_t num_filter, double wo, double Q) {
         assert(protyle.size() >= num_filter * 2);
 
         double bw = wo / Q;
-        for (size_t i = 0; i < protyle.size(); ++i) {
+        // 只遍历原型节, 结果写入 i 与 i + num_filter 两半
+        for (size_t i = 0; i < num_filter; ++i) {
             // prototype -> highpass at bw
             ZPK s = protyle[i];
             {
@@ -431,13 +515,20 @@ struct IIRDesign {
     }
 
     /**
-     * @note num_filter将会x2
+     * @brief 原型 -> 带阻, 用两个边沿频率指定带宽
+     * @param protyle 被就地修改的原型节
+     * @param num_filter 原型极点对数, 处理前 num_filter 节
+     * @param w1 低边沿的模拟角频率(rad/sec), w1 < w2
+     * @param w2 高边沿的模拟角频率(rad/sec)
+     * @note 带宽取 bw = w2 - w1; 节数翻倍, protyle 至少要有 2 * num_filter 个元素
+     * @note 与 ProtyleToBandstop(wo, Q) 的区别是这里直接给两个边沿
      */
     static void ProtyleToBandstop2(std::span<ZPK> protyle, size_t num_filter, double w1, double w2) {
         assert(protyle.size() >= 2 * num_filter);
 
         double bw = w2 - w1;
-        for (size_t i = 0; i < protyle.size(); ++i) {
+        // 只遍历原型节, 结果写入 i 与 i + num_filter 两半
+        for (size_t i = 0; i < num_filter; ++i) {
             ZPK s = protyle[i];
             {
                 auto const& ss = protyle[i];
@@ -477,6 +568,17 @@ struct IIRDesign {
     // --------------------------------------------------------------------------------
     // 离散化
     // --------------------------------------------------------------------------------
+    /**
+     * @brief 双线性变换, 模拟 ZPK -> 数字 ZPK
+     *
+     * 做 s = 2*fs*(1 - z^-1)/(1 + z^-1): 极点为 (k+p)/(k-p), k = 2*fs;
+     * 有限零点为 (k+z)/(k-z), 无穷远零点变成 z = -1(Nyquist)。
+     *
+     * @param analog 被就地修改的模拟域零极点节
+     * @param fs 采样率(Hz)
+     * @note 每节的 k 按 |k-z|^2/|k-p|^2(无零点时 1/|k-p|^2)缩放, 保持频响幅度不变
+     * @note 变换后每节一定带有有限零点, 可以直接交给 TfToBiquad
+     */
     static void Bilinear(std::span<ZPK> analog, double fs) {
         std::complex k = 2.0 * fs;
         for (size_t i = 0; i < analog.size(); ++i) {
@@ -496,6 +598,19 @@ struct IIRDesign {
         }
     }
 
+    /**
+     * @brief 数字域 ZPK 转成双二阶系数
+     *
+     * 每节映射为 b0 = k, b1 = -2*k*Re(z), b2 = k*|z|^2, a1 = -2*Re(p), a2 = |p|^2,
+     * 也就是 H(z) = k(1 - z*z^-1)(1 - z'*z^-1) / ((1 - p*z^-1)(1 - p'*z^-1))。
+     *
+     * @param digital 数字域零极点节
+     * @param biquad 输出的双二阶系数, 至少 digital.size() 个
+     * @pre 每节都必须有有限零点(通常先调用 Bilinear, 无穷远零点会被写成 z = -1),
+     *      否则解引用空的 optional 是未定义行为
+     * @warning 系数按 float 存放: 高选择性/窄陷波设计的实测频响会与设计值有偏差,
+     *          偏差量随极点靠近单位圆而变大
+     */
     static void TfToBiquad(std::span<ZPK> digital, std::span<BiquadCoeff> biquad) {
         assert(biquad.size() >= digital.size());
 
@@ -519,7 +634,11 @@ struct IIRDesign {
     }
 
     /**
-     * @return analog omega frequency!(rad/sec)
+     * @brief 数字频率的预畸变, 得到双线性变换前应使用的模拟角频率
+     * @param freq 数字频率(Hz)
+     * @param fs 采样率(Hz)
+     * @return 模拟角频率(rad/sec), 即 2*fs*tan(pi*freq/fs)
+     * @note 逆变换为 freq = fs/pi * atan(omega/(2*fs))
      */
     static double Digital2AnalogW(double freq, double fs) {
         return 2 * fs * std::tan(freq * pi / fs);
