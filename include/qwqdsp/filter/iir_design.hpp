@@ -255,8 +255,7 @@ struct IIRDesign {
         std::vector<double> kdot_;
     };
 
-    // qwqfixme 椭圆滤波器的通带有点偏差
-    //          偶数极点零点修改
+    // qwqfixme 偶数极点零点修改
     /**
      * @brief 椭圆(考尔)原型, 通带与阻带都等波纹
      *
@@ -269,7 +268,6 @@ struct IIRDesign {
      * @param db_passband 通带纹波(dB, >0), 通带边沿电平
      * @param db_stopband 阻带衰减(dB, >0), 需要大于 db_passband
      * @note 零点在虚轴上(有限频率)
-     * @warning 通带内存在高于 0dB 的凸起(见上方 qwqfixme)
      * @ref Orfanidis lecture notes on Elliptic Filter Design.pdf
      */
     static void Elliptic(std::span<ZPK> ret, size_t num_filter, double db_passband, double db_stopband) {
@@ -297,9 +295,10 @@ struct IIRDesign {
 
         EllipticHelper helper{k};
         EllipticHelper helper1{k1};
-        double const k1_complt_int = helper1.CompleteIntegral();
+        // ArcSn 返回的就是以 K(k1) 归一化的自变量, 所以这里只除以 N;
+        // 若再除一次 K(k1) 会让极点整体偏移, 通带纹波变成向上凸(见 Elliptic 的修好记录)
         auto const v0 = std::complex{0.0, -1.0} * helper1.ArcSn(std::complex{0.0, 1.0} / eps_passband)
-                      / (static_cast<double>(N) * k1_complt_int);
+                      / static_cast<double>(N);
         for (size_t i = 0; i < num_filter; ++i) {
             auto& s = ret[i];
             auto ui = (2.0 * static_cast<double>(i + 1) - 1.0) / static_cast<double>(N);
