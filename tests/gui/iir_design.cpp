@@ -328,6 +328,7 @@ static FilterDesign makeDesign(DesignParams const& params) {
     std::span<ZPK> proto{zpk.data(), num_sections};
 
     // ----- 原型滤波器 -----
+    bool prototype_ok = true;
     switch (params.prototype) {
     case Prototype::Butterworth:
         IIRDesign::Butterworth(proto, num_pairs);
@@ -340,7 +341,8 @@ static FilterDesign makeDesign(DesignParams const& params) {
         IIRDesign::Chebyshev2(proto, num_pairs, -params.stopband_atten_db, params.even_modify);
         break;
     case Prototype::Elliptic:
-        IIRDesign::Elliptic(proto, num_pairs, params.passband_ripple_db, params.stopband_atten_db);
+        // 规格过陡时(阻带边沿与通带边沿重合)会返回 false, 此时不该继续算曲线
+        prototype_ok = IIRDesign::Elliptic(proto, num_pairs, params.passband_ripple_db, params.stopband_atten_db);
         break;
     case Prototype::ButterworthAtten:
         // 这个原型的 atten 是截止频率处的幅度
@@ -367,6 +369,10 @@ static FilterDesign makeDesign(DesignParams const& params) {
     }
 
     // ----- 频率映射 -----
+    if (!prototype_ok) {
+        out.valid = false;
+        return out;
+    }
     double const wo = IIRDesign::Digital2AnalogW(params.fc, kFs);
     switch (params.kind) {
     case ResponseKind::Lowpass:

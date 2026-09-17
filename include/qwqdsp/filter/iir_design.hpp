@@ -1,7 +1,9 @@
 #pragma once
 #include "biquad_coeff.hpp"
+#include <array>
 #include <cassert>
 #include <complex>
+#include <limits>
 #include <numbers>
 #include <optional>
 #include <span>
@@ -255,6 +257,214 @@ struct IIRDesign {
         std::vector<double> kdot_;
     };
 
+    /**
+     * @brief cephes 椭圆函数工具(移植自 ref_repos/cephes-master/ellf)
+     *
+     * 与 EllipticHelper 的区别:
+     * - 完全积分 K 用 minimax 多项式逼近(cephes ellpk), 不做 Landen 下降;
+     * - 由 nome 的 theta 级数反解模数(cephes cay), 在 k 逼近 1 时收敛最快,
+     *   不会像 Landen 上升/下降那样退化或死循环;
+     * - sn/cn/dn 用 AGM + 反向递推(cephes ellpj), 参数是弧度;
+     * - 不完全积分 F(phi|m) 用 AGM(cephes ellik)。
+     *
+     * @note cephes 的 ellpk(x) 里 x = 1 - m, 即 ellpk(x) = K(m)
+     */
+    struct EllipticHelperCephes {
+        /// cephes polevl: 降幂 Horner 求值
+        static double Polevl(double x, std::span<double const> coef) {
+            double ans = coef[0];
+            for (size_t i = 1; i < coef.size(); ++i) {
+                ans = ans * x + coef[i];
+            }
+            return ans;
+        }
+
+        /**
+         * @brief 完全椭圆积分 K(m), 参数 m = 1 - m1
+         * @param m1 互补参数, 即 K 的奇点在 m1 = 0
+         * @return K(m)
+         */
+        static double Ellpk(double m1) {
+            static constexpr std::array<double, 11> kP{
+                1.37982864606273237150E-4, 2.28025724005875567385E-3, 7.97404013220415179367E-3,
+                9.85821379021226008714E-3, 6.87489687449949877925E-3, 6.18901033637687613229E-3,
+                8.79078273952743772254E-3, 1.49380448916805252718E-2, 3.08851465246711995998E-2,
+                9.65735902811690126535E-2, 1.38629436111989062502E0};
+            static constexpr std::array<double, 11> kQ{
+                2.94078955048598507511E-5, 9.14184723865917226571E-4, 5.94058303753167793257E-3,
+                1.54850516649762399335E-2, 2.39089602715924892727E-2, 3.01204715227604046988E-2,
+                3.73774314173823228969E-2, 4.88280347570998239232E-2, 7.03124996963957469739E-2,
+                1.24999999999870820058E-1, 4.99999999999999999821E-1};
+            constexpr double kMachep = 2.220446049250313e-16;
+            if (m1 > kMachep) {
+                return Polevl(m1, kP) - std::log(m1) * Polevl(m1, kQ);
+            }
+            // log(4) - log(sqrt(m1))
+            return 1.3862943611198906188E0 - 0.5 * std::log(m1);
+        }
+
+        /**
+         * @brief 由 nome 反解模数 k = sqrt(m)
+         * @param q nome, 0 < q < 1
+         * @return 模数 k; q 太大时会返回 >= 1 的值, 由调用者判无效
+         * @note cephes cay(): (2K/pi)^(1/2) m^(1/4) 用 theta 级数展开后反解
+         */
+        static double Cay(double q) {
+            constexpr double kMachep = 2.220446049250313e-16;
+            double a = 1.0;
+            double b = 1.0;
+            double r = 1.0;
+            double p = q;
+            for (int iter = 0; iter < 10000; ++iter) {
+                r *= p;
+                a += 2.0 * r;
+                double t1 = std::abs(r / a);
+                r *= p;
+                b += r;
+                p *= q;
+                double const t2 = std::abs(r / b);
+                if (t2 > t1) {
+                    t1 = t2;
+                }
+                if (!(t1 > kMachep)) {
+                    break;
+                }
+            }
+            a = b / a;
+            return 4.0 * std::sqrt(q) * a * a;
+        }
+
+        /**
+         * @brief 不完全椭圆积分 F(phi|m)
+         * @param phi 幅角(弧度)
+         * @param m 参数 m = k^2
+         * @return F(phi|m)
+         */
+        static double Ellik(double phi, double m) {
+            constexpr double kMachep = 2.220446049250313e-16;
+            if (m == 0.0) {
+                return phi;
+            }
+            double const a0 = 1.0 - m;
+            if (a0 == 0.0) {
+                if (std::abs(phi) >= pi / 2.0) {
+                    return std::numeric_limits<double>::max();
+                }
+                return std::log(std::tan((pi / 2.0 + phi) / 2.0));
+            }
+            int npio2 = static_cast<int>(std::floor(phi / (pi / 2.0)));
+            if (npio2 & 1) {
+                npio2 += 1;
+            }
+            double K = 0.0;
+            if (npio2) {
+                K = Ellpk(a0);
+                phi = phi - static_cast<double>(npio2) * (pi / 2.0);
+            }
+            int sign = 0;
+            if (phi < 0.0) {
+                phi = -phi;
+                sign = -1;
+            }
+            double b = std::sqrt(a0);
+            double t = std::tan(phi);
+            bool transformed = false;
+            double result = 0.0;
+            if (std::abs(t) > 10.0) {
+                double const e = 1.0 / (b * t);
+                if (std::abs(e) < 10.0) {
+                    if (npio2 == 0) {
+                        K = Ellpk(a0);
+                    }
+                    result = K - Ellik(std::atan(e), m);
+                    transformed = true;
+                }
+            }
+            if (!transformed) {
+                double a = 1.0;
+                double c = std::sqrt(m);
+                int d = 1;
+                int mod = 0;
+                while (std::abs(c / a) > kMachep) {
+                    double const ratio = b / a;
+                    phi = phi + std::atan(t * ratio) + static_cast<double>(mod) * pi;
+                    mod = static_cast<int>((phi + pi / 2.0) / pi);
+                    t = t * (1.0 + ratio) / (1.0 - ratio * t * t);
+                    c = (a - b) / 2.0;
+                    double const next_b = std::sqrt(a * b);
+                    a = (a + b) / 2.0;
+                    b = next_b;
+                    d += d;
+                }
+                result = (std::atan(t) + static_cast<double>(mod) * pi) / (static_cast<double>(d) * a);
+            }
+            if (sign < 0) {
+                result = -result;
+            }
+            return result + static_cast<double>(npio2) * K;
+        }
+
+        /**
+         * @brief 实参数下的 Jacobi 椭圆函数 sn/cn/dn
+         * @param u 自变量(弧度)
+         * @param m 参数 m = k^2, 需要 0 <= m <= 1
+         * @param sn 输出 sn(u, k)
+         * @param cn 输出 cn(u, k)
+         * @param dn 输出 dn(u, k)
+         */
+        static void Ellpj(double u, double m, double& sn, double& cn, double& dn) {
+            constexpr double kMachep = 2.220446049250313e-16;
+            if (m < 1.0e-9) {
+                double const t = std::sin(u);
+                double const b = std::cos(u);
+                double const ai = 0.25 * m * (u - t * b);
+                sn = t - ai * b;
+                cn = b + ai * t;
+                dn = 1.0 - 0.5 * m * t * t;
+                return;
+            }
+            if (m >= 0.9999999999) {
+                double const ai = 0.25 * (1.0 - m);
+                double const b = std::cosh(u);
+                double const t = std::tanh(u);
+                double const ph = 1.0 / b;
+                double const twon = b * std::sinh(u);
+                sn = t + ai * (twon - u) / (b * b);
+                double const ai2 = ai * t * ph;
+                cn = ph - ai2 * (twon - u);
+                dn = ph + ai2 * (twon + u);
+                return;
+            }
+            std::array<double, 9> a{};
+            std::array<double, 9> c{};
+            a[0] = 1.0;
+            double b = std::sqrt(1.0 - m);
+            double twon = 1.0;
+            c[0] = std::sqrt(m);
+            int i = 0;
+            while (std::abs(c[i] / a[i]) > kMachep && i <= 7) {
+                double const ai = a[i];
+                ++i;
+                c[i] = (ai - b) / 2.0;
+                double const next_b = std::sqrt(ai * b);
+                a[i] = (ai + b) / 2.0;
+                b = next_b;
+                twon *= 2.0;
+            }
+            // 反向递推
+            double phi = twon * a[i] * u;
+            do {
+                double const t = c[i] * std::sin(phi) / a[i];
+                b = phi;
+                phi = (std::asin(t) + phi) / 2.0;
+            } while (--i > 0);
+            sn = std::sin(phi);
+            double const t = std::cos(phi);
+            cn = t;
+            dn = t / std::cos(phi - b);
+        }
+    };
+
     // qwqfixme 偶数极点零点修改
     /**
      * @brief 椭圆(考尔)原型, 通带与阻带都等波纹
@@ -263,42 +473,130 @@ struct IIRDesign {
      * 阻带边沿在 (1)rad/sec 的 1/k 倍处(k 是椭圆模数, 由阶数与两个纹波决定),
      * 从那里起等波纹深度为 -db_stopband dB。相同阶数下过渡带最陡。
      *
+     * 模数 k 用 cephes 的做法(由 nome 的 theta 级数反解)计算, 不使用 Landen 下降
+     * 序列, 因此在很陡的规格下也不会陷入死循环; 旧的 Orfanidis 式实现保留在
+     * EllipticLanden 里。
+     *
      * @param ret 输出的零极点节, 至少 num_filter 个
      * @param num_filter 极点对数, 阶数 = 2 * num_filter
      * @param db_passband 通带纹波(dB, >0), 通带边沿电平
      * @param db_stopband 阻带衰减(dB, >0), 需要大于 db_passband
+     * @return 成功返回 true
+     * @retval false db_stopband <= db_passband, 或该规格要求的模数在 double 下就是 1
+     *         (规格过陡, 阻带边沿与通带边沿重合; 例如 order=16, 通带 6dB, 阻带 10dB)
      * @note 零点在虚轴上(有限频率)
-     * @ref Orfanidis lecture notes on Elliptic Filter Design.pdf
+     * @ref Gray & Markel, "A Computer Program for Designing Digital Elliptic Filters",
+     *      IEEE Trans. ASSP, Dec. 1976; 以及 cephes 的 ellf.c
      */
-    static void Elliptic(std::span<ZPK> ret, size_t num_filter, double db_passband, double db_stopband) {
+    [[nodiscard]] static bool Elliptic(std::span<ZPK> ret, size_t num_filter, double db_passband, double db_stopband) {
         assert(ret.size() >= num_filter);
 
-        auto eps_passband = std::sqrt(std::pow(10.0, db_passband / 10.0) - 1.0);
-        auto eps_stopband = std::sqrt(std::pow(10.0, db_stopband / 10.0) - 1.0);
-        auto k1 = eps_passband / eps_stopband;
-        size_t N = 2 * num_filter;
-        // ellipdeg k1 -> k
+        double const eps_passband = std::sqrt(std::pow(10.0, db_passband / 10.0) - 1.0);
+        double const eps_stopband = std::sqrt(std::pow(10.0, db_stopband / 10.0) - 1.0);
+        if (!(eps_stopband > eps_passband)) {
+            return false;
+        }
+        size_t const N = 2 * num_filter;
+        double const m1 = eps_passband / eps_stopband; // 选择性(第二模数)
+        double const m1_sq = m1 * m1;
+        // 设计模数: q = exp(-pi*K(k1')/(N*K(k1))), k = cay(q)
+        double const Kk1 = EllipticHelperCephes::Ellpk(1.0 - m1_sq);
+        double const Kpk1 = EllipticHelperCephes::Ellpk(m1_sq);
+        double const q = std::exp(-pi * Kpk1 / (static_cast<double>(N) * Kk1));
+        double const k = EllipticHelperCephes::Cay(q);
+        if (!(k > 0.0 && k < 1.0)) {
+            return false;
+        }
+        double const m = k * k;
+        double const Kk = EllipticHelperCephes::Ellpk(1.0 - m);
+        // u = F(atan(1/eps_p) | k1'^2) * K(k) / (N*K(k1))
+        double const u = EllipticHelperCephes::Ellik(std::atan(1.0 / eps_passband), 1.0 - m1_sq) * Kk
+                       / (static_cast<double>(N) * Kk1);
+        double sn1 = 0.0;
+        double cn1 = 0.0;
+        double dn1 = 0.0;
+        EllipticHelperCephes::Ellpj(u, 1.0 - m, sn1, cn1, dn1);
+
+        for (size_t i = 0; i < num_filter; ++i) {
+            auto& s = ret[i];
+            double const arg = static_cast<double>(N - 1 - 2 * static_cast<int>(i)) * Kk / static_cast<double>(N);
+            double sn = 0.0;
+            double cn = 0.0;
+            double dn = 0.0;
+            EllipticHelperCephes::Ellpj(arg, m, sn, cn, dn);
+            // 零点在虚轴上
+            s.z = std::complex{0.0, 1.0 / (k * sn)};
+            // 极点: Gray & Markel 的实值公式
+            double const r = k * sn * sn1;
+            double const den = cn1 * cn1 + r * r;
+            s.p = std::complex{-cn * dn * sn1 * cn1 / den, sn * dn1 / den};
+            s.k = std::norm(s.p) / std::norm(*s.z);
+        }
+        ret[0].k /= std::sqrt(1.0 + eps_passband * eps_passband);
+        return true;
+    }
+
+    /**
+     * @brief 椭圆(考尔)原型, Orfanidis 式实现(Landen 序列求模数)
+     *
+     * 与 Elliptic 的数学定义相同, 但模数用 k' = (k1')^N * prod sn(u_i)^4 的
+     * Landen 路线求, 需要构造多级 Landen 序列。
+     *
+     * @param ret 输出的零极点节, 至少 num_filter 个
+     * @param num_filter 极点对数, 阶数 = 2 * num_filter
+     * @param db_passband 通带纹波(dB, >0), 通带边沿电平
+     * @param db_stopband 阻带衰减(dB, >0), 需要大于 db_passband
+     * @return 成功返回 true
+     * @retval false 参数非法, 或求出的互补模数不在 (0, 1)(此时继续做 Landen 下降
+     *         会死循环, 所以直接返回失败)
+     * @warning 深阻带 + 小通带纹波时(k1 很小)精度不如 Elliptic(nome 反解),
+     *          例如 order=12, 通带 0.05dB, 阻带 140dB 时模数误差可达 1e-2
+     * @note 供对照/兼容使用, 新代码建议直接用 Elliptic
+     */
+    [[nodiscard]] static bool EllipticLanden(std::span<ZPK> ret, size_t num_filter, double db_passband,
+                                             double db_stopband) {
+        assert(ret.size() >= num_filter);
+
+        double const eps_passband = std::sqrt(std::pow(10.0, db_passband / 10.0) - 1.0);
+        double const eps_stopband = std::sqrt(std::pow(10.0, db_stopband / 10.0) - 1.0);
+        double const k1 = eps_passband / eps_stopband;
+        if (!(k1 > 0.0 && k1 < 1.0)) {
+            return false;
+        }
+        size_t const N = 2 * num_filter;
+        auto const k1dot = EllipticHelper::Kdot(k1);
+        if (!(k1dot > 0.0 && k1dot < 1.0)) {
+            return false;
+        }
+        // ellipdeg: k' = (k1')^N * prod sn(u_i)^4
         double kdot = 0.0;
         {
-            auto k1dot = EllipticHelper::Kdot(k1);
-            size_t L = num_filter;
             EllipticHelper helper{k1dot};
-            double f1 = std::pow(k1dot, N);
+            double const f1 = std::pow(k1dot, N);
             std::complex<double> back{1.0, 0.0};
-            for (size_t i = 1; i <= L; ++i) {
+            for (size_t i = 1; i <= num_filter; ++i) {
                 auto ui = (2.0 * static_cast<double>(i) - 1.0) / static_cast<double>(N);
                 back *= std::pow(helper.Sn(ui), 4.0);
             }
             kdot = f1 * std::real(back);
         }
-        double k = EllipticHelper::Kdot(kdot);
+        if (!(kdot > 0.0 && kdot < 1.0)) {
+            return false;
+        }
+        double const k = EllipticHelper::Kdot(kdot);
+        // 注意: 这里必须检验 k 本身。kdot 只要是"非零的很小值"(例如 2e-9),
+        // sqrt(1 - kdot^2) 就会在 double 下舍入成精确的 1.0, 于是下面的
+        // EllipticHelper{k} 会卡在 k0 恒为 1 的 Landen 下降里死循环。
+        if (!(k > 0.0 && k < 1.0)) {
+            return false;
+        }
 
         EllipticHelper helper{k};
         EllipticHelper helper1{k1};
         // ArcSn 返回的就是以 K(k1) 归一化的自变量, 所以这里只除以 N;
-        // 若再除一次 K(k1) 会让极点整体偏移, 通带纹波变成向上凸(见 Elliptic 的修好记录)
-        auto const v0 = std::complex{0.0, -1.0} * helper1.ArcSn(std::complex{0.0, 1.0} / eps_passband)
-                      / static_cast<double>(N);
+        // 若再除一次 K(k1) 会让极点整体偏移, 通带纹波变成向上凸
+        auto const v0 =
+            std::complex{0.0, -1.0} * helper1.ArcSn(std::complex{0.0, 1.0} / eps_passband) / static_cast<double>(N);
         for (size_t i = 0; i < num_filter; ++i) {
             auto& s = ret[i];
             auto ui = (2.0 * static_cast<double>(i + 1) - 1.0) / static_cast<double>(N);
@@ -307,9 +605,10 @@ struct IIRDesign {
             s.z = std::complex<double>{0.0, 1.0} / (k * epsi);
             // pole
             s.p = std::complex{0.0, 1.0} * helper.Cd(ui - v0 * std::complex{0.0, 1.0});
-            ret[i].k = std::norm(s.p) / std::norm(*s.z);
+            s.k = std::norm(s.p) / std::norm(*s.z);
         }
         ret[0].k /= std::sqrt(1.0 + eps_passband * eps_passband);
+        return true;
     }
 
     // --------------------------------------------------------------------------------
