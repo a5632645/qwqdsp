@@ -128,7 +128,10 @@ public:
 
     BiquadCoeff Peaking(float wc, float Q, float db) noexcept {
         auto G = std::pow(10.0f, db / 20.0f);
-        auto r = ImpluseInvarant(wc, Q);
+        // 原型的极点是 wn = wc, Qp = A*Q (A = 10^(db/40) = sqrt(G));
+        // 注意与 shelf 族的区别: shelf 原型的增益作用在 wn 上(wn = wc*sqrt(A)), Q 不变,
+        // 而 peaking 原型的增益作用在 Q 上, wn 不变。
+        auto r = ImpluseInvarant(wc, Q * std::sqrt(G));
         auto phi = GetPhi(wc);
         auto A = GetA(r);
         auto R1 = G * G * std::inner_product(phi.begin(), phi.end(), A.begin(), double{});
@@ -223,21 +226,41 @@ public:
 private:
     static constexpr auto kPi = std::numbers::pi_v<double>;
 
+    /**
+     * @brief 脉冲响应不变的极点映射
+     * @param wc 数字截止角频率 (rad/sample)
+     * @param Q 极点品质因子
+     * @return 只有 a1/a2 非零的二阶节
+     * @note 全程用 double 计算: 返回类型本来就是 DoubleBiquadCoeff, 而下游要算
+     *       1+a1+a2 = |D(1)|, 当 wc 很小时它只有 ~wc^2 量级, 是灾难性相消; 若这里
+     *       用 float 算 a1/a2, 该量只剩两三位有效数字, 低频段(如 fc=20Hz)的
+     *       零极点会偏到把响应算错几十 dB。参数仍是 float 精度, 进来先提升。
+     */
     static inline DoubleBiquadCoeff ImpluseInvarant(float wc, float Q) noexcept {
-        auto zeta = 1 / (2 * Q);
-        auto exp_qwc = std::exp(-zeta * wc);
-        auto a1 = float{};
-        if (zeta <= 1) {
-            a1 = -2 * exp_qwc * std::cos(std::sqrt(1 - zeta * zeta) * wc);
+        double const wc_d = wc;
+        double const zeta = 1.0 / (2.0 * static_cast<double>(Q));
+        double const exp_qwc = std::exp(-zeta * wc_d);
+        double a1 = 0.0;
+        if (zeta <= 1.0) {
+            a1 = -2.0 * exp_qwc * std::cos(std::sqrt(1.0 - zeta * zeta) * wc_d);
         }
         else {
-            a1 = -2 * exp_qwc * std::cosh(std::sqrt(zeta * zeta - 1) * wc);
+            a1 = -2.0 * exp_qwc * std::cosh(std::sqrt(zeta * zeta - 1.0) * wc_d);
         }
-        auto a2 = exp_qwc * exp_qwc;
+        double const a2 = exp_qwc * exp_qwc;
         return DoubleBiquadCoeff{0, 0, 0, a1, a2};
     }
 
-    static inline void Solveb(DoubleBiquadCoeff& c, float B0, float B1, float B2) noexcept {
+    /**
+     * @brief 由 |N|^2 的三个约束解出分子系数 b0/b1/b2
+     * @param c 输入输出的系数(输入用 a1/a2, 输出写入 b0/b1/b2)
+     * @param B0 |N(1)|^2 (直流处分子模平方)
+     * @param B1 |N(-1)|^2 (奈奎斯特处分子模平方)
+     * @param B2 由 wc 处目标幅度反推的量, 满足 b0*b2 = -B2/4
+     * @note 参数用 double 而不是 float: b0 由 W^2+B2 解出, 低频时二者几乎相等,
+     *       残差很小, 用 float 传参会把残差的有效位数吃掉, b0/b2 就失真了
+     */
+    static inline void Solveb(DoubleBiquadCoeff& c, double B0, double B1, double B2) noexcept {
         auto sqrt_B0 = ClampSqrt(B0);
         auto sqrt_B1 = ClampSqrt(B1);
         auto W = (sqrt_B0 + sqrt_B1) / 2;
