@@ -28,7 +28,7 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
 from scipy.signal import stft, get_window
 
-from nc_dft import NCDftConfig, analyze
+from qwqdsp.tests.hybrid.lab2.nc_dft import NCDftConfig, analyze
 
 # ------------------------------------------------------------
 # 配置

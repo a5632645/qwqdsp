@@ -37,8 +37,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
 
-from nc_dft import NCDftConfig, build_bins, downsample_and_smooth  # 复用 bin/配置/抽取平滑
-from run import stft_spectrogram, to_db, F_MIN, F_MAX, DB_FLOOR  # 复用 STFT 参照与 dB 工具
+from qwqdsp.tests.hybrid.lab2.nc_dft import NCDftConfig, build_bins, downsample_and_smooth  # 复用 bin/配置/抽取平滑
+from qwqdsp.tests.hybrid.lab2.run import stft_spectrogram, to_db, F_MIN, F_MAX, DB_FLOOR  # 复用 STFT 参照与 dB 工具
 
 # 默认输入/输出
 INPUT_DIR = os.path.join(os.path.dirname(__file__),
