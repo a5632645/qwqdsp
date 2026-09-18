@@ -42,7 +42,6 @@ static constexpr float kDbFloor = -72.0f;
 static constexpr float kWindowLessNcDbFloor = -85.0f;
 static constexpr float kFreqMin = 20.0f;
 static constexpr float kFreqMax = 20000.0f;
-static constexpr float kMinWeight = 0.3f;
 
 // ── 滚动图像 ──
 static constexpr float kScrollSeconds = 3.0f;
@@ -105,15 +104,15 @@ static constexpr const char* kFrameNames[] = {
 static_assert(std::size(kFrameNames) == static_cast<int>(FrameType::kCount));
 
 static SpectrogramFrame<ColorMap> f_sp;
-static FreqReassignmentFrame<ColorMap, kMinWeight> f_freq;
+static FreqReassignmentFrame<ColorMap> f_freq;
 static TimeReassignmentFrame<ColorMap> f_time;
-static TfReassignmentFrame<ColorMap, kMinWeight> f_tf;
-static TfPhaseVocoderReassignmentFrame<ColorMap, false, kMinWeight> f_pv;
-static TfPhaseVocoderReassignmentFrame<ColorMap, true, kMinWeight> f_pv_pk;
-static TfDerivativeReassignmentFrame<ColorMap, false, kMinWeight> f_deriv;
-static TfDerivativeReassignmentFrame<ColorMap, true, kMinWeight> f_deriv_pk;
-static TfPhaseVocoderReassignmentFrameConv<ColorMap, kMinWeight> f_pv_conv;
-static TfDerivativeReassignmentFrameConv<ColorMap, kMinWeight> f_deriv_conv;
+static TfReassignmentFrame<ColorMap> f_tf;
+static TfPhaseVocoderReassignmentFrame<ColorMap, false> f_pv;
+static TfPhaseVocoderReassignmentFrame<ColorMap, true> f_pv_pk;
+static TfDerivativeReassignmentFrame<ColorMap, false> f_deriv;
+static TfDerivativeReassignmentFrame<ColorMap, true> f_deriv_pk;
+static TfPhaseVocoderReassignmentFrameConv<ColorMap> f_pv_conv;
+static TfDerivativeReassignmentFrameConv<ColorMap> f_deriv_conv;
 static NcReassignmentFrame<ColorMap> f_nc;
 static NcTimeReassignmentFrame<ColorMap> f_nc_time;
 static WindowlessNcFrame<ColorMap> f_windowless;

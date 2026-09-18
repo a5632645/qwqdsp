@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cmath>
 #include <complex>
-#include <cstring>
 #include <numbers>
 #include <span>
 #include <vector>
@@ -12,34 +11,30 @@
 
 #include "raylib.h"
 
+#include "log_reassign_grid.hpp"
+
 /**
  * @brief 原始帧+窗 → 频率重分配 + 时间重分配 → magma 颜色输出
  *
- * 内部维护 subColumns 个子列缓存，每帧将能量按 (inst_freq, group_delay)
- * 2D 双线性分布到缓存，然后弹出最旧子列。
+ * 显示累加交给 LogReassignGrid: log 频率行 → 线性子格, 子格内求和 / 行内取 max,
+ * 不加权, 幅度由窗函数自动标定。
  *
  * X_h = FFT(x·w)
  * X_t = FFT(x[n-1]·w[n])           (频率重分配)
  * X_pf = roll(X_h,1), X_pf[0]=0    (时间重分配 → 群延迟)
  */
-template <typename Colormap, float kMinWeight = 0.1f>
+template <typename Colormap>
 struct TfReassignmentFrame {
     void Init(int sampleRate, int fftSize, int hopSize, int zeroPad, int outputHeight, float freqMin, float freqMax,
               float dbFloor) noexcept {
         sampleRate_ = sampleRate;
         fftSize_ = fftSize;
-        hopSize_ = hopSize;
-        zeroPad_ = zeroPad;
+        subColumns_ = fftSize / hopSize;
         fftLen_ = fftSize * zeroPad;
         binSize_ = fftLen_ / 2 + 1;
-        subColumns_ = fftSize / hopSize;
         outputHeight_ = outputHeight;
         freqMin_ = freqMin;
         freqMax_ = freqMax;
-        dbFloor_ = dbFloor;
-        logMin_ = std::log10(freqMin);
-        logMax_ = std::log10(freqMax);
-        subColScale_ = static_cast<float>(subColumns_);
 
         fft_.Init(fftLen_);
 
@@ -48,14 +43,17 @@ struct TfReassignmentFrame {
         X_h_.resize(binSize_);
         X_t_.resize(binSize_);
         X_pf_.resize(binSize_);
-
-        col_buf_.resize(subColumns_ * outputHeight_, 0.0f);
-        weight_buf_.resize(subColumns_ * outputHeight_, 0.0f);
         column_.resize(outputHeight_);
+
+        grid_.Init(sampleRate, fftLen_, subColumns_, outputHeight, freqMin, freqMax, dbFloor);
     }
 
     void Process(std::span<const float> raw_frame, std::span<const float> window,
                  std::span<const float> windowed_frame) noexcept {
+        // ── 0. 首次调用: 由用户的窗算出幅度标定 ──
+        if (!grid_.CalibrationReady())
+            grid_.SetWindow(window, fft_);
+
         // ── 1. X_h = FFT(x * w) ──
         std::copy(windowed_frame.begin(), windowed_frame.end(), fft_in_.begin());
         std::fill(fft_in_.begin() + fftSize_, fft_in_.end(), 0.0f);
@@ -84,9 +82,7 @@ struct TfReassignmentFrame {
             // ── 频率重分配: inst_freq_hz ──
             auto cross_t = X_h_[k] * std::conj(X_t_[k]);
             float inst_freq_norm = std::arg(cross_t) / two_pi;
-            while (inst_freq_norm < 0.0f)
-                inst_freq_norm += 1.0f;
-            inst_freq_norm = std::fmod(inst_freq_norm, 1.0f);
+            inst_freq_norm -= std::floor(inst_freq_norm);
             float inst_freq_hz = inst_freq_norm * sampleRate_;
             if (inst_freq_hz < freqMin_ || inst_freq_hz > freqMax_)
                 continue;
@@ -94,89 +90,13 @@ struct TfReassignmentFrame {
             // ── 时间重分配: group_delay ∈ (-0.5, 0.5] ──
             auto cross_f = X_h_[k] * std::conj(X_pf_[k]);
             float arg_f = std::arg(cross_f) / two_pi;
-            while (arg_f < 0.0f)
-                arg_f += 1.0f;
-            arg_f = std::fmod(arg_f, 1.0f);
-            float group_delay = 0.5f - arg_f; // (-0.5, 0.5]
+            arg_f -= std::floor(arg_f);
+            float group_delay = 0.5f - arg_f;
 
-            // ── 映射到子列 + Y 像素 ──
-            float logF = std::log10(inst_freq_hz);
-            float norm = (logF - logMin_) / (logMax_ - logMin_);
-            float y_pos = static_cast<float>(outputHeight_ - 1) * (1.0f - norm);
-
-            float c_pos = (group_delay + 0.5f) * subColScale_;
-            // ── 2D 双线性分布 ──
-            y_pos = std::clamp(y_pos, 0.0f, static_cast<float>(outputHeight_ - 0.01f));
-            int y_idx = static_cast<int>(std::floor(y_pos));
-            bool y_last = (y_idx >= outputHeight_ - 1);
-
-            c_pos = std::clamp(c_pos, 0.0f, static_cast<float>(subColumns_ - 0.01f));
-            int c_idx = static_cast<int>(std::floor(c_pos));
-            bool c_last = (c_idx >= subColumns_ - 1);
-
-            // 处理边界特殊情况
-            if (y_last && c_last) {
-                col_buf_[c_idx * outputHeight_ + y_idx] += mag_lin;
-                weight_buf_[c_idx * outputHeight_ + y_idx] += 1.0f;
-            }
-            else if (y_last) {
-                float c_frac = c_pos - static_cast<float>(c_idx);
-                float w1 = 1.0f - c_frac;
-                col_buf_[c_idx * outputHeight_ + y_idx] += mag_lin * w1;
-                col_buf_[(c_idx + 1) * outputHeight_ + y_idx] += mag_lin * c_frac;
-                weight_buf_[c_idx * outputHeight_ + y_idx] += w1;
-                weight_buf_[(c_idx + 1) * outputHeight_ + y_idx] += c_frac;
-            }
-            else if (c_last) {
-                float y_frac = y_pos - static_cast<float>(y_idx);
-                float w1 = 1.0f - y_frac;
-                col_buf_[c_idx * outputHeight_ + y_idx] += mag_lin * w1;
-                col_buf_[c_idx * outputHeight_ + y_idx + 1] += mag_lin * y_frac;
-                weight_buf_[c_idx * outputHeight_ + y_idx] += w1;
-                weight_buf_[c_idx * outputHeight_ + y_idx + 1] += y_frac;
-            }
-            else {
-                float c_frac = c_pos - static_cast<float>(c_idx);
-                float y_frac = y_pos - static_cast<float>(y_idx);
-                float wgt = mag_lin;
-                float w00 = (1.0f - c_frac) * (1.0f - y_frac);
-                float w10 = c_frac * (1.0f - y_frac);
-                float w01 = (1.0f - c_frac) * y_frac;
-                float w11 = c_frac * y_frac;
-                col_buf_[c_idx * outputHeight_ + y_idx] += wgt * w00;
-                col_buf_[(c_idx + 1) * outputHeight_ + y_idx] += wgt * w10;
-                col_buf_[c_idx * outputHeight_ + y_idx + 1] += wgt * w01;
-                col_buf_[(c_idx + 1) * outputHeight_ + y_idx + 1] += wgt * w11;
-                weight_buf_[c_idx * outputHeight_ + y_idx] += w00;
-                weight_buf_[(c_idx + 1) * outputHeight_ + y_idx] += w10;
-                weight_buf_[c_idx * outputHeight_ + y_idx + 1] += w01;
-                weight_buf_[(c_idx + 1) * outputHeight_ + y_idx + 1] += w11;
-            }
+            grid_.Add(inst_freq_hz, group_delay, mag_lin);
         }
 
-        // ── 5. 弹出最旧子列 → dB → Color ──
-        constexpr float kEps = 1e-12f;
-        for (int y = 0; y < outputHeight_; ++y) {
-            float dB;
-            if (weight_buf_[y] < kMinWeight) {
-                dB = dbFloor_;
-            }
-            else {
-                float avg = col_buf_[y] / weight_buf_[y];
-                dB = 20.0f * std::log10(avg + kEps);
-            }
-            dB = std::clamp(dB, dbFloor_, 0.0f);
-            int idx = static_cast<int>((dB - dbFloor_) / (-dbFloor_) * 255.0f);
-            idx = std::clamp(idx, 0, 255);
-            column_[y] = Colormap::kTable[idx];
-        }
-
-        // 左移: col_buf_[0..n-2] = col_buf_[1..n-1]
-        std::move(col_buf_.begin() + outputHeight_, col_buf_.end(), col_buf_.begin());
-        std::move(weight_buf_.begin() + outputHeight_, weight_buf_.end(), weight_buf_.begin());
-        // 清零新列
-        std::fill(col_buf_.begin() + (subColumns_ - 1) * outputHeight_, col_buf_.end(), 0.0f);
-        std::fill(weight_buf_.begin() + (subColumns_ - 1) * outputHeight_, weight_buf_.end(), 0.0f);
+        grid_.Emit(Colormap::kTable, column_);
     }
 
     std::span<const Color> GetColumn() const noexcept {
@@ -186,16 +106,20 @@ struct TfReassignmentFrame {
     int ColumnHeight() const noexcept {
         return outputHeight_;
     }
+
+    /// @brief 窗相干增益 (单位纯音的重分配和 / 谱峰), 首次 Process 后有效
+    float Calibration() const noexcept {
+        return grid_.Calibration();
+    }
+
 private:
-    int sampleRate_{}, fftSize_{}, hopSize_{}, zeroPad_{}, fftLen_{}, binSize_{};
-    int subColumns_{}, outputHeight_{};
-    float freqMin_{}, freqMax_{}, logMin_{}, logMax_{}, dbFloor_{}, subColScale_{};
+    int sampleRate_{}, fftSize_{}, subColumns_{}, zeroPad_{}, fftLen_{}, binSize_{}, outputHeight_{};
+    float freqMin_{}, freqMax_{};
 
     qwqdsp_spectral::RealFftAdv fft_;
     std::vector<float> fft_in_;
     std::vector<float> shift_in_;
     std::vector<std::complex<float>> X_h_, X_t_, X_pf_;
-    std::vector<float> col_buf_; // [subCol * outputHeight + y]
-    std::vector<float> weight_buf_;
     std::vector<Color> column_;
+    LogReassignGrid grid_;
 };
