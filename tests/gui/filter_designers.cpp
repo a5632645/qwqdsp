@@ -19,10 +19,10 @@
 //
 // 覆盖范围与三个设计器的非对称性:
 //   - 两极点共有族: lowpass / highpass / bandpass(norm) / notch /
-//     peaking / lowshelf / highshelf / allpass;
-//   - RBJ 没有: 两极点 tiltshelf; Ivantsov 没有: bandpass(峰值=Q)、tiltshelf;
-//   - 一阶: Ivantsov 提供 lp / hp / ap / highshelf / lowshelf;
-//     MatchBiquad 提供 highshelf / lowshelf / tiltshelf; RBJ 不提供一阶;
+//     peaking / lowshelf / highshelf / tiltshelf / allpass;
+//   - Ivantsov 没有: bandpass(峰值=Q);
+//   - 一阶: RBJ 与 Ivantsov 都提供 lp / hp / ap / highshelf / lowshelf;
+//     RBJ 与 MatchBiquad 都提供 tiltshelf; MatchBiquad 不提供 lp / hp / ap;
 //   - 未收录: RBJ::BandpassKeep0Precise(需要两个频率参数)、RBJ::Dicimate(固定 Q)。
 //
 // ⚠ raylib 内置字体只有 ASCII 字形: 界面文字必须用 ASCII, 中文只出现在注释里。
@@ -170,14 +170,14 @@ static constexpr std::array<KindInfo, 16> kKinds{
      {"peaking", "peak gain = gain", 2, true, true, true, true},
      {"lowshelf", "DC gain = gain", 2, true, true, true, true},
      {"highshelf", "Nyquist gain = gain", 2, true, true, true, true},
-     {"tiltshelf", "DC -g/2, Nyquist +g/2", 2, false, false, true, true},
+     {"tiltshelf", "DC -g/2, Nyquist +g/2", 2, true, false, true, true},
      {"allpass", "magnitude is 0 dB everywhere; only phase differs", 2, true, true, true, false},
-     {"onepole lowpass", "", 1, false, true, false, false},
-     {"onepole highpass", "", 1, false, true, false, false},
-     {"onepole allpass", "magnitude is 0 dB everywhere; only phase differs", 1, false, true, false, false},
-     {"onepole highshelf", "DC 0 dB, Nyquist gain = gain", 1, false, true, false, true},
-     {"onepole lowshelf", "DC gain = gain, Nyquist 0 dB", 1, false, true, false, true},
-     {"onepole tiltshelf", "DC -g/2, Nyquist +g/2", 1, false, false, false, true},
+     {"onepole lowpass", "", 1, true, true, false, false},
+     {"onepole highpass", "", 1, true, true, false, false},
+     {"onepole allpass", "magnitude is 0 dB everywhere; only phase differs", 1, true, true, false, false},
+     {"onepole highshelf", "DC 0 dB, Nyquist gain = gain", 1, true, true, false, true},
+     {"onepole lowshelf", "DC gain = gain, Nyquist 0 dB", 1, true, true, false, true},
+     {"onepole tiltshelf", "DC -g/2, Nyquist +g/2", 1, true, false, false, true},
      }
 };
 
@@ -438,6 +438,9 @@ static DesignSet makeDesign(Params const& params) {
                 return toDb(a.Tiltshelf(wa, wc, q, sqrt_a80));
             };
             out.mb = mb.Tiltshelf(wc, q, g);
+            rbj.Tiltshelf(wc, q, g);
+            out.rbj = rbj.ToBiquadCoeff();
+            out.has_rbj = true;
             out.has_mb = true;
             break;
         case Kind::Allpass:
@@ -459,6 +462,9 @@ static DesignSet makeDesign(Params const& params) {
                 return toDb(a.HighshelfOnepole(wa, wc, a40));
             };
             out.mb = mb.HighshelfOnepole(wc, g);
+            rbj.HighshelfOnepole(wc, g);
+            out.rbj = rbj.ToBiquadCoeff();
+            out.has_rbj = true;
             out.has_mb = true;
             out.iv = iv.HighshelfOnepole(wc, g, sigma);
             out.has_iv = true;
@@ -469,6 +475,9 @@ static DesignSet makeDesign(Params const& params) {
                 return toDb(a.LowshelfOnepole(wa, wc, a40));
             };
             out.mb = mb.LowshelfOnepole(wc, g);
+            rbj.LowshelfOnepole(wc, g);
+            out.rbj = rbj.ToBiquadCoeff();
+            out.has_rbj = true;
             out.has_mb = true;
             out.iv = iv.LowshelfOnepole(wc, g, sigma);
             out.has_iv = true;
@@ -479,6 +488,9 @@ static DesignSet makeDesign(Params const& params) {
                 return toDb(a.TiltshelfOnepole(wa, wc, a40));
             };
             out.mb = mb.TiltshelfOnepole(wc, g);
+            rbj.TiltshelfOnepole(wc, g);
+            out.rbj = rbj.ToBiquadCoeff();
+            out.has_rbj = true;
             out.has_mb = true;
             break;
         case Kind::OnepoleLowpass:
@@ -487,6 +499,9 @@ static DesignSet makeDesign(Params const& params) {
                 return toDb(a.LowpassOnepole(wa, wc));
             };
             out.iv = iv.LowpassOnepole(wc, sigma);
+            rbj.LowpassOnepole(wc);
+            out.rbj = rbj.ToBiquadCoeff();
+            out.has_rbj = true;
             out.has_iv = true;
             break;
         case Kind::OnepoleHighpass:
@@ -495,6 +510,9 @@ static DesignSet makeDesign(Params const& params) {
                 return toDb(a.HighpassOnepole(wa, wc));
             };
             out.iv = iv.HighpassOnepole(wc, sigma);
+            rbj.HighpassOnepole(wc);
+            out.rbj = rbj.ToBiquadCoeff();
+            out.has_rbj = true;
             out.has_iv = true;
             break;
         case Kind::OnepoleAllpass:
@@ -503,6 +521,9 @@ static DesignSet makeDesign(Params const& params) {
                 return toDb(a.AllpassOnepole(wa, wc));
             };
             out.iv = iv.AllpassOnepole(wc, sigma);
+            rbj.AllpassOnepole(wc);
+            out.rbj = rbj.ToBiquadCoeff();
+            out.has_rbj = true;
             out.has_iv = true;
             break;
     }
