@@ -22,7 +22,8 @@
 //     peaking / lowshelf / highshelf / tiltshelf / allpass;
 //   - Ivantsov 没有: bandpass(峰值=Q);
 //   - 一阶: 三个设计器都提供 lp / hp / highshelf / lowshelf / tiltshelf;
-//     RBJ 与 Ivantsov 另外提供 ap(幅度恒为 1, 面板上看不出差别);
+//     RBJ 与 Ivantsov 另外提供 ap(幅度恒为 1, 面板上看不出差别),
+//     只有"一阶全通"这一格 MatchBiquad 没有(库里未实现该类型);
 //   - 未收录: RBJ::BandpassKeep0Precise(需要两个频率参数)、RBJ::Dicimate(固定 Q)。
 //
 // ⚠ raylib 内置字体只有 ASCII 字形: 界面文字必须用 ASCII, 中文只出现在注释里。
@@ -155,29 +156,29 @@ struct KindInfo {
     std::string_view note; ///< 额外提示(可为空)
     int poles;             ///< 极点个数, 1 或 2
     bool has_rbj;          ///< RBJ 是否提供该类型
-    bool has_ivantsov;     ///< Ivantsov 是否提供该类型
     bool uses_q;           ///< Q 是否参与设计
     bool uses_gain;        ///< gain 是否参与设计
 };
 
 static constexpr std::array<KindInfo, 16> kKinds{
     {
-     {"lowpass", "", 2, true, true, true, false},
-     {"highpass", "", 2, true, true, true, false},
-     {"bandpass Q", "peak gain = Q", 2, false, true, false},
-     {"bandpass norm", "peak gain = 1 (Ivantsov/RBJ keep0)", 2, true, true, true, false},
-     {"notch", "", 2, true, true, true, false},
-     {"peaking", "peak gain = gain", 2, true, true, true, true},
-     {"lowshelf", "DC gain = gain", 2, true, true, true, true},
-     {"highshelf", "Nyquist gain = gain", 2, true, true, true, true},
-     {"tiltshelf", "DC -g/2, Nyquist +g/2", 2, true, false, true, true},
-     {"allpass", "magnitude is 0 dB everywhere; only phase differs", 2, true, true, true, false},
-     {"onepole lowpass", "", 1, true, true, false, false},
-     {"onepole highpass", "", 1, true, true, false, false},
-     {"onepole allpass", "magnitude is 0 dB everywhere; only phase differs", 1, true, true, false, false},
-     {"onepole highshelf", "DC 0 dB, Nyquist gain = gain", 1, true, true, false, true},
-     {"onepole lowshelf", "DC gain = gain, Nyquist 0 dB", 1, true, true, false, true},
-     {"onepole tiltshelf", "DC -g/2, Nyquist +g/2", 1, true, false, false, true},
+     // name, note, poles, has_rbj, uses_q, uses_gain
+        {"lowpass", "", 2, true, true, false},
+     {"highpass", "", 2, true, true, false},
+     {"bandpass Q", "peak gain = Q", 2, true, true, false},
+     {"bandpass norm", "peak gain = 1", 2, true, true, false},
+     {"notch", "", 2, true, true, false},
+     {"peaking", "peak gain = gain", 2, true, true, true},
+     {"lowshelf", "DC gain = gain", 2, true, true, true},
+     {"highshelf", "Nyquist gain = gain", 2, true, true, true},
+     {"tiltshelf", "DC -g/2, Nyquist +g/2", 2, true, true, true},
+     {"allpass", "magnitude is 0 dB everywhere; only phase differs", 2, true, true, false},
+     {"onepole lowpass", "", 1, true, false, false},
+     {"onepole highpass", "", 1, true, false, false},
+     {"onepole allpass", "magnitude is 0 dB everywhere; only phase differs", 1, true, false, false},
+     {"onepole highshelf", "DC 0 dB, Nyquist gain = gain", 1, true, false, true},
+     {"onepole lowshelf", "DC gain = gain, Nyquist 0 dB", 1, true, false, true},
+     {"onepole tiltshelf", "DC -g/2, Nyquist +g/2", 1, true, false, true},
      }
 };
 
@@ -365,6 +366,8 @@ static DesignSet makeDesign(Params const& params) {
             out.has_rbj = true;
             out.mb = mb.Bandpass(wc, q);
             out.has_mb = true;
+            out.iv = iv.BandpassQ(wc, q, sigma);
+            out.has_iv = true;
             break;
         case Kind::BandpassNorm:
             out.analog_db = [wc, q](float wa) {
@@ -442,6 +445,8 @@ static DesignSet makeDesign(Params const& params) {
             out.rbj = rbj.ToBiquadCoeff();
             out.has_rbj = true;
             out.has_mb = true;
+            out.iv = iv.Tiltshelf(wc, q, g, sigma);
+            out.has_iv = true;
             break;
         case Kind::Allpass:
             out.analog_db = [wc, q](float wa) {
@@ -492,6 +497,8 @@ static DesignSet makeDesign(Params const& params) {
             out.rbj = rbj.ToBiquadCoeff();
             out.has_rbj = true;
             out.has_mb = true;
+            out.iv = iv.TiltshelfOnepole(wc, g, sigma);
+            out.has_iv = true;
             break;
         case Kind::OnepoleLowpass:
             out.analog_db = [wc](float wa) {
@@ -832,9 +839,6 @@ static std::string kindHint(KindInfo const& info) {
     if (!info.has_rbj) {
         parts.emplace_back("RBJ does not provide it");
     }
-    if (!info.has_ivantsov) {
-        parts.emplace_back("Ivantsov does not provide it");
-    }
     if (!info.uses_q) {
         parts.emplace_back("Q unused");
     }
@@ -1017,10 +1021,9 @@ int main() {
             // 被隐藏的旋钮会空出一块, 后面的 sigma 就会被推到信息文字上
             q_knob.SetEnable(info.uses_q);
             gain_knob.SetEnable(info.uses_gain);
-            sigma_knob.SetEnable(info.has_ivantsov);
             {
                 std::array<Knob*, 4> const knobs{&fc_knob, &q_knob, &gain_knob, &sigma_knob};
-                std::array<bool, 4> const visible{true, info.uses_q, info.uses_gain, info.has_ivantsov};
+                std::array<bool, 4> const visible{true, info.uses_q, info.uses_gain, true};
                 size_t slot = 0;
                 for (size_t i = 0; i < knobs.size(); ++i) {
                     if (visible[i]) {

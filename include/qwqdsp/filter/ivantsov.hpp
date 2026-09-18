@@ -106,6 +106,26 @@ public:
         return AssembleOnepole(gain, alpha, beta);
     }
 
+    /**
+     * @brief 一阶倾斜架: 直流 -db/2, 奈奎斯特 +db/2, 转折处 0dB
+     * @param wc 数字转折角频率 (rad/sample)
+     * @param db 两端到中心的落差 (dB)
+     * @param sigma 算法形状参数
+     * @note 模拟原型上 HighshelfOnepole = sqrt_A * TiltshelfOnepole
+     *       (sqrt_A = 10^(db/40), 见 analog_responce.hpp);
+     *       滤波器的分子乘常数等于整个 |H| 乘该常数, 所以直接把分子除以 sqrt_A。
+     *       缩放后与模拟原型的偏差与 HighshelfOnepole 逐点相同。
+     */
+    BiquadCoeff TiltshelfOnepole(float wc, float db, float sigma = kDefaultSigma) noexcept {
+        double const omega = PrewarpedOmega(wc, sigma);
+        double const g = std::pow(10.0, static_cast<double>(db) / 20.0);
+        double const sqrt_g = std::sqrt(g);
+        double const alpha = Phi(omega * sqrt_g, sigma);
+        double const beta = Phi(omega / sqrt_g, sigma);
+        double const gain = 1.0 / ((1.0 + alpha) * sqrt_g);
+        return AssembleOnepole(gain, alpha, beta);
+    }
+
     // ------------------------------------------------------------
     // 二阶
     // ------------------------------------------------------------
@@ -153,6 +173,24 @@ public:
         double const alpha1 = phi0 + kPhiAtInfinity;
         double const alpha2 = phi0 * kPhiAtInfinity;
         double const gain = (omega / (2.0 * kPi)) * (2.0 * zeta / (2.0 + alpha1));
+        return AssembleSecondOrder(gain, alpha1, alpha2, wc, Q, sigma);
+    }
+
+    /**
+     * @brief 二阶带通, 峰值增益 = Q (与 RBJ::Bandpass / MatchBiquad::Bandpass 同约定)
+     * @param wc 数字中心角频率 (rad/sample)
+     * @param Q 品质因子 (notebook 里的 zeta = 1/(2Q))
+     * @param sigma 算法形状参数
+     * @note 模拟原型上 Bandpass = Q * NormBandpass (见 analog_responce.hpp),
+     *       所以把归一化带通的分子乘以 Q 即可; 缩放后与模拟原型的偏差逐点不变。
+     */
+    BiquadCoeff BandpassQ(float wc, float Q, float sigma = kDefaultSigma) noexcept {
+        double const omega = PrewarpedOmega(wc, sigma);
+        double const zeta = ZetaOf(Q);
+        double const phi0 = Phi(0.0, sigma);
+        double const alpha1 = phi0 + kPhiAtInfinity;
+        double const alpha2 = phi0 * kPhiAtInfinity;
+        double const gain = (omega / (2.0 * kPi)) * (2.0 * zeta / (2.0 + alpha1)) * static_cast<double>(Q);
         return AssembleSecondOrder(gain, alpha1, alpha2, wc, Q, sigma);
     }
 
@@ -252,6 +290,28 @@ public:
         return Assemble(gain, alpha1, alpha2, beta1, beta2);
     }
 
+    /**
+     * @brief 二阶倾斜架: 直流 -db/2, 奈奎斯特 +db/2, 中心处 0dB
+     * @param wc 数字中心角频率 (rad/sample)
+     * @param Q 品质因子 (notebook 里的 zeta = 1/(2Q))
+     * @param db 两端到中心的落差 (dB), 正值表示抬高频压低频
+     * @param sigma 算法形状参数
+     * @note 模拟原型上 Highshelf = A * Tiltshelf (A = 10^(db/40), 见 analog_responce.hpp),
+     *       且两者极点零点完全相同, 只差这个常数因子; 滤波器的分子乘常数等于整个 |H|
+     *       乘该常数, 所以直接把分子除以 A。缩放后与模拟原型的偏差与 Highshelf 逐点相同。
+     */
+    BiquadCoeff Tiltshelf(float wc, float Q, float db, float sigma = kDefaultSigma) noexcept {
+        double const zeta = ZetaOf(Q);
+        double const omega = PrewarpedOmega(wc, sigma);
+        double const g = std::pow(10.0, static_cast<double>(db) / 20.0);
+        double const sqrt_sqrt_g = std::pow(g, 0.25);
+        double const alpha1 = Phi1(omega * sqrt_sqrt_g, zeta, sigma);
+        double const alpha2 = Phi2(omega * sqrt_sqrt_g, zeta, sigma);
+        double const gain = 1.0 / ((1.0 + alpha1 + alpha2) * std::sqrt(g));
+        double const beta1 = Phi1(omega / sqrt_sqrt_g, zeta, sigma);
+        double const beta2 = Phi2(omega / sqrt_sqrt_g, zeta, sigma);
+        return Assemble(gain, alpha1, alpha2, beta1, beta2);
+    }
 private:
     static constexpr double kPi = std::numbers::pi_v<double>;
     /// 一阶原型在 x -> +inf 时的 phi 值, 即 phi(inf, sigma) 的极限
@@ -340,13 +400,8 @@ private:
      * @return b0..a2
      * @note 分母对所有二阶类型都相同, 只由 (omega, zeta, sigma) 决定
      */
-    static inline BiquadCoeff AssembleSecondOrder(
-        double gain,
-        double num1,
-        double num2,
-        float wc,
-        float Q,
-        float sigma) noexcept {
+    static inline BiquadCoeff AssembleSecondOrder(double gain, double num1, double num2, float wc, float Q,
+                                                  float sigma) noexcept {
         double const zeta = ZetaOf(Q);
         double const omega = PrewarpedOmega(wc, sigma);
         double const den1 = Phi1(omega, zeta, sigma);
@@ -363,12 +418,7 @@ private:
      * @param den2 分母二次项
      * @return b0..a2
      */
-    static inline BiquadCoeff Assemble(
-        double gain,
-        double num1,
-        double num2,
-        double den1,
-        double den2) noexcept {
+    static inline BiquadCoeff Assemble(double gain, double num1, double num2, double den1, double den2) noexcept {
         double const scale = gain * (1.0 + den1 + den2);
         return DoubleBiquadCoeff{scale, scale * num1, scale * num2, den1, den2}.ToFloat();
     }
