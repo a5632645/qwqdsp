@@ -21,8 +21,8 @@
 //   - 两极点共有族: lowpass / highpass / bandpass(norm) / notch /
 //     peaking / lowshelf / highshelf / tiltshelf / allpass;
 //   - Ivantsov 没有: bandpass(峰值=Q);
-//   - 一阶: RBJ 与 Ivantsov 都提供 lp / hp / ap / highshelf / lowshelf;
-//     RBJ 与 MatchBiquad 都提供 tiltshelf; MatchBiquad 不提供 lp / hp / ap;
+//   - 一阶: 三个设计器都提供 lp / hp / highshelf / lowshelf / tiltshelf;
+//     RBJ 与 Ivantsov 另外提供 ap(幅度恒为 1, 面板上看不出差别);
 //   - 未收录: RBJ::BandpassKeep0Precise(需要两个频率参数)、RBJ::Dicimate(固定 Q)。
 //
 // ⚠ raylib 内置字体只有 ASCII 字形: 界面文字必须用 ASCII, 中文只出现在注释里。
@@ -498,6 +498,8 @@ static DesignSet makeDesign(Params const& params) {
                 AnalogResponce a;
                 return toDb(a.LowpassOnepole(wa, wc));
             };
+            out.mb = mb.LowpassOnepole(wc);
+            out.has_mb = true;
             out.iv = iv.LowpassOnepole(wc, sigma);
             rbj.LowpassOnepole(wc);
             out.rbj = rbj.ToBiquadCoeff();
@@ -509,6 +511,8 @@ static DesignSet makeDesign(Params const& params) {
                 AnalogResponce a;
                 return toDb(a.HighpassOnepole(wa, wc));
             };
+            out.mb = mb.HighpassOnepole(wc);
+            out.has_mb = true;
             out.iv = iv.HighpassOnepole(wc, sigma);
             rbj.HighpassOnepole(wc);
             out.rbj = rbj.ToBiquadCoeff();
