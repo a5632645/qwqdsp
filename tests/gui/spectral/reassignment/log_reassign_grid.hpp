@@ -28,7 +28,13 @@
  * 幅度: 标定系数 cal 由 SetWindow 用实际窗函数自动算出 ——
  *   单位幅度、bin 中心的实正弦, 其重分配全谱和 / 谱峰 = 窗相干增益,
  * 使单位纯音在显示上回到 0 dB。
+ *
+ * @tparam EnableFreqInterp 是否启用频率轴方向的线性分布 (相邻两行加权叠加):
+ *                          true  → 纵向平滑、无栅格锯齿, 但落在两行之间的音会衰减
+ *                          false → 只落到单一行, 无衰减, 可能有栅格锯齿
+ *                          两种情况都只叠加、不做任何归一化
  */
+template <bool EnableFreqInterp = true>
 struct LogReassignGrid {
     /// @brief 子格宽度相对 FFT bin 宽的比值 (0.25 = bin/4)
     static constexpr float kSubcellScale = 0.25f;
@@ -85,16 +91,23 @@ struct LogReassignGrid {
     /// @brief 把一个 bin 加到网格; inst_freq_hz 需已落在 [freqMin, freqMax]
     /// @param group_delay 群延迟 ∈ [-0.5, 0.5] (无时间重分配时传 0)
     void Add(float inst_freq_hz, float group_delay, float mag) noexcept {
-        // 行 + 行内线性子格
+        // ── 频率轴: 按小数位置双线性分配到相邻两行 (EnableFreqInterp), 纵向平滑 ──
         float logF = std::log10(inst_freq_hz);
         float norm = (logF - logMin_) / (logMax_ - logMin_);
-        float y_pos = static_cast<float>(outputHeight_ - 1) * (1.0f - norm);
-        int y_idx = std::clamp(static_cast<int>(std::floor(y_pos)), 0, outputHeight_ - 1);
-        int subcell = static_cast<int>((inst_freq_hz - row_f_lo_[y_idx]) / row_cell_w_[y_idx]);
-        subcell = std::clamp(subcell, 0, row_k_[y_idx] - 1);
-        int const row_base = row_offset_[y_idx] + subcell;
+        float y_pos = std::clamp(static_cast<float>(outputHeight_ - 1) * (1.0f - norm), 0.0f,
+                                 static_cast<float>(outputHeight_ - 1));
+        int y0 = static_cast<int>(std::floor(y_pos));
+        float y_frac = y_pos - static_cast<float>(y0);
+        if (y0 >= outputHeight_ - 1) {
+            y0 = outputHeight_ - 1;
+            y_frac = 0.0f;
+        }
+        if constexpr (!EnableFreqInterp) {
+            y_frac = 0.0f; // 关闭频率轴线性分布: 只落到 y0
+        }
+        int const y1 = (y_frac > 0.0f) ? y0 + 1 : y0;
 
-        // 群延迟 → 环形子列 + 双线性
+        // ── 时间轴: 群延迟 → 环形子列 + 双线性 ──
         float c_pos = std::clamp((group_delay + 0.5f) * static_cast<float>(subColumns_), 0.0f,
                                  static_cast<float>(subColumns_ - 1));
         int c_idx = static_cast<int>(std::floor(c_pos));
@@ -106,13 +119,25 @@ struct LogReassignGrid {
         int slot0 = head_ + c_idx;
         if (slot0 >= subColumns_)
             slot0 -= subColumns_;
-        col_buf_[slot0 * total_cells_ + row_base] += mag * (1.0f - c_frac);
-        if (c_frac > 0.0f) {
-            int slot1 = slot0 + 1;
-            if (slot1 >= subColumns_)
-                slot1 -= subColumns_;
-            col_buf_[slot1 * total_cells_ + row_base] += mag * c_frac;
-        }
+        int slot1 = slot0 + 1;
+        if (slot1 >= subColumns_)
+            slot1 -= subColumns_;
+
+        // 行内硬分配子格; 相邻行沿用同一子格序号 (若按"落在该行内"重算, 该频率根本
+        // 不在相邻行的频率范围内, 会把所有越界 bin 都夹到边缘子格、叠出假亮边)
+        int subcell = static_cast<int>((inst_freq_hz - row_f_lo_[y0]) / row_cell_w_[y0]);
+        subcell = std::clamp(subcell, 0, row_k_[y0] - 1);
+
+        auto splat = [&](int row, int cell, float wy) {
+            float const v = mag * wy;
+            int const base = row_offset_[row] + cell;
+            col_buf_[slot0 * total_cells_ + base] += v * (1.0f - c_frac);
+            if (c_frac > 0.0f)
+                col_buf_[slot1 * total_cells_ + base] += v * c_frac;
+        };
+        splat(y0, subcell, 1.0f - y_frac);
+        if (y1 != y0)
+            splat(y1, std::min(subcell, row_k_[y1] - 1), y_frac);
     }
 
     /// @brief 归约最旧子列(行内取 max) → 标定 → dB → 上色, 然后子列指针前进

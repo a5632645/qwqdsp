@@ -32,7 +32,7 @@
  * X_th  = FFT(x·(n-center)w[n])    (时间重分配)
  * X_tdh = FFT(x·(n-center)dw[n])   (仅用于 conv)
  */
-template <typename Colormap>
+template <typename Colormap, bool EnableFreqInterp = true>
 struct TfPhaseVocoderReassignmentFrameConv {
     void Init(int sampleRate, int fftSize, int hopSize, int zeroPad, int outputHeight, float freqMin, float freqMax,
               float dbFloor) noexcept {
@@ -207,5 +207,5 @@ private:
     std::vector<float> lastPhase_;
     std::vector<float> tdwindow_;
     std::vector<Color> column_;
-    LogReassignGrid grid_;
+    LogReassignGrid<EnableFreqInterp> grid_;
 };

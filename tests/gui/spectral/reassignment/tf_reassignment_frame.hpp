@@ -23,7 +23,7 @@
  * X_t = FFT(x[n-1]·w[n])           (频率重分配)
  * X_pf = roll(X_h,1), X_pf[0]=0    (时间重分配 → 群延迟)
  */
-template <typename Colormap>
+template <typename Colormap, bool EnableFreqInterp = true>
 struct TfReassignmentFrame {
     void Init(int sampleRate, int fftSize, int hopSize, int zeroPad, int outputHeight, float freqMin, float freqMax,
               float dbFloor) noexcept {
@@ -121,5 +121,5 @@ private:
     std::vector<float> shift_in_;
     std::vector<std::complex<float>> X_h_, X_t_, X_pf_;
     std::vector<Color> column_;
-    LogReassignGrid grid_;
+    LogReassignGrid<EnableFreqInterp> grid_;
 };

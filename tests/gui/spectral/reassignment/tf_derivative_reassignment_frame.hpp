@@ -27,7 +27,7 @@
  * X_dh = FFT(x·dw)               (导数窗频率重分配)
  * X_th = FFT(x·(n-center)w[n])   (时间重分配)
  */
-template <typename Colormap, bool EnablePeakFilter = false>
+template <typename Colormap, bool EnablePeakFilter = false, bool EnableFreqInterp = true>
 struct TfDerivativeReassignmentFrame {
     void Init(int sampleRate, int fftSize, int hopSize, int zeroPad, int outputHeight, float freqMin, float freqMax,
               float dbFloor) noexcept {
@@ -185,5 +185,5 @@ private:
     std::vector<float> freq_c_arr_;
     std::vector<uint8_t> sidelobe_mask_;
     std::vector<Color> column_;
-    LogReassignGrid grid_;
+    LogReassignGrid<EnableFreqInterp> grid_;
 };

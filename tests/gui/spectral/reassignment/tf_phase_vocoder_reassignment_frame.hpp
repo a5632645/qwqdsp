@@ -36,7 +36,7 @@
  * 时间: 时间加权窗法
  *   group_delay = Re(conj(X_h)·X_th) / (|X_h|² · N)
  */
-template <typename Colormap, bool EnablePeakFilter = false>
+template <typename Colormap, bool EnablePeakFilter = false, bool EnableFreqInterp = true>
 struct TfPhaseVocoderReassignmentFrame {
     void Init(int sampleRate, int fftSize, int hopSize, int zeroPad, int outputHeight, float freqMin, float freqMax,
               float dbFloor) noexcept {
@@ -202,5 +202,5 @@ private:
     std::vector<float> freq_c_arr_;
     std::vector<uint8_t> sidelobe_mask_;
     std::vector<Color> column_;
-    LogReassignGrid grid_;
+    LogReassignGrid<EnableFreqInterp> grid_;
 };
