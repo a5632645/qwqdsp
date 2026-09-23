@@ -83,7 +83,13 @@ struct IIRDesign {
             double phi = (2.0 * static_cast<double>(k) - 1.0) * pi / (2.0 * static_cast<double>(n));
             if (even_pole_modify) {
                 auto pole = std::complex{-std::sin(phi) * k_re, std::cos(phi) * k_im};
-                ret[i].p = std::sqrt((pole * pole + first_pole) / (1.0 - first_pole));
+                auto modified = std::sqrt((pole * pole + first_pole) / (1.0 - first_pole));
+                // 复数 sqrt 有两个根, 主值分支会落到右半平面(滤波器不稳定)。
+                // 两个根给出的 |H(jw)| 完全相同, 所以直接取另一个根保证稳定。
+                if (modified.real() > 0.0) {
+                    modified = -modified;
+                }
+                ret[i].p = modified;
             }
             else {
                 ret[i].p = std::complex{-std::sin(phi) * k_re, std::cos(phi) * k_im};
@@ -138,7 +144,13 @@ struct IIRDesign {
             }
             else {
                 auto pole = std::complex{-std::sin(phi) * k_re, std::cos(phi) * k_im};
-                ret[i].p = 1.0 / std::sqrt((pole * pole + first_pole) / (1.0 - first_pole));
+                auto modified = std::sqrt((pole * pole + first_pole) / (1.0 - first_pole));
+                // 同 Chebyshev1: 取另一个根, 免得极点(以及它的倒数)落到右半平面。
+                // 复数取倒数不改变实部符号, 所以要 1/x 在左半平面就得 x 在左半平面。
+                if (modified.real() > 0.0) {
+                    modified = -modified;
+                }
+                ret[i].p = 1.0 / modified;
                 if (k != num_filter) {
                     // 最靠近0的切比雪夫多项式的零点被映射到0，所以零点在无穷远处不赋值
                     double const zero = std::cos(phi);
@@ -154,6 +166,81 @@ struct IIRDesign {
                 ret[i].k = std::norm(ret[i].p);
             }
             ++i;
+        }
+    }
+
+    /**
+     * @brief 切比雪夫 II 型(逆切比雪夫)原型, 自然归一化(阻带边沿在 1 rad/sec)
+     *
+     * 与 @ref Chebyshev2 的唯一区别是归一化位置: Chebyshev2 把 -3.01dB 点钉在
+     * (1)rad/sec, 于是那个频率尺度会随阻带衰减一起变, 顺便把传输零点也搬走;
+     * 这里把阻带边沿(第一个等波纹峰值)钉在 (1)rad/sec, 于是
+     * **传输零点只由阶数决定, 与 ripple 无关**。
+     *
+     * 这个性质是做 shelving 滤波器的前提: shelf 的分子分母是两个"只有 ripple 不同"
+     * 的原型, 传输零点必须逐点相同才能相消(见 IIRDesignShelf::Chebyshev2)。
+     *
+     * @param ret 输出的零极点节, 至少 num_filter 个
+     * @param num_filter 极点对数, 阶数 = 2 * num_filter
+     * @param ripple 阻带衰减(dB, <0, 例如 -40), 与 Chebyshev1 的正纹波相反
+     * @param even_order_modify 偶数阶修正: 把最靠近 0dB 的那个传输零点推到无穷远,
+     *        使高频端不再"饱和"; 极点取左半平面的那一支(稳定)
+     * @note 零点在虚轴上, 位置 z_m = j / cos(phi_m) 只由 num_filter 决定
+     * @note 直流增益 0dB
+     * @note 与 scipy/MATLAB 的 cheby2(N, rs, Wn=1) 形状一致
+     * @see Chebyshev2
+     */
+    static void Chebyshev2Natural(std::span<ZPK> ret, size_t num_filter, double ripple, bool even_order_modify) {
+        assert(ret.size() >= num_filter);
+
+        size_t const n = 2 * num_filter;
+        double const eps = 1.0 / std::sqrt(std::pow(10.0, -ripple / 10.0) - 1.0);
+        double const a = 1.0 / static_cast<double>(n) * std::asinh(1.0 / eps);
+        double const sh = std::sinh(a);
+        double const ch = std::cosh(a);
+        // 偶数阶修正用: c = 最小切比雪夫节点
+        double const c = std::cos(pi * (static_cast<double>(n) - 1.0) / (2.0 * static_cast<double>(n)));
+        double const c2 = c * c;
+
+        for (size_t k = 1; k <= num_filter; ++k) {
+            double const phi = (2.0 * static_cast<double>(k) - 1.0) * pi / (2.0 * static_cast<double>(n));
+            double const cos_phi = std::cos(phi);
+            if (even_order_modify) {
+                // T_N 的根 u_k = cos(phi)*cosh(a) + j*sin(phi)*sinh(a)
+                auto const u = std::complex{cos_phi * ch, std::sin(phi) * sh};
+                auto x = std::sqrt((u * u - c2) / (1.0 - c2));
+                if (x.real() < 0.0) {
+                    x = -x;
+                }
+                auto p = std::complex{0.0, 1.0} / x;
+                if (p.imag() < 0.0) {
+                    p = -p;
+                }
+                if (p.real() > 0.0) {
+                    p = -std::conj(p);      // 反射到左半平面(幅度响应不变)
+                }
+                ret[k - 1].p = p;
+                if (cos_phi * cos_phi > c2) {
+                    double const xz = std::sqrt((cos_phi * cos_phi - c2) / (1.0 - c2));
+                    ret[k - 1].z = std::complex{0.0, 1.0 / xz};
+                }
+                else {
+                    ret[k - 1].z = std::nullopt;   // 最靠近 0dB 的那个零点推到无穷远
+                }
+            }
+            else {
+                // 极点 = 1/q (q 是切比雪夫 I 的 s 平面极点); 取共轭让代表落在上半平面,
+                // 与 Butterworth / Chebyshev1 的约定一致
+                auto const q = std::complex{-std::sin(phi) * sh, cos_phi * ch};
+                ret[k - 1].p = std::conj(std::complex{1.0, 0.0} / q);
+                ret[k - 1].z = std::complex{0.0, 1.0 / cos_phi};
+            }
+            if (ret[k - 1].z) {
+                ret[k - 1].k = std::norm(ret[k - 1].p) / std::norm(*ret[k - 1].z);
+            }
+            else {
+                ret[k - 1].k = std::norm(ret[k - 1].p);
+            }
         }
     }
 

@@ -115,7 +115,13 @@ public:
             double phi = (2.0 * static_cast<double>(k) - 1.0) * pi / (2.0 * static_cast<double>(n));
             if (even_pole_modify) {
                 auto pole = std::complex{-std::sin(phi) * k_re, std::cos(phi) * k_im};
-                ret[i].p = scale * std::sqrt((pole * pole + first_pole) / (1.0 - first_pole));
+                auto modified = std::sqrt((pole * pole + first_pole) / (1.0 - first_pole));
+                // 复数 sqrt 有两个根, 主值分支会落到右半平面(滤波器不稳定)。
+                // 两个根给出的 |H(jw)| 完全相同, 所以直接取另一个根保证稳定。
+                if (modified.real() > 0.0) {
+                    modified = -modified;
+                }
+                ret[i].p = scale * modified;
             }
             else {
                 ret[i].p = scale * std::complex{-std::sin(phi) * k_re, std::cos(phi) * k_im};
@@ -207,7 +213,12 @@ public:
             }
             else {
                 auto pole = std::complex{-std::sin(phi) * k_re, std::cos(phi) * k_im};
-                ret[i].p = scale / std::sqrt((pole * pole + first_pole) / (1.0 - first_pole));
+                auto modified = std::sqrt((pole * pole + first_pole) / (1.0 - first_pole));
+                // 同 Chebyshev1: 取另一个根; 复数取倒数不改变实部符号, 所以 x 要在左半平面。
+                if (modified.real() > 0.0) {
+                    modified = -modified;
+                }
+                ret[i].p = scale / modified;
                 if (kk != num_filter) {
                     // 最靠近0的切比雪夫多项式的零点被映射到0，所以零点在无穷远处不赋值
                     double const zero = std::cos(phi);
