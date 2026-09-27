@@ -30,6 +30,9 @@ if(QWQDSP_BUILD_TESTS)
     set(QWQDSP_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
     include(cmake/qwqdsp_targets.cmake)
 
+    # 测试用 CTest 跑：ctest --test-dir build -C Debug --output-on-failure
+    enable_testing()
+
     add_subdirectory(support)
     add_subdirectory(tests)
     add_subdirectory(example)

@@ -27,10 +27,13 @@ function(_qwqdsp_headless prefix folder name code_file)
 endfunction()
 
 # ------------------------------------------------------------
-# 无头测试
+# 无头测试（写测试优先用 CTest：加好目标就能 ctest 跑到）
 # ------------------------------------------------------------
 function(add_qwqdsp_test name code_file)
     _qwqdsp_headless(qwqdsp-test qwqdsp-tests ${name} ${code_file} ${ARGN})
+    # 约定：测试进程用退出码报告结果（0 = 通过），失败路径要返回非零。
+    add_test(NAME qwqdsp-test-${name} COMMAND qwqdsp-test-${name})
+    set_tests_properties(qwqdsp-test-${name} PROPERTIES TIMEOUT 600)
 endfunction()
 
 # ------------------------------------------------------------
