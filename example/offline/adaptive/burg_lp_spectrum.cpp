@@ -23,6 +23,7 @@
 // 段的疏密不同，就是频率轴被扭曲的结果。
 // ------------------------------------------------------------
 #include "AudioFile.h"
+#include "matplot_headless.hpp"
 #include "work_dir.hpp"
 
 #include <qwqdsp/adaptive/burg_lp.hpp>
@@ -160,6 +161,7 @@ int main(int argc, char** argv) {
 
     // ---- 对每条曲线：求 k → A(z) → 扭曲轴上的包络 → 对齐增益 ----
     using namespace matplot;
+    qwqdsp_support::MakeMatplotHeadless(); // 见该函数注释：不切就会每改一次图就重画一遍（闪窗 + 慢）
     std::vector<double> dft_x(dft_mag.size());
     std::vector<double> dft_y(dft_mag.size());
     for (size_t b = 0; b < dft_mag.size(); ++b) {

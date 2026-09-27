@@ -46,4 +46,8 @@ add_qwqdsp_example(dft_filter_bank spectral/dft_filter_bank.cpp)
 # 需要 matplot++（外层 CMake 里 add_subdirectory + 置 QWQDSP_USE_MATPLOT）
 if(QWQDSP_USE_MATPLOT)
     add_qwqdsp_example(burg_lp_spectrum adaptive/burg_lp_spectrum.cpp EXTRA_LIBS matplot)
+    # RLS 是 Eigen 模板类（RLSFIlter），需要 QWQDSP_USE_EIGEN
+    if(QWQDSP_USE_EIGEN)
+        add_qwqdsp_example(rls_lp_spectrum adaptive/rls_lp_spectrum.cpp EXTRA_LIBS matplot)
+    endif()
 endif()
