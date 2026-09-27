@@ -173,7 +173,7 @@ struct OddOrderPrototype {
  * @ref 纯极点 https://radiosystemdesign.com/assets/pdf/downloads/Reducing_IIR_Comp_Workload_Lyons.pdf
  * @ref 可零点
  * https://www.researchgate.net/publication/278320928_A_Most_Efficient_Digital_Filter_The_Two-Path_Recursive_All-Pass_Filter
- * @ref 分解方法与数值验证见 tests/hybrid/tf2ca
+ * @ref 分解方法与数值验证见 labs/tf2ca
  */
 class ParallelAllpass {
 public:

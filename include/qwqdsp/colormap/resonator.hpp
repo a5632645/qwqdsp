@@ -9,7 +9,7 @@ namespace qwqdsp_colormap {
 // ------------------------------------------------------------
 // Resonator colormap, 256 entries, RGB 8-bit
 // Black → Blue → Cyan → Green → Yellow → Red
-// 提取自 tests/gui/spectral/resonate_bank.cpp 的 MapDbToColor
+// 提取自 example/gui/spectral/resonate_bank.cpp 的 MapDbToColor
 // 八段线性渐变: (0,0,0)→(0,0,80)→(0,60,180)→(0,180,255)→(0,240,80)
 //              →(180,255,0)→(255,180,0)→(255,40,40)
 // ------------------------------------------------------------

@@ -1,69 +1,21 @@
-cmake_policy(SET CMP0076 NEW)
-
 # ------------------------------------------------------------
-# 测试源码根目录（供子目录调用的 add_qwqdsp_* 定位 work_dir / support）
-# ------------------------------------------------------------
-set(QWQDSP_TESTS_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
-
-# ------------------------------------------------------------
-# add a no_gui test/demo
-# ------------------------------------------------------------
-function(add_qwqdsp_dsp_test name code_file)
-    set(multiValueArgs EXTRA_LIBS)
-    cmake_parse_arguments(ARG "" "" "${multiValueArgs}" ${ARGN})
-    add_executable(qwqdsp-nogui-${name}
-        ${code_file}
-    )
-    target_link_libraries(qwqdsp-nogui-${name} PUBLIC qwqdsp qwqdsp_support ${ARG_EXTRA_LIBS})
-    target_compile_definitions(qwqdsp-nogui-${name} PRIVATE
-        QWQDSP_WORK_DIR="${QWQDSP_TESTS_SRC_DIR}/work_dir"
-    )
-    set_target_properties(qwqdsp-nogui-${name} PROPERTIES CXX_STANDARD 20)
-    set_target_properties(qwqdsp-nogui-${name} PROPERTIES FOLDER qwqdsp-dsp-tests)
-endfunction()
-
-# ------------------------------------------------------------
-# add a gui test/demo
-# ------------------------------------------------------------
-function(add_qwqdsp_gui_test name code_file)
-    set(options NO_MINIAUDIO)
-    cmake_parse_arguments(ARG "${options}" "" "" ${ARGN})
-
-    if(ARG_NO_MINIAUDIO)
-        add_executable(qwqdsp-gui-${name}
-            ${code_file}
-        )
-    else()
-        add_executable(qwqdsp-gui-${name}
-            ${code_file}
-            ${QWQDSP_TESTS_SRC_DIR}/../support/miniaudio.c
-        )
-    endif()
-
-    target_link_libraries(qwqdsp-gui-${name} PUBLIC qwqdsp raylib qwqdsp_support)
-
-    if(TARGET qwqdsp_support_slider)
-        target_link_libraries(qwqdsp-gui-${name} PUBLIC qwqdsp_support_slider)
-    endif()
-
-    target_compile_definitions(qwqdsp-gui-${name} PRIVATE
-        QWQDSP_WORK_DIR="${QWQDSP_TESTS_SRC_DIR}/work_dir"
-    )
-    set_target_properties(qwqdsp-gui-${name} PROPERTIES CXX_STANDARD 20)
-    set_target_properties(qwqdsp-gui-${name} PROPERTIES FOLDER qwqdsp-gui-tests)
-endfunction()
-
-# ------------------------------------------------------------
-# 分发到子文件夹
+# tests — 真正的测试：程序自己判定（断言 / 非零退出 / PASS-FAIL / 与参考逐点比对）
+#
+# 新增：add_qwqdsp_test(<name> <file> [EXTRA_LIBS ...]) -> qwqdsp-test-<name>
 # ------------------------------------------------------------
 
-# ----- DSP 测试（无 GUI） -----
-add_subdirectory(nogui)
+add_qwqdsp_test(cephes cephes/cephes.cpp)
 
-# ----- GUI 测试 -----
-add_subdirectory(gui)
+add_qwqdsp_test(parallel_allpass filter/parallel_allpass.cpp)
 
-# ----- Lab（依赖 raylib 的可执行实验/演示，如 playing） -----
-if(QWQDSP_USE_RAYLIB)
-    add_subdirectory(lab)
+add_qwqdsp_test(autocorrelation_pitch_shift_rt audiofx/autocorrelation_delay_pitch_shifter_test.cpp)
+
+add_qwqdsp_test(pyin pitch/pyin.cpp)
+add_qwqdsp_test(pmpm pitch/pmpm.cpp)
+add_qwqdsp_test(pitch_algorithms pitch/pitch_algorithms.cpp)
+
+if(QWQDSP_USE_EIGEN)
+    add_qwqdsp_test(swift_f0 pitch/swift_f0.cpp)
 endif()
+
+add_qwqdsp_test(minimax_sine oneset/minimax_sine_test.cpp)

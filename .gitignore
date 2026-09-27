@@ -1,5 +1,5 @@
 build/
 raylib/
-tests/work_dir/output/
+work_dir/output/
 *.asd
 __pycache__/

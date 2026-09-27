@@ -25,8 +25,13 @@ if(QWQDSP_USE_SIMDE)
     target_compile_definitions(qwqdsp PUBLIC QWQDSP_HAVE_SIMDE)
 endif()
 
-# enable tests
+# enable tests / examples / labs
 if(QWQDSP_BUILD_TESTS)
+    set(QWQDSP_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+    include(cmake/qwqdsp_targets.cmake)
+
     add_subdirectory(support)
     add_subdirectory(tests)
+    add_subdirectory(example)
+    add_subdirectory(labs)
 endif()
