@@ -41,3 +41,9 @@ endif()
 
 # ----- Spectral -----
 add_qwqdsp_example(dft_filter_bank spectral/dft_filter_bank.cpp)
+
+# ----- Adaptive -----
+# 需要 matplot++（外层 CMake 里 add_subdirectory + 置 QWQDSP_USE_MATPLOT）
+if(QWQDSP_USE_MATPLOT)
+    add_qwqdsp_example(burg_lp_spectrum adaptive/burg_lp_spectrum.cpp EXTRA_LIBS matplot)
+endif()

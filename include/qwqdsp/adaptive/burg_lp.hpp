@@ -1,4 +1,6 @@
 #pragma once
+#include <algorithm>
+#include <cassert>
 #include <span>
 #include <vector>
 
@@ -10,6 +12,13 @@ public:
     }
 
     /**
+     * @brief 逐级 Burg 递推，求出各阶反射系数
+     * @param x 输入信号。**会被就地修改**（递推的 upgoing 结果直接写在 x 上），
+     *          需要保留原信号时调用方先自行拷贝
+     * @param latticek 输出的反射系数，长度 = 想要的最大阶数
+     * @note 需要 `x.size() >= latticek.size()`；内部缓冲由 `Init(block_len)` 分配，
+     *       应保证 `block_len >= x.size()`
+     *
      *                     +-----k----+
      *                     |          ↓
      *   x -------------------------> + -----> x
@@ -20,6 +29,8 @@ public:
      *            +----+
      */
     void Process(std::span<float> x, std::span<float> latticek) noexcept {
+        assert(eb_.size() >= x.size());
+        assert(x.size() >= latticek.size());
         // std::copy(x.begin(), x.end(), eb_.begin());
         // for (auto& k : latticek) {
         //     float lag{};
@@ -82,12 +93,23 @@ public:
     }
 
     /**
+     * @note 内部会先把两个多项式清零并从 0 阶 `A_0(z) = A_0(z^-1) = 1` 起步，
+     *       调用方不需要（也不应该）预置初值
      * @note upgoing.size() = downgoing.size() = k.size() + 1
      * @param upgoing sum upgoing[i] * z^-i, i from 0 to k.size, 最小相位
      * @param downgoing sum downgoing[i] * z^-i, i from 0 to k.size, 最大相位
      */
     static void Lattice2Tf_KeepK(std::span<const float> k, std::span<float> upgoing,
                                  std::span<float> downgoing) noexcept {
+        assert(upgoing.size() > k.size());
+        assert(downgoing.size() > k.size());
+
+        // 0 阶多项式：A_0(z) = A_0(z^-1) = 1
+        std::fill(upgoing.begin(), upgoing.end(), 0.0f);
+        std::fill(downgoing.begin(), downgoing.end(), 0.0f);
+        upgoing[0] = 1.0f;
+        downgoing[0] = 1.0f;
+
         for (size_t kidx = 0; kidx < k.size(); ++kidx) {
             for (size_t i = kidx + 1; i != 0; --i) {
                 downgoing[i] = downgoing[i - 1];

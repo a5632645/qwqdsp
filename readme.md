@@ -22,5 +22,6 @@
 | **Apple Accelerate** | `QWQDSP_HAVE_ACCELERATE`（由外部定义） | macOS 上替换 Ooura FFT 为 vDSP 后端（外部链接 Accelerate） |
 | **SIMDe** | `QWQDSP_HAVE_SIMDE`（由外部定义） | 非 x86 平台模拟 SIMD（头文件直接 include `<x86/avx2.h>` / `<x86/sse4.1.h>`） |
 | **raylib** | `QWQDSP_USE_RAYLIB=ON` | 构建 raylib 依赖的 GUI example（`example/gui`）与 `labs/playing` 实验；raylib 由外部提供 |
+| **matplot++** | `QWQDSP_USE_MATPLOT=ON` | 无头 example 直接出图（如 `example/offline/adaptive`） |
 
 ---
