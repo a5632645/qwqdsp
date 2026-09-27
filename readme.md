@@ -36,7 +36,7 @@
 | [`biquad.cpp`](tests/nogui/filter/biquad.cpp) | 对比 Biquad 与 LatticeBiquad 的脉冲响应差异 |
 | [`fir_design.cpp`](tests/nogui/filter/fir_design.cpp) | WindowFIR 带阻滤波器设计 + Hamming 窗 + FFT 频响验证 |
 | [`minimum_phase_fir.cpp`](tests/nogui/filter/minimum_phase_fir.cpp) | 离散 Hilbert 变换将线性相位 FIR 转为最小相位 |
-| [`paralle_allpass.cpp`](tests/nogui/filter/paralle_allpass.cpp) | 被注释掉的并行全通 |
+| [`parallel_allpass.cpp`](tests/nogui/filter/parallel_allpass.cpp) | 并行全通四族设计（butter/cheby1/cheby2/ellip）与解析幅频对比 |
 | [`reverse_iir.cpp`](tests/nogui/filter/reverse_iir.cpp) | Vicanek 反向时间 IIR 实现线性相位补偿 |
 | [`residual_chebyshev.cpp`](tests/nogui/filter/residual_chebyshev.cpp) | Chebyshev II 型从 s 域极点推导到并行双二阶滤波器 |
 | [`any_hilbert.cpp`](tests/nogui/filter/any_hilbert.cpp) | AnyHilbert 脉冲响应输出 |
@@ -247,7 +247,7 @@
 | [`one_pole_tpt.hpp`](include/qwqdsp/filter/one_pole_tpt.hpp) | `OnePoleTPT` 一阶 TPT 滤波器 |
 | [`onepole_tpt_shelf.hpp`](include/qwqdsp/filter/onepole_tpt_shelf.hpp) | `OnepoleTPTShelf` 一阶 TPT 搁架滤波器 |
 | [`ota_one_pole.hpp`](include/qwqdsp/filter/ota_one_pole.hpp) | `OTAOnePole` OTA 一阶滤波器 |
-| [`parallel_allpass.hpp`](include/qwqdsp/filter/parallel_allpass.hpp) | `ParallelAllpass` 双路并联全通滤波器 |
+| [`parallel_allpass.hpp`](include/qwqdsp/filter/parallel_allpass.hpp) | `ParallelAllpass` 双路并联全通（butter/cheby1/cheby2/ellip 奇数阶） |
 | [`rbj.hpp`](include/qwqdsp/filter/rbj.hpp) | `RBJ` Audio EQ Cookbook 系数设计 |
 | [`svf.hpp`](include/qwqdsp/filter/svf.hpp) | `SVF` A.Simpler 状态变量滤波器 |
 | [`svf_tpt.hpp`](include/qwqdsp/filter/svf_tpt.hpp) | `SvfTPT` TPT状态变量滤波器 |
