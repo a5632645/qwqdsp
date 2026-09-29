@@ -3,33 +3,27 @@
 verify_time_reassignment.py
 ===========================
 
-【历史实验】验证 windowless NC 的「时间重分配」对低频瞬态是否真的聚焦。
+【历史实验：结论已被推翻，保留作记录】
 
-背景
-----
-曾为 windowless NC 设计了时间重分配(TimeReassignment)版本，用左右两 DFT 分量
-交叉相位算群延迟：
-    cross = X_R · conj(X_L),  gd = 0.5 - arg(cross)/(2π)
-然后把能量按 gd 折算成列偏移写入图像缓冲。
+早期给 windowless NC 做过"时间重分配"版本：用左右两 DFT 分量的交叉相位算群延迟
 
-本脚本做**可读图**的对照实验（人 + AI 都能看图判断）：
-  用一颗清晰短促的低频鼓击(60Hz, 阻尼包络)作为输入，
-  分别算：
-    (a) plain      —— 无时间重分配(直接输出每帧 NC gain)
-    (b) reassign   —— 时间重分配(群延迟 → 整数列偏移，写入持久缓冲)
-  输出对比图，判断低频瞬态是否被聚焦。
+    cross = X_R·conj(X_L),   gd = 0.5 − arg(cross)/(2π)
 
-结论
-----
-实验显示 reassign 不聚焦，反而把连续脉冲块撕成竖条、低频出现空隙、高频冒伪影，
-因此该方案**已放弃**——C++ 侧的 WindowlessNcTimeFrame 已被移除，本脚本仅作为
-证据保留。
+再按 **帧长**（fft_size/hop = 16 列）统一折算成列偏移写进持久缓冲，当时结论写成
+"群延迟时间重分配对低频瞬态不聚焦"。**该结论是错的**，原因三条（见 README「结论速览」
+第 3 条与「窗长 N 的下限」）：
 
-用法
-----
-    python verify_time_reassignment.py
-输出:
-    output/tr_plain_vs_reassign.png   (上=plain, 下=reassign)
+  1. 单位错：NC 每个 bin 的时间单位是**它自己的窗长 N**（正确偏移 = N·δ/(2π) 样本，
+     最大 ±N/2），不是统一的帧长；
+  2. 符号与参考点错：它算的是 −δ/(2π)，参考点取帧中心而不是窗口中心；
+  3. 负偏移（能量落在当前帧之前）被写进已发射过的环形槽位、随后清空 → 丢掉一半能量、
+     另一半被打散。
+
+按正确折算后，单冲激落点误差中位/90 分位都是 **0.5 样本**（`verify_log_chirp.py
+--selftest`），能量确实聚焦。正确实现见 `nc_reassign.py` 的 `freq` / `time` / `tf`
+三个变体（C++ 侧对应 `windowless_nc_reassign_frame.hpp`）。
+
+下方脚本保持原样，仅用于回看当时的对照图 output/tr_plain_vs_reassign.png。
 """
 from __future__ import annotations
 

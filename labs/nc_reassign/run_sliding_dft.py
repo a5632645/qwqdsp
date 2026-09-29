@@ -20,7 +20,7 @@ with Reduced Noise and Latency for Real-Time Music Analysis》
 
 与 nc_dft.py 的关系
 -------------------
-nc_dft.py 用 FFT 卷积等价实现累加器(逐样本等价，同样能复现 NC 行为)；
+nc_dft.py / run_nc_vs_stft.py 用 FFT 卷积等价实现累加器(逐样本等价，同样能复现 NC 行为)；
 本文件用递归滑动 DFT，逐样本流式处理，避免卷积开销，且省去式(8)相位校正。
 
 NC 部分(式3/8、归一化、时间抽取、IIR 平滑)与 nc_dft.py 完全一致。
@@ -38,7 +38,7 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
 
 from nc_dft import NCDftConfig, build_bins, downsample_and_smooth  # 复用 bin/配置/抽取平滑
-from run import stft_spectrogram, to_db, F_MIN, F_MAX, DB_FLOOR  # 复用 STFT 参照与 dB 工具
+from run_nc_vs_stft import stft_spectrogram, to_db, F_MIN, F_MAX, DB_FLOOR  # 复用 STFT 参照与 dB 工具
 
 # 默认输入/输出
 INPUT_DIR = os.path.join(os.path.dirname(__file__),

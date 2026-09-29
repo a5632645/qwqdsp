@@ -89,8 +89,24 @@ struct LogReassignGrid {
     }
 
     /// @brief 把一个 bin 加到网格; inst_freq_hz 需已落在 [freqMin, freqMax]
-    /// @param group_delay 群延迟 ∈ [-0.5, 0.5] (无时间重分配时传 0)
+    /// @param group_delay 群延迟 ∈ [-0.5, 0.5] (无时间重分配时传 0);
+    ///                    0 = 帧中心, 单位 = 帧长(见 AddAtColumn)
     void Add(float inst_freq_hz, float group_delay, float mag) noexcept {
+        AddAtColumn(inst_freq_hz, (group_delay + 0.5f) * static_cast<float>(subColumns_), mag);
+    }
+
+    /// @brief 把一个 bin 加到网格, 时间位置直接给**环形子列坐标**
+    /// @param col_pos 环形子列坐标 ∈ [0, subColumns]: 0 = 本次将发射的最旧子列,
+    ///                subColumns-1 = 最新; 内部做时间双线性
+    ///
+    /// 无窗 NC 的每个 bin 窗长不同, 落点时刻 = 窗中心 + N·δ/(2π)(样本), 因此按
+    /// 绝对子列坐标落点更自然(见 ``windowless_nc_tf_frame.hpp``)。
+    void AddAtColumn(float inst_freq_hz, float col_pos, float mag) noexcept {
+        // 非有限值(如上游含 NaN 的样本把累加器污染成 NaN)会算出 INT_MIN 的行/列索引,
+        // 直接越界写 col_buf_; 这里丢掉这种点, 避免整块显示崩掉。
+        if (!std::isfinite(inst_freq_hz) || !std::isfinite(col_pos) || !std::isfinite(mag) || mag <= 0.0f)
+            return;
+
         // ── 频率轴: 按小数位置双线性分配到相邻两行 (EnableFreqInterp), 纵向平滑 ──
         float logF = std::log10(inst_freq_hz);
         float norm = (logF - logMin_) / (logMax_ - logMin_);
@@ -107,9 +123,8 @@ struct LogReassignGrid {
         }
         int const y1 = (y_frac > 0.0f) ? y0 + 1 : y0;
 
-        // ── 时间轴: 群延迟 → 环形子列 + 双线性 ──
-        float c_pos = std::clamp((group_delay + 0.5f) * static_cast<float>(subColumns_), 0.0f,
-                                 static_cast<float>(subColumns_ - 1));
+        // ── 时间轴: 环形子列 + 双线性 ──
+        float c_pos = std::clamp(col_pos, 0.0f, static_cast<float>(subColumns_ - 1));
         int c_idx = static_cast<int>(std::floor(c_pos));
         float c_frac = c_pos - static_cast<float>(c_idx);
         if (c_idx >= subColumns_ - 1) {
@@ -198,6 +213,7 @@ struct LogReassignGrid {
     bool CalibrationReady() const noexcept {
         return cal_ready_;
     }
+
 
 private:
     int sampleRate_{}, fftLen_{}, subColumns_{}, outputHeight_{}, binSize_{}, total_cells_{}, head_{};
