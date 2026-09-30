@@ -187,6 +187,10 @@ struct WindowlessNcReassignFrame {
             const int floor_n = static_cast<int>(std::round(minPeriodsFloor * sampleRate / b.f_center));
             n = std::min(natural_n, std::max(n, floor_n));
             b.N = std::max(8, n);
+            // float q = std::round(2.0f * b.f_center / w_nc);
+            // float n_float = std::round(q * sampleRate / (2.0f * b.f_center));
+            // b.N = static_cast<int>(n_float);
+            // b.N = std::max(8, std::min(b.N, max_window_samples));
 
             // (5) 左右分量频率（用 double 保证旋转因子精度）
             b.f_left = static_cast<double>(b.f_center) - static_cast<double>(sampleRate) / (2.0 * b.N);
