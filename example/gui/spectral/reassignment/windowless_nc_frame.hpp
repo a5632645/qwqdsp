@@ -27,6 +27,15 @@
  * 递归滑动 DFT（相位锚定窗口起点，无相位校正）：
  *   X(n) = W·X(n−1) + x[n] − x[n−N]·W^N,   W = e^{−j·2π·f/F_S}
  *
+ * 时间轴：每个 bin 的增益是**窗中心**时刻的量（窗中心 = 最新样本 − (N_k−1)/2），
+ * 而窗长随频率变化（N_k ∝ 1/f，低频带 4 周期下限）——若把每帧算出的增益直接画在
+ * 最新一列，低频就按 (N_k−1)/2 滞后出现（20 Hz 的 4 周期窗下限 → 100 ms，高频只有
+ * 几个样本），即"delta 下低频比高频晚到、越低越晚"。故本帧与
+ * ``WindowlessNcReassignFrame<..., kFreq>`` **同口径**做时间轴修正：增益按窗中心的
+ * 绝对时刻落进环形子列（col = (ringSpan_ + 1 − (N_k−1)/2)/hop，时间双线性），
+ * 每帧只发射最旧一列。整幅显示因此固定滞后 N_max 样本（= 重分配帧的滞后：
+ * 4 周期下限下 200 ms），跨算法切换时同一事件落在同一列。
+ *
  * @ref https://arxiv.org/html/2410.07982v3
  */
 template <typename Colormap>
@@ -96,7 +105,9 @@ struct WindowlessNcFrame {
         const int n_bins = outputHeight_;
         bins_ema_.clear();
         bins_bypass_.clear();
+        // 所有 bin 的窗长范围：上限同时是整幅画面的滞后(环回缓冲长度)
         int maxN = 8;
+        int minN = maxWindowSamples;
 
         const float logStep = (logMax_ - logMin_) / static_cast<float>(outputHeight_);
         std::vector<float> centers(n_bins);
@@ -118,10 +129,16 @@ struct WindowlessNcFrame {
             w_nc = std::max(w_nc, 1e-3f);
 
             // (7) 窗长；clamp 到 [8, maxWindowSamples]
-            float q = std::round(2.0f * b.f_center / w_nc);
-            float n_float = std::round(q * sampleRate / (2.0f * b.f_center));
-            b.N = static_cast<int>(n_float);
-            b.N = std::max(8, std::min(b.N, maxWindowSamples));
+            // float q = std::round(2.0f * b.f_center / w_nc);
+            // float n_float = std::round(q * sampleRate / (2.0f * b.f_center));
+            // b.N = static_cast<int>(n_float);
+            // b.N = std::max(8, std::min(b.N, maxWindowSamples));
+            const float q = std::round(2.0f * b.f_center / w_nc);
+            const int natural_n = static_cast<int>(std::round(q * sampleRate / (2.0f * b.f_center)));
+            int n = std::clamp(natural_n, 8, maxWindowSamples);
+            const int floor_n = static_cast<int>(std::round(kDefaultMinPeriods * sampleRate / b.f_center));
+            n = std::min(natural_n, std::max(n, floor_n));
+            b.N = std::max(8, n);
 
             // (5) 左右分量频率(用 double 保证旋转因子精度)
             b.f_left = static_cast<double>(b.f_center) - static_cast<double>(sampleRate) / (2.0 * b.N);
@@ -154,14 +171,25 @@ struct WindowlessNcFrame {
             }
 
             maxN = std::max(maxN, b.N);
+            minN = std::min(minN, b.N);
         }
+        min_n_ = minN;
+        max_n_ = maxN;
 
         // ── 共享样本环回缓冲（长度 = 最长窗长）──
         ring_.assign(maxN, 0.0);
         ringSize_ = maxN;
         n_ = 0;
 
-        binDb_.resize(n_bins);
+        // ── 时间轴子列环：与 WindowlessNcReassignFrame 同尺寸同落点口径 ──
+        // 落点子列坐标 = (N_max + 1 − ⟨m⟩)/hop，⟨m⟩ = (N−1)/2 ∈ [3.5, (N_max−1)/2]
+        // （N ≥ 8），故坐标 ∈ [(N_max/2 + 1.5)/hop, (N_max − 2.5)/hop]，恒落在
+        // [1, ringCols_) 内、不会写进本帧要发射的最旧列。
+        ringSpan_ = maxN;
+        ringCols_ = std::max(2, static_cast<int>(std::ceil((ringSpan_ + 1.5) / hopSize_)) + 1);
+        head_ = 0;
+        colBuf_.assign(static_cast<size_t>(ringCols_) * static_cast<size_t>(outputHeight_), 0.0f);
+
         column_.resize(outputHeight_);
     }
 
@@ -171,6 +199,9 @@ struct WindowlessNcFrame {
      * window 与 windowed_frame 传入但被忽略（无窗法）。
      * SpectrogramColumn 提供重叠帧：第一次调用整帧都是新样本；之后每次调用只有
      * 末尾 hopSize_ 个样本是新增的（前面的 overlap 与上一帧重复），故只进给滑动 DFT。
+     *
+     * 输出的这一列代表「最新样本 − N_max 样本」的绝对时刻（整幅显示的固定滞后，见类注释
+     * 的时间轴段），每个 bin 的值取自它自己窗中心落在该时刻的那次估计。
      */
     void Process(std::span<const float> raw_frame, std::span<const float> /*window*/,
                  std::span<const float> /*windowed_frame*/) noexcept {
@@ -201,30 +232,21 @@ struct WindowlessNcFrame {
             ++n_;
         }
 
-        // ── 按 row 回填各 bin 的 dB(此时已带限) ──
+        // ── 逐 bin 增益按**窗中心绝对时刻**落进环形子列（见 Splat） ──
         constexpr float kEps = 1e-18f;
         // 抗混叠箱: 取每样本 EMA 平滑后的增益
-        for (Bin& b : bins_ema_) {
-            float gain = b.smoothed_gain;
-            float db = (gain > 0.0f) ? 20.0f * std::log10(gain) : dbFloor_;
-            binDb_[b.row] = std::clamp(db, dbFloor_, 0.0f);
-        }
+        for (Bin& b : bins_ema_)
+            Splat(b.row, b.N, b.smoothed_gain);
         // 旁路箱: 输出瞬时增益
         for (Bin& b : bins_bypass_) {
             double ncSum = -(b.acc_l.real() * b.acc_r.real() + b.acc_l.imag() * b.acc_r.imag());
             float gain = (ncSum > 0.0) ? static_cast<float>(std::sqrt(ncSum + kEps) / b.N) : 0.0f;
             gain *= gainNorm_;   // 幅度归一化(乘 π)，使纯音峰值回到 ≈0 dB
-            float db = (gain > 0.0f) ? 20.0f * std::log10(gain) : dbFloor_;
-            binDb_[b.row] = std::clamp(db, dbFloor_, 0.0f);
+            Splat(b.row, b.N, gain);
         }
 
-        // ── 每行对应一个 bin（一一映射），直接上色 ──
-        for (int y = 0; y < outputHeight_; ++y) {
-            float db = binDb_[y];
-            int idx = static_cast<int>((db - dbFloor_) / (-dbFloor_) * 255.0f);
-            idx = std::clamp(idx, 0, 255);
-            column_[y] = Colormap::kTable[idx];
-        }
+        // ── 发射最旧子列（每行一个 bin，一一映射 → 直接上色） ──
+        EmitColumn();
     }
 
     std::span<const Color> GetColumn() const noexcept {
@@ -235,19 +257,93 @@ struct WindowlessNcFrame {
         return outputHeight_;
     }
 
+    /**
+     * @brief 各 NC bin 实际使用的窗长下限(样本)
+     *
+     * Init 后有效。与 MaxWindowSamples 一起给出窗长范围(纯理论窗长经
+     * kMaxWindowS 时间上限夹取之后的结果)。
+     */
+    int MinWindowSamples() const noexcept {
+        return min_n_;
+    }
+
+    /// @brief 各 NC bin 实际使用的窗长上限(样本)，同时也是整幅画面的滞后
+    int MaxWindowSamples() const noexcept {
+        return max_n_;
+    }
+
 private:
-    static constexpr float kMaxWindowS = 0.075f;   // 低音窗长上限(秒)
-    static constexpr double kEpsSample = 1e-18;    // 样本级 NC 增益计算保护(平方根内非负)
+    /**
+     * @brief 把一个 bin 的增益按**窗中心绝对时刻**双线性落进环形子列
+     *
+     * 落点 col = (ringSpan_ + 1 − (N−1)/2)/hop：0 = 本次要发射的最旧子列，与
+     * ``WindowlessNcReassignFrame`` 的 kFreq 变体完全同口径（同样的窗长几何、同样的
+     * 子列数、同样的落点公式），所以两帧对同一输入的时间轴逐列一致。
+     * 窗中心 = 最新样本 − (N−1)/2 样本 → 各 bin 的增益都落在它实际代表的时刻上，
+     * 低频不再按 (N−1)/2 滞后出现。
+     *
+     * 相邻两次 Process 对同一 bin 落进同一对子列（col 只由 N 决定、head_ 每帧前进 1），
+     * 权重和为 1 → 发射时得到的正是线性插值后的增益，刻度与修正前一致。
+     *
+     * @param row   输出行（= bin 序号）
+     * @param n     该 bin 的窗长(样本)
+     * @param gain  线性幅度（已含 π 归一化）；≤0 或非有限值不落点
+     */
+    void Splat(int row, int n, float gain) noexcept {
+        if (!(gain > 0.0f))   // 0 / 负数 / NaN 都不落点
+            return;
+        const float mean_delay = 0.5f * static_cast<float>(n - 1);
+        float col = (static_cast<float>(ringSpan_) + 1.0f - mean_delay) / static_cast<float>(hopSize_);
+        col = std::clamp(col, 1.0f, static_cast<float>(ringCols_ - 1));   // 夹取只在退化环长(N_max ≲ hop)下生效
+        int c_idx = static_cast<int>(col);
+        float c_frac = col - static_cast<float>(c_idx);
+        if (c_idx >= ringCols_ - 1) {
+            c_idx = ringCols_ - 1;
+            c_frac = 0.0f;
+        }
+        int slot0 = head_ + c_idx;
+        if (slot0 >= ringCols_)
+            slot0 -= ringCols_;
+        colBuf_[static_cast<size_t>(slot0) * static_cast<size_t>(outputHeight_) + static_cast<size_t>(row)] +=
+            gain * (1.0f - c_frac);
+        if (c_frac > 0.0f) {
+            int slot1 = slot0 + 1;
+            if (slot1 >= ringCols_)
+                slot1 = 0;
+            colBuf_[static_cast<size_t>(slot1) * static_cast<size_t>(outputHeight_) + static_cast<size_t>(row)] +=
+                gain * c_frac;
+        }
+    }
+
+    /// @brief 归约最旧子列（线性幅度 → dB → 上色），然后子列指针前进
+    void EmitColumn() noexcept {
+        const size_t oldest = static_cast<size_t>(head_) * static_cast<size_t>(outputHeight_);
+        for (int y = 0; y < outputHeight_; ++y) {
+            const float gain = colBuf_[oldest + static_cast<size_t>(y)];
+            const float db = (gain > 0.0f) ? 20.0f * std::log10(gain) : dbFloor_;
+            int idx = static_cast<int>((std::clamp(db, dbFloor_, 0.0f) - dbFloor_) / (-dbFloor_) * 255.0f);
+            column_[y] = Colormap::kTable[std::clamp(idx, 0, 255)];
+        }
+        std::fill(colBuf_.begin() + static_cast<std::ptrdiff_t>(oldest),
+                  colBuf_.begin() + static_cast<std::ptrdiff_t>(oldest + static_cast<size_t>(outputHeight_)), 0.0f);
+        head_ = (head_ + 1 == ringCols_) ? 0 : head_ + 1;
+    }
+
+    static constexpr float kMaxWindowS = 0.075f;        // 低音窗长上限(秒)
+    static constexpr float kDefaultMinPeriods = 4.0f;   // 窗长下限(周期数，与重分配帧同口径)
+    static constexpr double kEpsSample = 1e-18;         // 样本级 NC 增益计算保护(平方根内非负)
 
     int sampleRate_{}, fftSize_{}, hopSize_{}, zeroPad_{}, outputHeight_{};
     int ringSize_{};
+    int min_n_{}, max_n_{};                        // 所有 bin 的窗长下限/上限(样本)
     int n_{};                                          // 已处理的样本计数
+    int ringSpan_{}, ringCols_{}, head_{};             // 时间轴子列环：跨窗样本数 / 子列数 / 发射指针
     float freqMin_{}, freqMax_{}, logMin_{}, logMax_{}, dbFloor_{};
     float gainNorm_{};                                 // 幅度归一化系数(乘 π，使纯音峰值 ≈0 dB)
 
     std::vector<Bin> bins_ema_;                       // N<hop 箱：每样本 EMA 抗混叠
     std::vector<Bin> bins_bypass_;                    // N>=hop 箱：旁路(窗长自身带限)
     std::vector<double> ring_;                       // 共享样本环回缓冲(double)
-    std::vector<float> binDb_;                         // 每 bin dB
+    std::vector<float> colBuf_;                        // [ringCols_ · outputHeight_] 子列环形缓冲(线性幅度)
     std::vector<Color> column_;
 };

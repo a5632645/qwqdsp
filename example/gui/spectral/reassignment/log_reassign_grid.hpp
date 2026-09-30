@@ -124,35 +124,34 @@ struct LogReassignGrid {
         int const y1 = (y_frac > 0.0f) ? y0 + 1 : y0;
 
         // ── 时间轴: 环形子列 + 双线性 ──
-        float c_pos = std::clamp(col_pos, 0.0f, static_cast<float>(subColumns_ - 1));
-        int c_idx = static_cast<int>(std::floor(c_pos));
-        float c_frac = c_pos - static_cast<float>(c_idx);
-        if (c_idx >= subColumns_ - 1) {
-            c_idx = subColumns_ - 1;
-            c_frac = 0.0f;
-        }
-        int slot0 = head_ + c_idx;
-        if (slot0 >= subColumns_)
-            slot0 -= subColumns_;
-        int slot1 = slot0 + 1;
-        if (slot1 >= subColumns_)
-            slot1 -= subColumns_;
+        const float c_pos = std::clamp(col_pos, 0.0f, static_cast<float>(subColumns_ - 1));
 
         // 行内硬分配子格; 相邻行沿用同一子格序号 (若按"落在该行内"重算, 该频率根本
         // 不在相邻行的频率范围内, 会把所有越界 bin 都夹到边缘子格、叠出假亮边)
         int subcell = static_cast<int>((inst_freq_hz - row_f_lo_[y0]) / row_cell_w_[y0]);
         subcell = std::clamp(subcell, 0, row_k_[y0] - 1);
 
-        auto splat = [&](int row, int cell, float wy) {
-            float const v = mag * wy;
-            int const base = row_offset_[row] + cell;
-            col_buf_[slot0 * total_cells_ + base] += v * (1.0f - c_frac);
-            if (c_frac > 0.0f)
-                col_buf_[slot1 * total_cells_ + base] += v * c_frac;
-        };
-        splat(y0, subcell, 1.0f - y_frac);
+        SplatTime(row_offset_[y0] + subcell, c_pos, mag * (1.0f - y_frac));
         if (y1 != y0)
-            splat(y1, std::min(subcell, row_k_[y1] - 1), y_frac);
+            SplatTime(row_offset_[y1] + std::min(subcell, row_k_[y1] - 1), c_pos, mag * y_frac);
+    }
+
+    /// @brief 把一个 bin 加到网格的**指定行**（不做频率→行映射），时间仍走环形子列双线性
+    ///
+    /// 给"不做重分配"的 bin 用（见 ``WindowlessNcReassignFrame`` 的重分配截止频率）：
+    /// 频率留在 bin 中心、时间留在窗中心，但仍然借用网格的时间子列，从而与重分配落点
+    /// 共用同一时间基准与环形指针。行内子格按 freq_hz 选，规则与 AddAtColumn 一致。
+    ///
+    /// @param row     目标行（调用者保证 0 ≤ row < outputHeight；本帧每行恰好一个 bin）
+    /// @param freq_hz 该 bin 的中心频率(Hz)，只用于选该行的子格
+    /// @param col_pos 环形子列坐标（含义同 AddAtColumn）
+    void AddAtRowColumn(int row, float freq_hz, float col_pos, float mag) noexcept {
+        if (!std::isfinite(freq_hz) || !std::isfinite(col_pos) || !std::isfinite(mag) || mag <= 0.0f)
+            return;
+        int cell = static_cast<int>((freq_hz - row_f_lo_[row]) / row_cell_w_[row]);
+        cell = std::clamp(cell, 0, row_k_[row] - 1);
+        const float c_pos = std::clamp(col_pos, 0.0f, static_cast<float>(subColumns_ - 1));
+        SplatTime(row_offset_[row] + cell, c_pos, mag);
     }
 
     /// @brief 归约最旧子列(行内取 max) → 标定 → dB → 上色, 然后子列指针前进
@@ -216,6 +215,25 @@ struct LogReassignGrid {
 
 
 private:
+    /// @brief 时间双线性：把 mag 按子列坐标 c_pos 分写到相邻两个子列的同一格 base 上
+    void SplatTime(int base, float c_pos, float mag) noexcept {
+        int c_idx = static_cast<int>(std::floor(c_pos));
+        float c_frac = c_pos - static_cast<float>(c_idx);
+        if (c_idx >= subColumns_ - 1) {
+            c_idx = subColumns_ - 1;
+            c_frac = 0.0f;
+        }
+        int slot0 = head_ + c_idx;
+        if (slot0 >= subColumns_)
+            slot0 -= subColumns_;
+        int slot1 = slot0 + 1;
+        if (slot1 >= subColumns_)
+            slot1 -= subColumns_;
+        col_buf_[slot0 * total_cells_ + base] += mag * (1.0f - c_frac);
+        if (c_frac > 0.0f)
+            col_buf_[slot1 * total_cells_ + base] += mag * c_frac;
+    }
+
     int sampleRate_{}, fftLen_{}, subColumns_{}, outputHeight_{}, binSize_{}, total_cells_{}, head_{};
     float logMin_{}, logMax_{}, dbFloor_{}, cal_{1.0f};
     bool cal_ready_{};

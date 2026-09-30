@@ -495,9 +495,19 @@ CQT 用已安装的 `librosa.cqt`（`bins_per_octave = 31` 使 Q ≈ 44，与显
 ## 与仓库其它部分的关系
 
 - `qwqdsp/example/gui/spectral/reassignment/windowless_nc_frame.hpp`：C++ 侧无窗
-  NC 帧（plain 显示、不重分配）。
+  NC 帧（不重分配：频率留在 bin 中心、时间按**窗中心**落点，与上面的 `plain` 变体
+  同口径——各 bin 窗长不同，增益按其窗中心的绝对时刻落进环形子列，整幅显示滞后
+  `N_max` 样本；未做这一步时低频会按 `(N−1)/2` 滞后于高频出现，delta 探针对拍实测
+  20 Hz 与 2 kHz 的响应重心相差 17 列 ≈ 91 ms，修正后两者一致到 0.6 列以内）。
 - `qwqdsp/example/gui/spectral/reassignment/windowless_nc_reassign_frame.hpp`：**本目录
-  结论的 C++ 落地**——无窗 NC 重分配帧，低频带 `N ≥ 4 周期` 下限。算子、时间参考、环缓冲
+  结论的 C++ 落地**——无窗 NC 重分配帧，低频带 `N ≥ 4 周期` 下限。**重分配只施加在
+  `f_c < 1 kHz` 的 bin**（`reassignMaxHz` 参数，默认 1 kHz）：高频 NC bin 窗短、行宽，
+  自身时频分辨率已经跟得上内容，搬瞬时频率/群延迟只会引入估计噪声，且要走网格的
+  频率→行映射（bin 中心落在行带交界 → 双线性分到相邻两行）而变暗——实测 2/5/10/16 kHz
+  的稳态纯音比不重分配暗 0.9/2.3/4.2/4.8 dB；本目录分带表里 `plain` 在 1–12 kHz 也已
+  0.998（与全程重分配持平），而 20–100 Hz 只有 0.418。截止以上退化为 bin 中心 + 窗中心、
+  直接落自身行，与 `WindowlessNcFrame` 逐像素一致（注意：本目录的 `tf` 是**全程**重分配，
+  所以 1–12 kHz 段的 lab 数字不代表 C++ 现在的口径）。算子、时间参考、环缓冲
   尺寸按本 README 的推导实现；幅度沿用 π 归一化（与 `WindowlessNcFrame` 同刻度），显示
   整体滞后最长窗（4 周期下限下 200 ms）。**已同步本节的锥形 IF + 一阶外推**：`Y = acc_r − acc_l`
   求窗中心瞬时频率，斜率用**因果后向差分**（每 bin 存上一帧 IF，实时拿不到未来帧）——
