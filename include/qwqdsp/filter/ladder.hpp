@@ -12,7 +12,7 @@ public:
     }
 
     float Tick(float x) noexcept {
-        float S = g2_ * s2_ + glp_ * (s3_ + s1_ * glp_) + s4_;
+        float S = g2_ * s2_ + glp_ * (s3_ + s1_ * g2_) + s4_;
         S /= (1 + g_);
         float u = (x - k_ * S) / (1 + k_ * g4_);
         float y = TickLpTPT(u, s1_, glp_);
@@ -32,7 +32,7 @@ public:
         };
         Output r;
 
-        float S = g2_ * s2_ + glp_ * (s3_ + s1_ * glp_) + s4_;
+        float S = g2_ * s2_ + glp_ * (s3_ + s1_ * g2_) + s4_;
         S /= (1 + g_);
         r.hp = (x - k_ * S) / (1 + k_ * g4_);
         r.lp1 = TickLpTPT(r.hp, s1_, glp_);
