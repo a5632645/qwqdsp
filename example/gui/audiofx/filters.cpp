@@ -9,11 +9,11 @@
 #include "slider.hpp"
 
 #include "qwqdsp/convert.hpp"
-#include "qwqdsp/filter/ladder.hpp"
-#include "qwqdsp/filter/ladder_8pole.hpp"
-#include "qwqdsp/filter/ota_one_pole.hpp"
-#include "qwqdsp/filter/svf_tpt.hpp"
-#include "qwqdsp/filter/transpose_sallen_key.hpp"
+#include "qwqdsp/filter/tpt/ladder.hpp"
+#include "qwqdsp/filter/tpt/ladder_8pole.hpp"
+#include "qwqdsp/filter/tpt/ota_one_pole.hpp"
+#include "qwqdsp/filter/tpt/svf_tpt.hpp"
+#include "qwqdsp/filter/tpt/transpose_sallen_key.hpp"
 #include "qwqdsp/oscillator/polyblep.hpp"
 
 static constexpr int kWidth = 620;

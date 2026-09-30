@@ -9,7 +9,7 @@
 #include "raylib.h"
 #include "slider.hpp"
 
-#include <qwqdsp/filter/one_pole_tpt.hpp>
+#include <qwqdsp/filter/tpt/one_pole_tpt.hpp>
 #include <qwqdsp/fx/delay_line.hpp>
 
 static constexpr int kWindowWidth = 480;
