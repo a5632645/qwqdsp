@@ -84,7 +84,7 @@ public:
         };
         Output r;
 
-        float S = g2_ * s2_ + glp_ * (s3_ + s1_ * glp_) + s4_;
+        float S = g2_ * s2_ + glp_ * (s3_ + s1_ * g2_) + s4_;
         S /= (1 + g_);
         r.hp = (x - k_ * S) / (1 + k_ * g4_);
         r.lp1 = Nonlinear(TickLpTPT(r.hp, s1_, glp_));
@@ -272,7 +272,7 @@ static float Nonlinear(float x) noexcept {
         case NonlinearType::ArcTan:
             return std::atan(y);
         case NonlinearType::Cubic:
-            return y - y * y * y / 3.0f;
+            return std::clamp(y - y * y * y / 3.0f, -1.0f, 1.0f);
         default:
             return y;
     }
