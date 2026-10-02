@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-run.py
-======
+odd_order.py
+============
 
-把数字 IIR 低通滤波器 H(z)=B(z)/A(z) 分解为「两条全通链之和」的探索脚本：
+**奇数阶**数字 IIR 低通滤波器 H(z)=B(z)/A(z) 分解为「两条全通链之和」的验证脚本：
 
     H = (A0 + A1)/2        （低通）
     Hc= (A0 - A1)/2        （功率互补高通，|H|^2 + |Hc|^2 = 1）
@@ -17,11 +17,13 @@ run.py
 5. 画 6 张图：幅频对比、z 平面极点分配、两链相位、极点模长交替规则、
    冲激响应对比、LP/HP 互补幅频。
 
+本脚本只处理**奇数阶**；偶数阶的分解研究见同目录 `even_order.py`。
+
 用法
 ----
-    python run.py                       # 默认 ellip 7 阶, cutoff=0.3, rp=2, rs=40
-    python run.py --kind butter --order 7 --cutoff 0.3
-    python run.py --check               # 跑一遍四族 × 多阶数的批量校验表
+    python odd_order.py                 # 默认 ellip 7 阶, cutoff=0.3, rp=2, rs=40
+    python odd_order.py --kind butter --order 7 --cutoff 0.3
+    python odd_order.py --check         # 跑一遍四族 × 多阶数的批量校验表
 """
 from __future__ import annotations
 
