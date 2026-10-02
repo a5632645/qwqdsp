@@ -109,7 +109,10 @@ $$B_c^2(z) = B^2(z) - A(z) A^\#(z)$$
    - 共轭对作为一个二阶节点单位，实极点作为一个一阶节点单位；
    - 按模长 $|p|$ 升序排序，第 0, 2, 4... 项归链 0，第 1, 3, 5... 项归链 1；
    - 6020 个用例全部完全吻合，机器精度级复原（残差 $\sim 10^{-13}$）。
-2. **文献中“角度交替”的真实含义**：文献指的其实是**连续时间模拟原型域（$s$ 平面）中的极点角**，经双线性逆变换映回模拟域后，按 $\arg(s)$ 排序与数字域按 $|p|$ 排序在代数上完全等价。
+2. **文献中“角度交替”的真实含义**：文献里有两种写法。
+   - **Vaidyanathan, _Multirate Systems and Filter Banks_, 1993, §3.6**（可在 CaltechAUTHORS 开放获取）把这个性质称为 *pole interlace property*，原文写的是 **$z$ 平面极点角** $\theta$（"the poles … with pole angles θ0, θ1, …; θ0<θ1<…"），并引用 **Gazsi 1985**。按字面用数字域 $\arg(p)$ 排序，在 butter/cheby1/ellip 常规规格下成立，但 **cheby2 整族失败**、极限规格下 ellip 也会失败（实测见下）。
+   - **Gazsi, "Explicit Formulas for Lattice Wave Digital Filters", IEEE TCS-32(1):68–88, 1985, §2.2「Alternating Distribution of Poles Among the Lattice Branches」** 是原始出处，**原文已核对**（论文无合法开放版本，文字取自用户复制的 Scribd 页面文本层）："the zeros of g₁(ψ) and g₂(ψ) will lie in **alternating order in the left half-plane** of the complex frequency"，且明确说该性质对 **inverse Chebyshev**、Chebyshev、Butterworth 同样成立。ψ 与 `s` 只差正实因子（ψ=(z−1)/(z+1)），故这就是按 `arg(s)` 交替。
+   - 于是：把数字极点经双线性逆变换映回模拟域后按 $\arg(s)$ 排序，与数字域按 $|p|$ 排序在实测范围内**完全等价**（`arg_s_plane.py`/`arg_s_stress.py`，0/6020）。
 
 ### 3.3 最佳落地方式：跳过多项式，直取设计原型
 在 C++ 工程落地中（见 `qwqdsp/include/qwqdsp/filter/parallel_allpass.hpp`）：

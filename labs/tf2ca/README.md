@@ -18,9 +18,9 @@ Hc(z) = 1/2 * ( A0(z) - A1(z) )        HP（功率互补：|H|^2 + |Hc|^2 = 1）
 - **极点分组规则**（四族经典设计的工程规则）：把 `A` 的所有极点按**模长 |p| 升序**排列
   （1 个实极点 + `(n-1)/2` 个共轭对），**逐个节点交替**分到两条链。
   实极点所在链的阶数为奇数。
-- **按"角度"交替要看是哪个角度**：**数字域** `arg(p)` 对 `cheby2` 有反例（见下文）；
-  但把极点映回 **s 平面**后按 `arg(s)` 交替，在测试范围内与模长规则完全等价
-  （**仅为数值测试支持的猜想，没有文献证据**，见下文「猜想」一节）。
+- **按"角度"交替要看是哪个角度**：原始出处 Gazsi 1985 §2.2 说的是 **ψ 平面（= `arg(s)`）左半平面
+  根交替**（原文已核对，覆盖 inverse Chebyshev）；Vaidyanathan 1993 §3.6 把它重述成 **z 平面**极点角，
+  那个读法对 `cheby2` 整族失败。实测：`arg(s)` 与按 `|p|` 升序在 6020 例里完全等价，工程上用后者。
 - **统一规则是模长 |p|**：按 |p| 升序交替对四族经典设计统一成立。
 - **通用精确判据**：`D0 = A / gcd(A, B+B_c)`、`D1 = A / gcd(A, B-B_c)`，
   其中 `B_c = sqrt(B^2 - A*A^#)` 是**反镜像**分子（见下文推导）。四族经典设计与
@@ -142,6 +142,55 @@ c[k] = ( R[k] - Σ_{i=1}^{k-1} c[i]*c[k-i] ) / (2*c[0])
 所以 Lyons 文中「pole interlacing property（按角度交错）」**在数字域角度下**只对部分情形成立；
 统一规则是模长。（s 平面角另见下节。）
 
+### 文献核对：Vaidyanathan 1993 与 Gazsi 1985
+
+**P. P. Vaidyanathan, *Multirate Systems and Filter Banks*, Prentice Hall 1993,
+§3.6「IIR Filters Based on Two Allpass Filters」(pp. 88–89)** —— 原文可在
+[CaltechAUTHORS 开放获取](https://authors.library.caltech.edu/records/rmhds-22q28)（分章 PDF）核对：
+
+> Given an odd order elliptic transfer function H0(z) = P0(z)/D(z), what is the procedure to
+> identify the allpass functions A0(z) and A1(z)? … Let the poles of H0(z) be z0, z1, …, with
+> **pole angles** θ0, θ1, …. Let the numbering of poles be such that θ0 < θ1 < …. Then the poles
+> of A0(z) are given by z_{2k} and those of A1(z) by z_{2k+1}. **This is called the pole interlace
+> property [Gazsi, 1985].**
+
+注意：书上写的是 **z 平面（数字域）的极点角 θ**，不是 s 平面；性质本身归给 Gazsi 1985。
+
+**L. Gazsi, "Explicit Formulas for Lattice Wave Digital Filters", IEEE Trans. Circuits and Systems,
+vol. 32, no. 1, pp. 68–88, Jan. 1985, DOI 10.1109/TCS.1985.1085595** —— 原始出处。该论文
+**没有合法的开放版本**（OpenAlex：`is_oa: false`、`oa_status: "closed"`、任何仓库都无全文），
+下面文字取自**用户复制的 Scribd 页面文本层**（第三方上传，扫描件 OCR 有瑕疵；符号 ψ 在文本层里
+常被识别成 `4`/`$`/`#`，已按上下文还原）：
+
+> §2.2 标题：**Alternating Distribution of Poles Among the Lattice Branches**
+>
+> The reference filter is designed in the **ψ-domain**, i.e., the complex frequency variable ψ is used
+> instead of the usual variable p. The relation between ψ and p is given by ψ = tanh(pT/2).
+>
+> … Finally, solving (11) and selecting the roots of the left half-plane we have the zeros of
+> g₁(ψ)g₂(ψ) occur at [15], for l = 1, 2, …, N (20). Comparing (18) and (19) to (20) we can conclude
+> that for l odd and even, (20) gives the same values as (18) and (19), respectively, i.e., **the zeros
+> of g₁(ψ) and g₂(ψ) will lie in alternating order in the left half-plane of the complex frequency**
+> (see Fig. 2). Since the **inverse Chebyshev**, the Chebyshev, and also the Butterworth case can be
+> derived as limiting cases of elliptic function prototype filters [17], it is clear that **this
+> alternating property remains true also for these filters**.
+
+要点：交替性是在 **ψ 平面（= 双线性变换后、数字域之前的"参考滤波器"复频率）** 上陈述的，
+且明确覆盖 **inverse Chebyshev（cheby2）**。而 ψ 与本目录脚本的 `s` 只差一个**正实**因子
+（ψ = (z−1)/(z+1)，`s = 2·fs·ψ`），角度完全相同 —— 所以 **Gazsi 说的就是"按 `arg(s)` 交替"**。
+
+**与实测对照**（脚本 `arg_s_plane.py` / `arg_s_stress.py`）：
+
+| 读法 | 实测适用范围 |
+|---|---|
+| **s 平面角** `arg(s)`（≡ 按 `\|p\|` 升序） | 四族 × 奇数阶 3…71 × cutoff 1e-4…0.499999 —— **0/6020 例失败** |
+| **z 平面角** `arg(p)`（Vaidyanathan 的字面读法） | butter / cheby1 / ellip 常规规格成立；**cheby2 整族失败**（A 组 105/1080），极限规格下 ellip 也会失败 |
+| `arg(p-1)`（丢掉 `arg(p+1)` 的残缺写法） | cheby1 高截止、ellip 部分规格失败（245/2700） |
+
+即文献两种写法都真实存在：z 平面写法在作者举例的族（奇数阶 elliptic / Butterworth /
+Chebyshev **I**）与常规规格下成立，但**不覆盖 inverse Chebyshev（cheby2）**，极端规格下先崩；
+s 平面写法（= 模长规则）在测过的所有例子里都成立。
+
 ### 猜想：文献里的"角度"可能指 s 平面上的极点角
 
 把数字极点经**双线性反变换**映回 s 平面（`s = 2*fs*(p-1)/(p+1)`，本目录取 `fs = 2`），
@@ -160,8 +209,10 @@ c[k] = ( R[k] - Σ_{i=1}^{k-1} c[i]*c[k-i] ) / (2*c[0])
 失败 245/2700；两者失效区互不重叠，都是 O(1) 残差量级，而 `arg(s)` 在排序间隔小到 1.3e-9 度的
 用例里依然正确。这说明「按角度交替」的正确读法很可能是 **s 平面角**，而 `|p|` 规则是它的等价形式。
 
-> ⚠️ **这只是数值测试支持的猜想**：我们**没有检索或核对文献原文**，"文献里说的按角度交替 =
-> s 平面极点角"这一步**没有文献证据**。若要写进正式说明，需要先找到原文出处并逐字确认。
+> ☑ **"文献里的角度 = s 平面极点角"现已落实为已核对的文献陈述**：Gazsi 1985 §2.2 明确写
+> "zeros of g₁(ψ) and g₂(ψ) … alternating order in the **left half-plane**"（ψ 平面，覆盖
+> inverse Chebyshev）；Vaidyanathan 1993 §3.6 则是同一性质在 **z 平面**的重述（`θ₀<θ₁<…`，
+> 引用 Gazsi），后者对 cheby2 整族失败。工程实现用 **`|p|`（≡ `arg(s)`）升序交替**。
 
 ### 复测：`arg(p)` 交替在 `cheby2` 上确实失败（2026-10-03 重跑）
 

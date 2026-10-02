@@ -11,6 +11,12 @@ arg_s_plane.py
 这正是双线性变换下真正的"设计角"：它与模拟原型极点的角度只差一个**正实**比例
 （``lp2lp`` 的频率缩放不改变角度），所以排序与设计序号一致。
 
+文献（已核对）：Gazsi 1985（IEEE TCS-32(1):68-88）§2.2「Alternating Distribution of Poles Among
+the Lattice Branches」明确写 "the zeros of g1(psi) and g2(psi) will lie in alternating order in the
+left half-plane"，且覆盖 inverse Chebyshev；Vaidyanathan《Multirate Systems and Filter Banks》§3.6
+则把同一性质重述为 **z 平面**极点角（那条读法对 cheby2 整族失败）。本脚本实现 s 平面读法，
+实测与"按 |p| 升序"完全等价（0/6020）。
+
 数值路径**全程不碰多项式**：
 
 - 极点：``iirfilter(..., output="zpk")`` 直接给；
