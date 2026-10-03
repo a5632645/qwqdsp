@@ -381,9 +381,11 @@ public:
 
         std::array<ZPK, kMaxPrototypePairs> scratch{};
         double const scale = std::sqrt(k_ref);
+        // 这里只用原型的极点(当 shelf 的零点/极点用), 基线是未修正的偶数阶椭圆,
+        // 所以不做偶数阶修正 —— 修正会搬动极点, 破坏下面注释里实测过的偏差量级
         // 零点: "特征 e_num"的椭圆原型极点
         if (!IIRDesign::Elliptic(
-                std::span{scratch}.first(num_filter), num_filter, DbOfEps(e_num), DbOfEps(e_num / m1))) {
+                std::span{scratch}.first(num_filter), num_filter, DbOfEps(e_num), DbOfEps(e_num / m1), false)) {
             return false;
         }
         for (size_t i = 0; i < num_filter; ++i) {
@@ -391,7 +393,7 @@ public:
         }
         // 极点: "特征 e_den"的椭圆原型极点
         if (!IIRDesign::Elliptic(
-                std::span{scratch}.first(num_filter), num_filter, DbOfEps(e_den), DbOfEps(e_den / m1))) {
+                std::span{scratch}.first(num_filter), num_filter, DbOfEps(e_den), DbOfEps(e_den / m1), false)) {
             return false;
         }
         for (size_t i = 0; i < num_filter; ++i) {

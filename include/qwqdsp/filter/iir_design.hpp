@@ -552,7 +552,53 @@ struct IIRDesign {
         }
     };
 
-    // qwqfixme 偶数极点零点修改
+    /**
+     * @brief 椭圆原型的偶数阶修正(就地修改)
+     *
+     * 偶数阶椭圆原型以 -db_passband 为直流电平、以 -db_stopband 为 w->inf 电平,
+     * 于是它既不是直流归一的、也不是严格真的(部分分式展开带常数项)。
+     * 本函数用 w^2 上唯一的 Mobius 变换
+     *
+     *     s'^2 = (1 - k^2 snL^2)(s^2 + snL^2) / (cnL^2 (1 + k^2 snL^2 s^2))
+     *
+     * 把最低反射零点 snL 映到 0、把最高传输零点 1/(k*snL) 映到无穷远, 并固定 w = 1,
+     * 两端等波纹深度不变(snL = sn(K/N), cnL = sqrt(1 - snL^2))。
+     * 代价: 少了一个传输零点, 阻带边沿略微外移。
+     *
+     * @param ret 零极点节, 就地修改(最后一节的零点被置为无穷远)
+     * @param num_filter 极点对数
+     * @param k 椭圆模数(第一模数)
+     * @param sn_lowest 最低反射零点(取自未修正的原型 sn(K/N))
+     * @note 修正后每节 k = |p|^2/|z|^2(无零点节 k = |p|^2), 直流增益为 1
+     * @ref https://en.wikipedia.org/wiki/Elliptic_filter#Even_order_modifications
+     */
+    static void EllipticEvenOrderModify(std::span<ZPK> ret, size_t num_filter, double k, double sn_lowest) {
+        assert(ret.size() >= num_filter);
+
+        double const a = sn_lowest * sn_lowest;
+        double const k2a = k * k * a;
+        // sqrt 的两个根 |H| 相同, 于是分支只影响极点/零点落在哪一半平面
+        auto const root = [&](std::complex<double> s, bool keep_imag_sign) {
+            auto const s2 = s * s;
+            auto const v = std::sqrt((1.0 - k2a) * (s2 + a) / ((1.0 - a) * (1.0 + k2a * s2)));
+            if (keep_imag_sign) {
+                return v.imag() * s.imag() >= 0.0 ? v : -v;
+            }
+            return v.real() < 0.0 ? v : -v;
+        };
+        for (size_t i = 0; i < num_filter; ++i) {
+            auto& s = ret[i];
+            s.p = root(s.p, false);
+            if (i + 1 == num_filter) {
+                s.z = std::nullopt; // 最高传输零点 -> 无穷远
+            }
+            else {
+                s.z = root(*s.z, true);
+            }
+            s.k = s.z ? std::norm(s.p) / std::norm(*s.z) : std::norm(s.p);
+        }
+    }
+
     /**
      * @brief 椭圆(考尔)原型, 通带与阻带都等波纹
      *
@@ -568,14 +614,25 @@ struct IIRDesign {
      * @param num_filter 极点对数, 阶数 = 2 * num_filter
      * @param db_passband 通带纹波(dB, >0), 通带边沿电平
      * @param db_stopband 阻带衰减(dB, >0), 需要大于 db_passband
+     * @param even_order_modify 偶数阶修正: 把最低反射零点搬到直流、最高传输零点搬到
+     *        无穷远, 使直流增益为 0dB(不再是 -db_passband)、且高频端严格衰减到 0
      * @return 成功返回 true
      * @retval false db_stopband <= db_passband, 或该规格要求的模数在 double 下就是 1
      *         (规格过陡, 阻带边沿与通带边沿重合; 例如 order=16, 通带 6dB, 阻带 10dB)
-     * @note 零点在虚轴上(有限频率)
+     * @note 零点在虚轴上(有限频率); 修正后最后一节的零点在无穷远
+     * @note 偶数阶(本类的阶数恒为偶数)椭圆滤波器的直流在高频端的镜像位置: 直流电平
+     *       落在纹波谷(-db_passband dB), 而 w->inf 的电平落在纹波峰(-db_stopband dB),
+     *       于是部分分式展开必然带常数项(直接项)。修正用 w^2 上唯一的 Mobius 变换
+     *         s'^2 = (1 - k^2 snL^2)(s^2 + snL^2) / (cnL^2 (1 + k^2 snL^2 s^2))
+     *       (snL = sn(K/N) 即最低反射零点, 对偶地 1/(k*snL) 是最高传输零点)把
+     *       最低反射零点映到 0、最高传输零点映到无穷远、并固定 w = 1, 两端等波纹
+     *       深度不变; 代价是阻带边沿略微外移(少了一个传输零点)。
+     * @ref https://en.wikipedia.org/wiki/Elliptic_filter#Even_order_modifications
      * @ref Gray & Markel, "A Computer Program for Designing Digital Elliptic Filters",
      *      IEEE Trans. ASSP, Dec. 1976; 以及 cephes 的 ellf.c
      */
-    [[nodiscard]] static bool Elliptic(std::span<ZPK> ret, size_t num_filter, double db_passband, double db_stopband) {
+    [[nodiscard]] static bool Elliptic(std::span<ZPK> ret, size_t num_filter, double db_passband, double db_stopband,
+                                       bool even_order_modify) {
         assert(ret.size() >= num_filter);
 
         double const eps_passband = std::sqrt(std::pow(10.0, db_passband / 10.0) - 1.0);
@@ -604,6 +661,7 @@ struct IIRDesign {
         double dn1 = 0.0;
         EllipticHelperCephes::Ellpj(u, 1.0 - m, sn1, cn1, dn1);
 
+        double sn_last = 0.0;
         for (size_t i = 0; i < num_filter; ++i) {
             auto& s = ret[i];
             double const arg = static_cast<double>(N - 1 - 2 * static_cast<int>(i)) * Kk / static_cast<double>(N);
@@ -618,8 +676,16 @@ struct IIRDesign {
             double const den = cn1 * cn1 + r * r;
             s.p = std::complex{-cn * dn * sn1 * cn1 / den, sn * dn1 / den};
             s.k = std::norm(s.p) / std::norm(*s.z);
+            if (i + 1 == num_filter) {
+                sn_last = sn; // arg = K/N, 即最低反射零点
+            }
         }
-        ret[0].k /= std::sqrt(1.0 + eps_passband * eps_passband);
+        if (even_order_modify) {
+            EllipticEvenOrderModify(ret, num_filter, k, sn_last);
+        }
+        else {
+            ret[0].k /= std::sqrt(1.0 + eps_passband * eps_passband);
+        }
         return true;
     }
 
@@ -633,6 +699,7 @@ struct IIRDesign {
      * @param num_filter 极点对数, 阶数 = 2 * num_filter
      * @param db_passband 通带纹波(dB, >0), 通带边沿电平
      * @param db_stopband 阻带衰减(dB, >0), 需要大于 db_passband
+     * @param even_order_modify 偶数阶修正, 与 @ref Elliptic 同义
      * @return 成功返回 true
      * @retval false 参数非法, 或求出的互补模数不在 (0, 1)(此时继续做 Landen 下降
      *         会死循环, 所以直接返回失败)
@@ -641,7 +708,7 @@ struct IIRDesign {
      * @note 供对照/兼容使用, 新代码建议直接用 Elliptic
      */
     [[nodiscard]] static bool EllipticLanden(std::span<ZPK> ret, size_t num_filter, double db_passband,
-                                             double db_stopband) {
+                                             double db_stopband, bool even_order_modify) {
         assert(ret.size() >= num_filter);
 
         double const eps_passband = std::sqrt(std::pow(10.0, db_passband / 10.0) - 1.0);
@@ -684,6 +751,7 @@ struct IIRDesign {
         // 若再除一次 K(k1) 会让极点整体偏移, 通带纹波变成向上凸
         auto const v0 =
             std::complex{0.0, -1.0} * helper1.ArcSn(std::complex{0.0, 1.0} / eps_passband) / static_cast<double>(N);
+        double sn_last = 0.0;
         for (size_t i = 0; i < num_filter; ++i) {
             auto& s = ret[i];
             auto ui = (2.0 * static_cast<double>(i + 1) - 1.0) / static_cast<double>(N);
@@ -693,8 +761,14 @@ struct IIRDesign {
             // pole
             s.p = std::complex{0.0, 1.0} * helper.Cd(ui - v0 * std::complex{0.0, 1.0});
             s.k = std::norm(s.p) / std::norm(*s.z);
+            sn_last = std::abs(epsi); // 逐次覆盖: 最后一段的 |Cd| 最小
         }
-        ret[0].k /= std::sqrt(1.0 + eps_passband * eps_passband);
+        if (even_order_modify) {
+            EllipticEvenOrderModify(ret, num_filter, k, sn_last);
+        }
+        else {
+            ret[0].k /= std::sqrt(1.0 + eps_passband * eps_passband);
+        }
         return true;
     }
 

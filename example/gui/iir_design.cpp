@@ -318,7 +318,8 @@ static bool usesEvenModify(Prototype prototype) noexcept {
     return prototype == Prototype::Chebyshev1
         || prototype == Prototype::Chebyshev2
         || prototype == Prototype::ExtraChebyshev1
-        || prototype == Prototype::ExtraChebyshev2;
+        || prototype == Prototype::ExtraChebyshev2
+        || prototype == Prototype::Elliptic;
 }
 
 /**
@@ -442,7 +443,8 @@ static FilterDesign makeDesign(DesignParams const& params) {
             break;
         case Prototype::Elliptic:
             // 规格过陡时(阻带边沿与通带边沿重合)会返回 false, 此时不该继续算曲线
-            prototype_ok = IIRDesign::Elliptic(proto, num_pairs, params.passband_ripple_db, params.stopband_atten_db);
+            prototype_ok = IIRDesign::Elliptic(
+                proto, num_pairs, params.passband_ripple_db, params.stopband_atten_db, params.even_modify);
             break;
         case Prototype::ButterworthAtten:
             // 这个原型的 atten 是截止频率处的幅度
