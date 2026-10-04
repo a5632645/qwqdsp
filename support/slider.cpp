@@ -33,12 +33,13 @@ void Knob::display() {
         m_counter += static_cast<int>(deltaY);
         auto const valueInc = m_counter / m_sensitivity;
         m_counter %= m_sensitivity;
-        m_value += valueInc * m_step * scale;
+        auto new_value = m_value + valueInc * m_step * scale;
         m_lastMousePosition = mousePosition;
-        auto newValue = std::clamp(m_value, m_min, m_max);
-        m_value = newValue;
-
-        on_value_change(m_value);
+        new_value = std::clamp(new_value, m_min, m_max);
+        if (m_value != new_value) {
+            m_value = new_value;
+            on_value_change(m_value);
+        }
     }
     else if (isNowDown && !m_isPressed) {
         if (s_currentKnob == nullptr) {
