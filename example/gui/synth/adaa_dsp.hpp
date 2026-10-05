@@ -1387,14 +1387,13 @@ static constexpr std::array<float, 4> kOvsIirChain1 = {
 /**
  * 低速率一阶全通链（ζ⁻¹ = z⁻²）。
  *
- * `rotated` 表示 A(−ζ)（解析/单边路径）：节 H(ζ⁻¹) = (ζ⁻¹ + a)/(1 + a·ζ⁻¹)，
+ * `kRotated` 表示 A(−ζ)（解析/单边路径）：节 H(ζ⁻¹) = (ζ⁻¹ + a)/(1 + a·ζ⁻¹)，
  * ζ → −ζ 后奇次项取负，等价递推 out = a·in − s（未旋转为 out = a·in + s）。
  */
-template <int N>
+template <int N, bool kRotated>
 struct AllpassChain {
-    void Init(const std::array<float, N>& a, bool rotated) noexcept {
+    void Init(const std::array<float, N>& a) noexcept {
         a_ = a;
-        rotated_ = rotated;
         s_.fill(0.0f);
     }
 
@@ -1406,7 +1405,7 @@ struct AllpassChain {
             const float a = a_[static_cast<size_t>(i)];
             const float s = s_[static_cast<size_t>(i)];
             float in;
-            if (rotated_) {
+            if constexpr (kRotated) {
                 in = y + a * s;
                 y = a * in - s;
             }
@@ -1422,7 +1421,6 @@ struct AllpassChain {
 private:
     std::array<float, N> a_{};
     std::array<float, N> s_{};
-    bool rotated_{};
 };
 
 /**
@@ -1436,22 +1434,22 @@ private:
 class AnalyticOvsIir {
 public:
     AnalyticOvsIir() noexcept {
-        up0_a0_.Init(kOvsIirChain0, false);
-        up0_a1_.Init(kOvsIirChain1, false);
-        up1_a0_.Init(kOvsIirChain0, false);
-        up1_a1_.Init(kOvsIirChain1, false);
-        up2_a0_.Init(kOvsIirChain0, false);
-        up2_a1_.Init(kOvsIirChain1, false);
-        an_ve_re_.Init(kOvsIirChain0, true);
-        an_vo_re_.Init(kOvsIirChain0, true);
-        an_ve_im_.Init(kOvsIirChain1, true);
-        an_vo_im_.Init(kOvsIirChain1, true);
-        dec0_a0_.Init(kOvsIirChain0, false);
-        dec0_a1_.Init(kOvsIirChain1, false);
-        dec1_a0_.Init(kOvsIirChain0, false);
-        dec1_a1_.Init(kOvsIirChain1, false);
-        dec2_a0_.Init(kOvsIirChain0, false);
-        dec2_a1_.Init(kOvsIirChain1, false);
+        up0_a0_.Init(kOvsIirChain0);
+        up0_a1_.Init(kOvsIirChain1);
+        up1_a0_.Init(kOvsIirChain0);
+        up1_a1_.Init(kOvsIirChain1);
+        up2_a0_.Init(kOvsIirChain0);
+        up2_a1_.Init(kOvsIirChain1);
+        an_ve_re_.Init(kOvsIirChain0);
+        an_vo_re_.Init(kOvsIirChain0);
+        an_ve_im_.Init(kOvsIirChain1);
+        an_vo_im_.Init(kOvsIirChain1);
+        dec0_a0_.Init(kOvsIirChain0);
+        dec0_a1_.Init(kOvsIirChain1);
+        dec1_a0_.Init(kOvsIirChain0);
+        dec1_a1_.Init(kOvsIirChain1);
+        dec2_a0_.Init(kOvsIirChain0);
+        dec2_a1_.Init(kOvsIirChain1);
     }
 
     void Reset() noexcept {
@@ -1549,22 +1547,22 @@ private:
         return re + d_ * z2.real() + d2_ * z3.real();
     }
 
-    AllpassChain<5> up0_a0_;
-    AllpassChain<4> up0_a1_;
-    AllpassChain<5> up1_a0_;
-    AllpassChain<4> up1_a1_;
-    AllpassChain<5> up2_a0_;
-    AllpassChain<4> up2_a1_;
-    AllpassChain<5> an_ve_re_;
-    AllpassChain<5> an_vo_re_;
-    AllpassChain<4> an_ve_im_;
-    AllpassChain<4> an_vo_im_;
-    AllpassChain<5> dec0_a0_;
-    AllpassChain<4> dec0_a1_;
-    AllpassChain<5> dec1_a0_;
-    AllpassChain<4> dec1_a1_;
-    AllpassChain<5> dec2_a0_;
-    AllpassChain<4> dec2_a1_;
+    AllpassChain<5, false> up0_a0_;
+    AllpassChain<4, false> up0_a1_;
+    AllpassChain<5, false> up1_a0_;
+    AllpassChain<4, false> up1_a1_;
+    AllpassChain<5, false> up2_a0_;
+    AllpassChain<4, false> up2_a1_;
+    AllpassChain<5, true> an_ve_re_;
+    AllpassChain<5, true> an_vo_re_;
+    AllpassChain<4, true> an_ve_im_;
+    AllpassChain<4, true> an_vo_im_;
+    AllpassChain<5, false> dec0_a0_;
+    AllpassChain<4, false> dec0_a1_;
+    AllpassChain<5, false> dec1_a0_;
+    AllpassChain<4, false> dec1_a1_;
+    AllpassChain<5, false> dec2_a0_;
+    AllpassChain<4, false> dec2_a1_;
     float d_{1.0f};
     float d2_{1.0f};
     bool poly_{true};

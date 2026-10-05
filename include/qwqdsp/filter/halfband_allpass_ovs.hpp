@@ -38,16 +38,16 @@ namespace detail {
  * @brief 低速率一阶全通链（延迟 z^-2 = ζ^-1）
  * @tparam T 采样类型
  * @tparam N 节数
+ * @tparam kRotated true 表示 A(−ζ)（解析/单边路径）
  *
- * `rotated` 表示 A(−ζ)（解析/单边路径）：节 H = (ζ^-1 + a)/(1 + a·ζ^-1)，ζ → −ζ 后等价递推
- * `out = a·in − s`（未旋转为 `out = a·in + s`）。两式都对应同一个 `in = y ∓ a·s`。
+ * 节 H = (ζ^-1 + a)/(1 + a·ζ^-1)；ζ → −ζ 后等价递推 `out = a·in − s`
+ * （未旋转为 `out = a·in + s`）。两式都对应同一个 `in = y ∓ a·s`。
  */
-template <class T, std::size_t N>
+template <class T, std::size_t N, bool kRotated>
 class ZetaAllpassChain {
 public:
-    void Init(const std::array<T, N>& a, bool rotated) noexcept {
+    void Init(const std::array<T, N>& a) noexcept {
         a_ = a;
-        rotated_ = rotated;
         s_.fill(T{});
     }
 
@@ -58,7 +58,7 @@ public:
         for (std::size_t i = 0; i < N; ++i) {
             const T a = a_[i];
             const T s = s_[i];
-            if (rotated_) {
+            if constexpr (kRotated) {
                 const T in = y + a * s;
                 y = a * in - s;
                 s_[i] = in;
@@ -75,20 +75,26 @@ public:
 private:
     std::array<T, N> a_{};
     std::array<T, N> s_{};
-    bool rotated_{};
 };
 
 /// 一级 2× 的公共部件：两条链 + 「偶相位取 A0、奇相位取 A1」
-template <class T>
+/// @tparam kRotated 解析（单边）路径取 true，即用 A(−ζ)
+template <class T, bool kRotated>
 class HalfbandStage {
 public:
+    /// 初始化两条链（系数来自椭圆半带 N=19 / 阻带 100 dB）
+    void Init() noexcept {
+        a0_.Init(kHalfbandN19Chain0);
+        a1_.Init(kHalfbandN19Chain1);
+    }
+
     void Reset() noexcept {
         a0_.Reset();
         a1_.Reset();
     }
 
     /// 一个输入样本 → 两个输出样本（上采样用）
-    void Tick2(T x, T* out) noexcept {
+    void Tick2(T x, std::span<T, 2> out) noexcept {
         out[0] = a0_.Tick(x);
         out[1] = a1_.Tick(x);
     }
@@ -97,15 +103,9 @@ public:
     [[nodiscard]] T TickA0(T x) noexcept { return a0_.Tick(x); }
     [[nodiscard]] T TickA1(T x) noexcept { return a1_.Tick(x); }
 
-    /// 初始化两条链（rotated = 解析路径的 A(−ζ)）
-    void Init(bool rotated) noexcept {
-        a0_.Init(kHalfbandN19Chain0, rotated);
-        a1_.Init(kHalfbandN19Chain1, rotated);
-    }
-
 private:
-    ZetaAllpassChain<T, kHalfbandChain0Len> a0_{};
-    ZetaAllpassChain<T, kHalfbandChain1Len> a1_{};
+    ZetaAllpassChain<T, kHalfbandChain0Len, kRotated> a0_{};
+    ZetaAllpassChain<T, kHalfbandChain1Len, kRotated> a1_{};
 };
 } // namespace detail
 
@@ -123,7 +123,7 @@ public:
 
     HalfbandAllpassUpsampler() noexcept {
         for (auto& s : stages_) {
-            s.Init(false);
+            s.Init();
         }
     }
 
@@ -166,7 +166,7 @@ private:
     /// 展开用的临时缓冲（最大 2^K 个）
     std::array<T, kFactor> ping_{};
     std::array<T, kFactor> pong_{};
-    std::array<detail::HalfbandStage<T>, K> stages_{};
+    std::array<detail::HalfbandStage<T, false>, K> stages_{};
 };
 
 /**
@@ -185,12 +185,12 @@ public:
 
     HalfbandAllpassAnalyticUpsampler() noexcept {
         for (auto& s : stages_) {
-            s.Init(false);
+            s.Init();
         }
-        ve_re_.Init(kHalfbandN19Chain0, true); ///< 偶相位 → 解析信号实部
-        vo_re_.Init(kHalfbandN19Chain0, true); ///< 奇相位 → 实部（上一拍）
-        ve_im_.Init(kHalfbandN19Chain1, true); ///< 偶相位 → 虚部（下一拍用）
-        vo_im_.Init(kHalfbandN19Chain1, true); ///< 奇相位 → 虚部（上一拍）
+        ve_re_.Init(kHalfbandN19Chain0); ///< 偶相位 → 解析信号实部
+        vo_re_.Init(kHalfbandN19Chain0); ///< 奇相位 → 实部（上一拍）
+        ve_im_.Init(kHalfbandN19Chain1); ///< 偶相位 → 虚部（下一拍用）
+        vo_im_.Init(kHalfbandN19Chain1); ///< 奇相位 → 虚部（上一拍）
     }
 
     void Reset() noexcept {
@@ -245,11 +245,11 @@ public:
 private:
     std::array<T, kFactor> ping_{};
     std::array<T, kFactor> pong_{};
-    std::array<detail::HalfbandStage<T>, K> stages_{};
-    detail::ZetaAllpassChain<T, kHalfbandChain0Len> ve_re_{};
-    detail::ZetaAllpassChain<T, kHalfbandChain0Len> vo_re_{};
-    detail::ZetaAllpassChain<T, kHalfbandChain1Len> ve_im_{};
-    detail::ZetaAllpassChain<T, kHalfbandChain1Len> vo_im_{};
+    std::array<detail::HalfbandStage<T, false>, K> stages_{};
+    detail::ZetaAllpassChain<T, kHalfbandChain0Len, true> ve_re_{};
+    detail::ZetaAllpassChain<T, kHalfbandChain0Len, true> vo_re_{};
+    detail::ZetaAllpassChain<T, kHalfbandChain1Len, true> ve_im_{};
+    detail::ZetaAllpassChain<T, kHalfbandChain1Len, true> vo_im_{};
     T im_prev_{};
 };
 
@@ -267,7 +267,7 @@ public:
 
     HalfbandAllpassDecimator() noexcept {
         for (auto& s : stages_) {
-            s.Init(false);
+            s.Init();
         }
     }
 
@@ -304,6 +304,6 @@ public:
 private:
     std::array<T, kFactor> buffer_{};
     std::array<T, kFactor> prev_{};
-    std::array<detail::HalfbandStage<T>, K> stages_{};
+    std::array<detail::HalfbandStage<T, false>, K> stages_{};
 };
 } // namespace qwqdsp_filter
