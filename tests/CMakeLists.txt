@@ -8,6 +8,7 @@ add_qwqdsp_test(cephes cephes/cephes.cpp)
 
 add_qwqdsp_test(parallel_allpass filter/parallel_allpass.cpp)
 add_qwqdsp_test(iir_design filter/iir_design.cpp)
+add_qwqdsp_test(halfband_allpass_ovs filter/halfband_allpass_ovs.cpp)
 
 add_qwqdsp_test(autocorrelation_pitch_shift_rt audiofx/autocorrelation_delay_pitch_shifter_test.cpp)
 
