@@ -4,9 +4,9 @@
 #include <cmath>
 #include <complex>
 #include <numbers>
+#include <qwqdsp/misc/smoother.hpp>
 #include <span>
 #include <vector>
-#include <qwqdsp/misc/smoother.hpp>
 
 #include "raylib.h"
 
@@ -44,18 +44,18 @@ struct WindowlessNcFrame {
      * @brief 每个 NC bin 的硬件描述与滑动 DFT 状态
      */
     struct Bin {
-        float f_center{};        // 中心频率(Hz, 仅用于显示/映射)
-        double f_left{};         // 左分量参考频率(Hz)
-        double f_right{};        // 右分量参考频率(Hz)
-        int N{};                 // 窗长(样本数)
-        int row{};               // 对应输出行 y(=bin 索引, 用于回填 binDb_)
+        float f_center{}; // 中心频率(Hz, 仅用于显示/映射)
+        double f_left{};  // 左分量参考频率(Hz)
+        double f_right{}; // 右分量参考频率(Hz)
+        int N{};          // 窗长(样本数)
+        int row{};        // 对应输出行 y(=bin 索引, 用于回填 binDb_)
         // 旋转因子与累加器用 double：float 会随时间累积慢速漂移(见论文 IV-B 节)，
         // double 使滑动 DFT 幅度有界无趋势，消除长期数值误差。
         std::complex<double> Wl{}, WNr_l{};    // 左分量旋转因子 W 与 W^N
         std::complex<double> Wr{}, WNr_r{};    // 右分量旋转因子 W 与 W^N
         std::complex<double> acc_l{}, acc_r{}; // 左右分量滑动 DFT 累加器
-        float smoothed_gain{};   // 一阶 IIR 平滑后的线性增益(非 dB)；EMA 在增益域线性作用
-        float alpha{};           // 每样本 EMA 系数(抗混叠箱<1, 旁路箱=1)
+        float smoothed_gain{};                 // 一阶 IIR 平滑后的线性增益(非 dB)；EMA 在增益域线性作用
+        float alpha{};                         // 每样本 EMA 系数(抗混叠箱<1, 旁路箱=1)
     };
 
     /**
@@ -84,7 +84,7 @@ struct WindowlessNcFrame {
         sampleRate_ = sampleRate;
         fftSize_ = fftSize;
         hopSize_ = hopSize;
-        zeroPad_ = zeroPad;   // 占位，无零填充
+        zeroPad_ = zeroPad; // 占位，无零填充
         outputHeight_ = outputHeight;
         freqMin_ = freqMin;
         freqMax_ = freqMax;
@@ -121,10 +121,12 @@ struct WindowlessNcFrame {
 
             // 带宽 = 相邻两 bin 中心频率之差 × 缩放系数 (论文: W_NC = f(i+1) - f(i-1))
             // 频率随 y 递减，边界用单侧邻居；取绝对值保证正带宽。
-            float f_hi = centers[y];                       // 更高频侧
-            float f_lo = centers[y];                       // 更低频侧
-            if (y > 0) f_hi = centers[y - 1];              // y-1 在更上方 = 更高频
-            if (y + 1 < n_bins) f_lo = centers[y + 1];     // y+1 在更下方 = 更低频
+            float f_hi = centers[y]; // 更高频侧
+            float f_lo = centers[y]; // 更低频侧
+            if (y > 0)
+                f_hi = centers[y - 1]; // y-1 在更上方 = 更高频
+            if (y + 1 < n_bins)
+                f_lo = centers[y + 1]; // y+1 在更下方 = 更低频
             float w_nc = std::abs(f_hi - f_lo) * bandwidthScale;
             w_nc = std::max(w_nc, 1e-3f);
 
@@ -164,8 +166,9 @@ struct WindowlessNcFrame {
                 b.alpha = 1.0f;
                 b.smoothed_gain = 0.0f;
                 bins_ema_.push_back(b);
-            } else {
-                b.alpha = 1.0f;                                                    // 旁路
+            }
+            else {
+                b.alpha = 1.0f; // 旁路
                 b.smoothed_gain = 0.0f;
                 bins_bypass_.push_back(b);
             }
@@ -206,10 +209,9 @@ struct WindowlessNcFrame {
     void Process(std::span<const float> raw_frame, std::span<const float> /*window*/,
                  std::span<const float> /*windowed_frame*/) noexcept {
         // 只有 hopSize_ 个新样本会进入滑动 DFT
-        const int new_sample_begin =
-            (n_ == 0) ? 0 : std::max(0, static_cast<int>(raw_frame.size()) - hopSize_);
+        const int new_sample_begin = (n_ == 0) ? 0 : std::max(0, static_cast<int>(raw_frame.size()) - hopSize_);
         for (int k = new_sample_begin; k < static_cast<int>(raw_frame.size()); ++k) {
-            const double s = static_cast<double>(raw_frame[k]);  // 提升为 double 参与累加
+            const double s = static_cast<double>(raw_frame[k]); // 提升为 double 参与累加
 
             // ── 抗混叠箱(N < hop)：更新滑动 DFT 累加器 + 每样本 EMA(先带限再采样) ──
             for (Bin& b : bins_ema_) {
@@ -218,8 +220,8 @@ struct WindowlessNcFrame {
                 b.acc_r = b.Wr * b.acc_r + s - old * b.WNr_r;
                 double ncSum = -(b.acc_l.real() * b.acc_r.real() + b.acc_l.imag() * b.acc_r.imag());
                 float gain = (ncSum > 0.0) ? static_cast<float>(std::sqrt(ncSum + kEpsSample) / b.N) : 0.0f;
-                gain *= gainNorm_;   // 幅度归一化(乘 π)，使纯音峰值回到 ≈0 dB
-                b.smoothed_gain += b.alpha * (gain - b.smoothed_gain);   // 每样本 EMA
+                gain *= gainNorm_;                                     // 幅度归一化(乘 π)，使纯音峰值回到 ≈0 dB
+                b.smoothed_gain += b.alpha * (gain - b.smoothed_gain); // 每样本 EMA
             }
             // ── 旁路箱(N >= hop)：窗长自身已带限，只更新滑动 DFT 累加器 ──
             for (Bin& b : bins_bypass_) {
@@ -241,7 +243,7 @@ struct WindowlessNcFrame {
         for (Bin& b : bins_bypass_) {
             double ncSum = -(b.acc_l.real() * b.acc_r.real() + b.acc_l.imag() * b.acc_r.imag());
             float gain = (ncSum > 0.0) ? static_cast<float>(std::sqrt(ncSum + kEps) / b.N) : 0.0f;
-            gain *= gainNorm_;   // 幅度归一化(乘 π)，使纯音峰值回到 ≈0 dB
+            gain *= gainNorm_; // 幅度归一化(乘 π)，使纯音峰值回到 ≈0 dB
             Splat(b.row, b.N, gain);
         }
 
@@ -271,7 +273,6 @@ struct WindowlessNcFrame {
     int MaxWindowSamples() const noexcept {
         return max_n_;
     }
-
 private:
     /**
      * @brief 把一个 bin 的增益按**窗中心绝对时刻**双线性落进环形子列
@@ -290,11 +291,11 @@ private:
      * @param gain  线性幅度（已含 π 归一化）；≤0 或非有限值不落点
      */
     void Splat(int row, int n, float gain) noexcept {
-        if (!(gain > 0.0f))   // 0 / 负数 / NaN 都不落点
+        if (!(gain > 0.0f)) // 0 / 负数 / NaN 都不落点
             return;
         const float mean_delay = 0.5f * static_cast<float>(n - 1);
         float col = (static_cast<float>(ringSpan_) + 1.0f - mean_delay) / static_cast<float>(hopSize_);
-        col = std::clamp(col, 1.0f, static_cast<float>(ringCols_ - 1));   // 夹取只在退化环长(N_max ≲ hop)下生效
+        col = std::clamp(col, 1.0f, static_cast<float>(ringCols_ - 1)); // 夹取只在退化环长(N_max ≲ hop)下生效
         int c_idx = static_cast<int>(col);
         float c_frac = col - static_cast<float>(c_idx);
         if (c_idx >= ringCols_ - 1) {
@@ -329,21 +330,21 @@ private:
         head_ = (head_ + 1 == ringCols_) ? 0 : head_ + 1;
     }
 
-    static constexpr float kMaxWindowS = 0.075f;        // 低音窗长上限(秒)
-    static constexpr float kDefaultMinPeriods = 4.0f;   // 窗长下限(周期数，与重分配帧同口径)
-    static constexpr double kEpsSample = 1e-18;         // 样本级 NC 增益计算保护(平方根内非负)
+    static constexpr float kMaxWindowS = 0.075f;      // 低音窗长上限(秒)
+    static constexpr float kDefaultMinPeriods = 4.0f; // 窗长下限(周期数，与重分配帧同口径)
+    static constexpr double kEpsSample = 1e-18;       // 样本级 NC 增益计算保护(平方根内非负)
 
     int sampleRate_{}, fftSize_{}, hopSize_{}, zeroPad_{}, outputHeight_{};
     int ringSize_{};
-    int min_n_{}, max_n_{};                        // 所有 bin 的窗长下限/上限(样本)
-    int n_{};                                          // 已处理的样本计数
-    int ringSpan_{}, ringCols_{}, head_{};             // 时间轴子列环：跨窗样本数 / 子列数 / 发射指针
+    int min_n_{}, max_n_{};                // 所有 bin 的窗长下限/上限(样本)
+    int n_{};                              // 已处理的样本计数
+    int ringSpan_{}, ringCols_{}, head_{}; // 时间轴子列环：跨窗样本数 / 子列数 / 发射指针
     float freqMin_{}, freqMax_{}, logMin_{}, logMax_{}, dbFloor_{};
-    float gainNorm_{};                                 // 幅度归一化系数(乘 π，使纯音峰值 ≈0 dB)
+    float gainNorm_{}; // 幅度归一化系数(乘 π，使纯音峰值 ≈0 dB)
 
-    std::vector<Bin> bins_ema_;                       // N<hop 箱：每样本 EMA 抗混叠
-    std::vector<Bin> bins_bypass_;                    // N>=hop 箱：旁路(窗长自身带限)
-    std::vector<double> ring_;                       // 共享样本环回缓冲(double)
-    std::vector<float> colBuf_;                        // [ringCols_ · outputHeight_] 子列环形缓冲(线性幅度)
+    std::vector<Bin> bins_ema_;    // N<hop 箱：每样本 EMA 抗混叠
+    std::vector<Bin> bins_bypass_; // N>=hop 箱：旁路(窗长自身带限)
+    std::vector<double> ring_;     // 共享样本环回缓冲(double)
+    std::vector<float> colBuf_;    // [ringCols_ · outputHeight_] 子列环形缓冲(线性幅度)
     std::vector<Color> column_;
 };

@@ -19,7 +19,8 @@ static inline float WrapToPi(float x) noexcept {
 static inline void MakePeriodicHann(std::span<float> w) noexcept {
     const size_t n = w.size();
     for (size_t i = 0; i < n; ++i) {
-        w[i] = 0.5f * (1.0f - std::cos(2.0f * std::numbers::pi_v<float> * static_cast<float>(i) / static_cast<float>(n)));
+        w[i] =
+            0.5f * (1.0f - std::cos(2.0f * std::numbers::pi_v<float> * static_cast<float>(i) / static_cast<float>(n)));
     }
 }
 
@@ -200,7 +201,8 @@ public:
 
         // 总拉伸比 = kt * kp（之后重采样还原 kp 部分）
         const float total_stretch = kt * kp;
-        const size_t ana_hop = std::max<size_t>(1, static_cast<size_t>(std::round(static_cast<float>(syn_hop) / std::max(total_stretch, 1e-6f))));
+        const size_t ana_hop = std::max<size_t>(
+            1, static_cast<size_t>(std::round(static_cast<float>(syn_hop) / std::max(total_stretch, 1e-6f))));
 
         if (La == 0)
             return {};
@@ -264,8 +266,11 @@ public:
             }
             else {
                 for (size_t j = 0; j < bins; ++j) {
-                    const float dp = detail::WrapToPi(ana_phase[j] - prev_[j] - static_cast<float>(j) * freq_per_bin * static_cast<float>(ana_hop));
-                    p[j] = syn_prev_[j] + (static_cast<float>(j) * freq_per_bin + dp / static_cast<float>(ana_hop)) * static_cast<float>(syn_hop);
+                    const float dp = detail::WrapToPi(
+                        ana_phase[j] - prev_[j] - static_cast<float>(j) * freq_per_bin * static_cast<float>(ana_hop));
+                    p[j] = syn_prev_[j]
+                         + (static_cast<float>(j) * freq_per_bin + dp / static_cast<float>(ana_hop))
+                               * static_cast<float>(syn_hop);
                 }
                 detail::LockPhase(mag.data(), p.data(), ana_phase.data(), bins - 1);
             }
@@ -291,8 +296,10 @@ public:
 
         // ---- 归一化 + 输出偏移 ----
         // 输出偏移 pOut = round(half * (syn_hop/ana_hop + 1))，去掉前置填充的零段
-        const size_t p_out = static_cast<size_t>(std::round(static_cast<float>(bins - 1) * (static_cast<float>(syn_hop) / static_cast<float>(ana_hop) + 1.0f)));
-        const size_t want = static_cast<size_t>(std::round(static_cast<float>(input.size()) * static_cast<float>(syn_hop) / static_cast<float>(ana_hop)));
+        const size_t p_out = static_cast<size_t>(std::round(
+            static_cast<float>(bins - 1) * (static_cast<float>(syn_hop) / static_cast<float>(ana_hop) + 1.0f)));
+        const size_t want = static_cast<size_t>(
+            std::round(static_cast<float>(input.size()) * static_cast<float>(syn_hop) / static_cast<float>(ana_hop)));
 
         std::vector<float> result;
         result.reserve(want);
@@ -311,7 +318,6 @@ public:
 
         return result;
     }
-
 private:
     size_t frame_size_ = kDefaultFrameSize;
     size_t hop_size_ = kDefaultHopSize;

@@ -112,8 +112,7 @@ struct OddOrderPrototype {
  * @param stop_db 阻带衰减(dB, >0)，需要大于 pass_db
  * @return 规格非法时返回 nullopt(与 IIRDesign::Elliptic 的失败条件一致)
  */
-[[nodiscard]] inline std::optional<OddOrderPrototype> EllipticPrototype(size_t order, double pass_db,
-                                                                        double stop_db) {
+[[nodiscard]] inline std::optional<OddOrderPrototype> EllipticPrototype(size_t order, double pass_db, double stop_db) {
     double const eps_passband = std::sqrt(std::pow(10.0, pass_db / 10.0) - 1.0);
     double const eps_stopband = std::sqrt(std::pow(10.0, stop_db / 10.0) - 1.0);
     if (!(eps_stopband > eps_passband)) {
@@ -131,8 +130,8 @@ struct OddOrderPrototype {
     }
     double const m = k * k;
     double const Kk = IIRDesign::EllipticHelperCephes::Ellpk(1.0 - m);
-    double const u = IIRDesign::EllipticHelperCephes::Ellik(std::atan(1.0 / eps_passband), 1.0 - m1_sq) * Kk
-                   / (n * Kk1);
+    double const u =
+        IIRDesign::EllipticHelperCephes::Ellik(std::atan(1.0 / eps_passband), 1.0 - m1_sq) * Kk / (n * Kk1);
     double sn1 = 0.0;
     double cn1 = 0.0;
     double dn1 = 0.0;

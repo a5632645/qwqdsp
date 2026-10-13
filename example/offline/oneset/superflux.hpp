@@ -105,9 +105,9 @@ public:
             b.start = lo;
             b.weights.resize(static_cast<size_t>(hi - lo + 1));
             for (int k = lo; k <= hi; ++k) {
-                b.weights[static_cast<size_t>(k - lo)] =
-                    (k <= ce) ? static_cast<float>(k - lo) / static_cast<float>(ce - lo)
-                              : static_cast<float>(hi - k) / static_cast<float>(hi - ce);
+                b.weights[static_cast<size_t>(k - lo)] = (k <= ce)
+                                                           ? static_cast<float>(k - lo) / static_cast<float>(ce - lo)
+                                                           : static_cast<float>(hi - k) / static_cast<float>(hi - ce);
             }
             bands.push_back(std::move(b));
         }
@@ -186,7 +186,6 @@ public:
 
         return result;
     }
-
 private:
     size_t frame_size_ = kDefaultFrameSize;
     size_t hop_ = kDefaultFrameSize / 4;

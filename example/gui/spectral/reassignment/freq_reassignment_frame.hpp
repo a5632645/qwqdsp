@@ -99,7 +99,6 @@ struct FreqReassignmentFrame {
     float Calibration() const noexcept {
         return grid_.Calibration();
     }
-
 private:
     int sampleRate_{}, fftSize_{}, zeroPad_{}, fftLen_{}, binSize_{}, outputHeight_{};
     float freqMin_{}, freqMax_{};

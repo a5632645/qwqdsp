@@ -141,7 +141,6 @@ public:
             confidence[t] = sum_masked;
         }
     }
-
 private:
     /// 时间维每侧补零帧数
     static constexpr int kPad = 2;

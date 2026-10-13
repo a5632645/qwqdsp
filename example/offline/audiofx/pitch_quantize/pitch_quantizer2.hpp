@@ -1,8 +1,6 @@
 #pragma once
 
 #include "scale_helper.hpp"
-#include <qwqdsp/window/hann.hpp>
-#include <qwqdsp/spectral/real_fft.hpp>
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -13,6 +11,8 @@
 #include <iostream>
 #include <limits>
 #include <numbers>
+#include <qwqdsp/spectral/real_fft.hpp>
+#include <qwqdsp/window/hann.hpp>
 #include <span>
 #include <vector>
 
@@ -94,9 +94,10 @@ public:
         const size_t hop = FindColaHop(fft_size, static_cast<size_t>(std::round(hop_desired)));
         const float actual_max_correction = sample_rate / (2.0f * static_cast<float>(hop));
 
-        std::cout << std::format("  Init2: desired_hop={:.1f}, cola_hop={}, "
-                                 "desired_max_corr={:.1f} Hz, actual_max_corr={:.1f} Hz\n",
-                                 hop_desired, hop, max_correction_freq, actual_max_correction)
+        std::cout << std::format(
+            "  Init2: desired_hop={:.1f}, cola_hop={}, "
+            "desired_max_corr={:.1f} Hz, actual_max_corr={:.1f} Hz\n",
+            hop_desired, hop, max_correction_freq, actual_max_correction)
                   << std::flush;
 
         Init(sample_rate, hop, fft_size);
@@ -109,8 +110,7 @@ public:
     }
 
     std::string KeyDescription() const {
-        return std::format("{} {}", ScaleHelper::kNoteNames[root_note_],
-                           ScaleHelper::TypeName(scale_type_));
+        return std::format("{} {}", ScaleHelper::kNoteNames[root_note_], ScaleHelper::TypeName(scale_type_));
     }
 
     std::vector<float> Process(std::span<const float> input) {
@@ -125,8 +125,7 @@ public:
         const size_t output_len = H * num_frames + N;
         std::vector<float> output(output_len, 0.0f);
 
-        std::cout << std::format("  frames={}, fft={}, hop={}\n", num_frames, N, H)
-                  << std::flush;
+        std::cout << std::format("  frames={}, fft={}, hop={}\n", num_frames, N, H) << std::flush;
 
         for (size_t i = 0; i < num_frames; ++i) {
             const float* frame = input.data() + i * H;
@@ -214,9 +213,8 @@ public:
                 // 前向扫描：找到左侧最近峰值
                 size_t nearest_left = 0;
                 for (size_t k = 0; k < nb; ++k) {
-                    if (k > 0 && k < nb - 1 &&
-                        synth_gain_[k] > synth_gain_[k - 1] &&
-                        synth_gain_[k] > synth_gain_[k + 1]) {
+                    if (k > 0 && k < nb - 1 && synth_gain_[k] > synth_gain_[k - 1]
+                        && synth_gain_[k] > synth_gain_[k + 1]) {
                         nearest_left = k;
                     }
                     peak_map[k] = nearest_left;
@@ -225,9 +223,8 @@ public:
                 size_t nearest_right = nb - 1;
                 for (size_t k = nb; k > 0;) {
                     --k;
-                    if (k > 0 && k < nb - 1 &&
-                        synth_gain_[k] > synth_gain_[k - 1] &&
-                        synth_gain_[k] > synth_gain_[k + 1]) {
+                    if (k > 0 && k < nb - 1 && synth_gain_[k] > synth_gain_[k - 1]
+                        && synth_gain_[k] > synth_gain_[k + 1]) {
                         nearest_right = k;
                     }
                     const size_t left = peak_map[k];
@@ -252,8 +249,8 @@ public:
                         const float peak_im = fft_buf_delay_[2 * p + 1];
                         const float peak_phase = std::atan2(peak_im, peak_re);
                         synth_phase_[k] = peak_phase
-                            + static_cast<float>(static_cast<int>(k) - static_cast<int>(p))
-                              * omega_per_bin_ * static_cast<float>(H);
+                                        + static_cast<float>(static_cast<int>(k) - static_cast<int>(p)) * omega_per_bin_
+                                              * static_cast<float>(H);
                     }
                 }
                 first_frame_ = false;
@@ -270,15 +267,14 @@ public:
                         else {
                             // 非峰值 bin：锁定到峰值相位
                             synth_phase_[k] = synth_phase_[p]
-                                + static_cast<float>(static_cast<int>(k) - static_cast<int>(p))
-                                  * omega_per_bin_ * static_cast<float>(H);
+                                            + static_cast<float>(static_cast<int>(k) - static_cast<int>(p))
+                                                  * omega_per_bin_ * static_cast<float>(H);
                             synth_phase_[k] = WrapPi(synth_phase_[k]);
                         }
                     }
                     else {
                         // 无内容的 bin：按 bin 中心频率递推
-                        synth_phase_[k] += omega_per_bin_ * static_cast<float>(k)
-                                           * static_cast<float>(H);
+                        synth_phase_[k] += omega_per_bin_ * static_cast<float>(k) * static_cast<float>(H);
                         synth_phase_[k] = WrapPi(synth_phase_[k]);
                     }
                 }
@@ -317,8 +313,7 @@ public:
             for (float& x : output)
                 x *= scale;
 
-            std::cout << std::format("  ola_peak_gain={:.4f}, scale={:.4f}\n", peak_gain, scale)
-                      << std::flush;
+            std::cout << std::format("  ola_peak_gain={:.4f}, scale={:.4f}\n", peak_gain, scale) << std::flush;
         }
 
         return output;
@@ -328,7 +323,6 @@ public:
         first_frame_ = true;
         std::fill(synth_phase_.begin(), synth_phase_.end(), 0.0f);
     }
-
 private:
     static float WrapPi(float x) noexcept {
         constexpr float two_pi = 2.0f * std::numbers::pi_v<float>;
@@ -387,8 +381,8 @@ private:
     size_t fft_size_ = 2048;
     size_t num_bins_ = 1025;
     bool first_frame_ = true;
-    float omega_per_bin_ = 0.0f;     // 2π / N
-    float fs_over_2pi_ = 0.0f;       // fs / (2π)
+    float omega_per_bin_ = 0.0f; // 2π / N
+    float fs_over_2pi_ = 0.0f;   // fs / (2π)
     float max_correction_ = 0.0f;
 
     // ---- 调性 ----

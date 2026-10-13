@@ -156,7 +156,6 @@ public:
         prev_phase_.clear();
         output_.clear();
     }
-
 private:
     static float WrapToPi(float x) noexcept {
         return x - 2.0f * std::numbers::pi_v<float> * std::round(x / (2.0f * std::numbers::pi_v<float>));

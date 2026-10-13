@@ -74,7 +74,6 @@ public:
             }
         }
     }
-
 private:
     qwqdsp_fx::PolyphaseDownsamplerFir fir_;
     std::array<float, 8> group_{};

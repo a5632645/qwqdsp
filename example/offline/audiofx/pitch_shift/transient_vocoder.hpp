@@ -82,7 +82,8 @@ public:
 
         // 总拉伸比 = kt * kp（之后重采样还原 kp 部分）
         const float total_stretch = kt * kp;
-        const size_t ana_hop = std::max<size_t>(1, static_cast<size_t>(std::round(static_cast<float>(syn_hop) / std::max(total_stretch, 1e-6f))));
+        const size_t ana_hop = std::max<size_t>(
+            1, static_cast<size_t>(std::round(static_cast<float>(syn_hop) / std::max(total_stretch, 1e-6f))));
 
         if (La == 0)
             return {};
@@ -153,8 +154,11 @@ public:
             }
             else {
                 for (size_t j = 0; j < bins; ++j) {
-                    const float dp = detail::WrapToPi(ana_phase[j] - prev_[j] - static_cast<float>(j) * freq_per_bin * static_cast<float>(ana_hop));
-                    p[j] = syn_prev_[j] + (static_cast<float>(j) * freq_per_bin + dp / static_cast<float>(ana_hop)) * static_cast<float>(syn_hop);
+                    const float dp = detail::WrapToPi(
+                        ana_phase[j] - prev_[j] - static_cast<float>(j) * freq_per_bin * static_cast<float>(ana_hop));
+                    p[j] = syn_prev_[j]
+                         + (static_cast<float>(j) * freq_per_bin + dp / static_cast<float>(ana_hop))
+                               * static_cast<float>(syn_hop);
                 }
                 detail::LockPhase(mag.data(), p.data(), ana_phase.data(), bins - 1);
             }
@@ -180,8 +184,10 @@ public:
         }
 
         // ---- 归一化 + 输出偏移 ----
-        const size_t p_out = static_cast<size_t>(std::round(static_cast<float>(bins - 1) * (static_cast<float>(syn_hop) / static_cast<float>(ana_hop) + 1.0f)));
-        const size_t want = static_cast<size_t>(std::round(static_cast<float>(input.size()) * static_cast<float>(syn_hop) / static_cast<float>(ana_hop)));
+        const size_t p_out = static_cast<size_t>(std::round(
+            static_cast<float>(bins - 1) * (static_cast<float>(syn_hop) / static_cast<float>(ana_hop) + 1.0f)));
+        const size_t want = static_cast<size_t>(
+            std::round(static_cast<float>(input.size()) * static_cast<float>(syn_hop) / static_cast<float>(ana_hop)));
 
         std::vector<float> result;
         result.reserve(want);
@@ -200,7 +206,6 @@ public:
 
         return result;
     }
-
 private:
     /** 逐帧谱通量瞬态检测（stretch transient.js 的 updateFluxStats + 双阈值） */
     bool DetectTransient(const std::vector<float>& mag) {
@@ -223,7 +228,7 @@ private:
             const float std = std::sqrt(flux_var_);
             // Std floor 0.07：稳定的和弦拍频 normFlux ≤ ~0.07，真实起始 ≥ ~0.19
             is_transient = frames_ > 4 && cooldown_ == 0 && norm_flux > mean + threshold * std::max(0.07f, std)
-                           && norm_flux > mean * 1.35f;
+                        && norm_flux > mean * 1.35f;
             UpdateFluxStats(norm_flux, is_transient ? 0.3f : 0.12f);
             cooldown_ = is_transient ? 1 : (cooldown_ > 0 ? cooldown_ - 1 : 0);
         }

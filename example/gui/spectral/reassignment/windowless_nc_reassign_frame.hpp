@@ -92,19 +92,18 @@ enum class NcReassignMode {
  * 不做 ``LogReassignGrid::SetWindow`` 那套窗相干增益标定；低频行因 NC bin 带宽重叠、
  * 子格内求和会偏亮（与 C++ ``WindowlessNcFrame`` 的低频行为一致）。
  */
-template <typename Colormap, NcReassignMode Mode = NcReassignMode::kFreqTime,
-          bool EnableFreqInterp = true>
+template <typename Colormap, NcReassignMode Mode = NcReassignMode::kFreqTime, bool EnableFreqInterp = true>
 struct WindowlessNcReassignFrame {
     /**
      * @brief 单个 NC bin 的几何与滑动 DFT 状态
      */
     struct Bin {
-        float f_center{};                        // 中心频率(Hz, 仅用于显示/映射)
-        double f_left{};                         // 左分量参考频率(Hz)
-        double f_right{};                        // 右分量参考频率(Hz)
-        int N{};                                 // 窗长(样本)
-        int row{};                               // 对应输出行 y(=bin 序号, 不重分配时直接落该行)
-        bool reassign{};                         // 该 bin 是否做重分配(f_center < 截止频率)
+        float f_center{}; // 中心频率(Hz, 仅用于显示/映射)
+        double f_left{};  // 左分量参考频率(Hz)
+        double f_right{}; // 右分量参考频率(Hz)
+        int N{};          // 窗长(样本)
+        int row{};        // 对应输出行 y(=bin 序号, 不重分配时直接落该行)
+        bool reassign{};  // 该 bin 是否做重分配(f_center < 截止频率)
         // 旋转因子与累加器用 double：float 会随时间累积慢速漂移(论文 IV-B 节)
         std::complex<double> Wl{}, Wr{};         // 每样本旋转因子 W
         std::complex<double> WNr_l{}, WNr_r{};   // 跨窗因子 W^N
@@ -130,9 +129,8 @@ struct WindowlessNcReassignFrame {
      *                          重分配，其余退化为无重分配(bin 中心 + 窗中心，直接落自身行)。
      *                          传 0（或负数）= 全部不重分配；传极大值 = 全程重分配
      */
-    void Init(int sampleRate, int fftSize, int hopSize, int zeroPad, int outputHeight,
-              float freqMin, float freqMax, float dbFloor, float bandwidthScale = 1.0f,
-              float minPeriodsFloor = kDefaultMinPeriods,
+    void Init(int sampleRate, int fftSize, int hopSize, int zeroPad, int outputHeight, float freqMin, float freqMax,
+              float dbFloor, float bandwidthScale = 1.0f, float minPeriodsFloor = kDefaultMinPeriods,
               float reassignMaxHz = kDefaultReassignMaxHz) noexcept {
         sampleRate_ = sampleRate;
         fftSize_ = fftSize;
@@ -229,8 +227,7 @@ struct WindowlessNcReassignFrame {
     void Process(std::span<const float> raw_frame, std::span<const float> /*window*/,
                  std::span<const float> /*windowed_frame*/) noexcept {
         constexpr double kTwoPi = 2.0 * std::numbers::pi_v<double>;
-        const int new_sample_begin =
-            (n_ == 0) ? 0 : std::max(0, static_cast<int>(raw_frame.size()) - hopSize_);
+        const int new_sample_begin = (n_ == 0) ? 0 : std::max(0, static_cast<int>(raw_frame.size()) - hopSize_);
 
         for (int k = new_sample_begin; k < static_cast<int>(raw_frame.size()); ++k) {
             const double s = static_cast<double>(raw_frame[static_cast<size_t>(k)]);
@@ -253,8 +250,7 @@ struct WindowlessNcReassignFrame {
             const double nc_sum = -(b.acc_l.real() * b.acc_r.real() + b.acc_l.imag() * b.acc_r.imag());
             if (nc_sum <= 0.0)
                 continue;
-            const float gain =
-                static_cast<float>(std::sqrt(nc_sum + kEpsSample) / b.N) * gain_norm_;
+            const float gain = static_cast<float>(std::sqrt(nc_sum + kEpsSample) / b.N) * gain_norm_;
 
             // ── 截止以上的 bin：不做重分配 ──
             // 频率留 bin 中心、时间留窗中心，直接落**自身行**（不经频率→行映射：
@@ -284,10 +280,9 @@ struct WindowlessNcReassignFrame {
                 const std::complex<double> y_prev = b.prev_r - b.prev_l;
                 const double if_center = -inv_two_pi_fs * std::arg(y_now * std::conj(y_prev));
                 if constexpr (Mode == NcReassignMode::kFreqTime) {
-                    const double offset = 0.5 * (b.N - 1) - mean_delay;   // 落点相对窗中心(样本)
-                    const double rate = b.if_prev_valid
-                                            ? (if_center - b.if_prev) / static_cast<double>(hopSize_)
-                                            : 0.0;                        // Hz/样本
+                    const double offset = 0.5 * (b.N - 1) - mean_delay; // 落点相对窗中心(样本)
+                    const double rate =
+                        b.if_prev_valid ? (if_center - b.if_prev) / static_cast<double>(hopSize_) : 0.0; // Hz/样本
                     freq_hz = static_cast<float>(if_center + rate * offset);
                 }
                 else {
@@ -328,12 +323,11 @@ struct WindowlessNcReassignFrame {
     int MaxWindowSamples() const noexcept {
         return max_n_;
     }
-
 private:
-    static constexpr float kMaxWindowS = 0.075f;         // 低音窗长上限(秒, C++ 现口径)
-    static constexpr float kDefaultMinPeriods = 4.0f;    // 窗长下限(周期数, lab 实测最优 ~4)
-    static constexpr float kDefaultReassignMaxHz = 1000.0f;  // 重分配截止频率(Hz, 见类注释)
-    static constexpr double kEpsSample = 1e-18;          // NC 增益平方根内的保护
+    static constexpr float kMaxWindowS = 0.075f;            // 低音窗长上限(秒, C++ 现口径)
+    static constexpr float kDefaultMinPeriods = 4.0f;       // 窗长下限(周期数, lab 实测最优 ~4)
+    static constexpr float kDefaultReassignMaxHz = 1000.0f; // 重分配截止频率(Hz, 见类注释)
+    static constexpr double kEpsSample = 1e-18;             // NC 增益平方根内的保护
 
     /// @brief 把相位卷绕到 (−π, π]
     static double WrapPi(double x) noexcept {
@@ -342,13 +336,13 @@ private:
 
     int sampleRate_{}, fftSize_{}, hopSize_{}, zeroPad_{}, outputHeight_{};
     int ring_size_{}, ring_span_{};
-    int min_n_{}, max_n_{};                              // 所有 bin 的窗长下限/上限(样本)
-    int n_{};                                            // 已处理样本计数
+    int min_n_{}, max_n_{}; // 所有 bin 的窗长下限/上限(样本)
+    int n_{};               // 已处理样本计数
     float freqMin_{}, freqMax_{}, logMin_{}, logMax_{}, dbFloor_{};
-    float gain_norm_{};                                  // 幅度归一化(乘 π ≈ 单位纯音 0 dB)
+    float gain_norm_{}; // 幅度归一化(乘 π ≈ 单位纯音 0 dB)
 
     std::vector<Bin> bins_;
-    std::vector<double> ring_;                           // 共享样本环回缓冲
+    std::vector<double> ring_; // 共享样本环回缓冲
     std::vector<Color> column_;
     LogReassignGrid<EnableFreqInterp> grid_;
 };

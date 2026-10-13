@@ -24,10 +24,10 @@ namespace pitch_shift_rt {
  */
 class AutocorrelationDelayPitchShifter {
 public:
-    static constexpr std::size_t kBufferSize = 4096; ///< 环形延迟线容量（采样）
-    static constexpr std::size_t kCrossFade = 512;   ///< 交叉淡化长度（也即互相关块大小）
-    static constexpr std::size_t kTargetDelay = 2048; ///< 跳转目标延迟（缓冲中心，淡化两侧空间充足）
-    static constexpr std::size_t kMinDelay = kCrossFade;      ///< 升调触发下界
+    static constexpr std::size_t kBufferSize = 4096;                   ///< 环形延迟线容量（采样）
+    static constexpr std::size_t kCrossFade = 512;                     ///< 交叉淡化长度（也即互相关块大小）
+    static constexpr std::size_t kTargetDelay = 2048;                  ///< 跳转目标延迟（缓冲中心，淡化两侧空间充足）
+    static constexpr std::size_t kMinDelay = kCrossFade;               ///< 升调触发下界
     static constexpr std::size_t kMaxDelay = kBufferSize - kCrossFade; ///< 降调触发上界
 
     /** @brief 初始化采样率并清空处理状态。 */
@@ -38,7 +38,8 @@ public:
 
     /** @brief 设置移调半音数，范围限制为 +/-12。 */
     void setPitchShift(float semitones) noexcept {
-        if (!std::isfinite(semitones)) return;
+        if (!std::isfinite(semitones))
+            return;
         target_speed_ = std::exp2(std::clamp(semitones, -12.0f, 12.0f) / 12.0f) - 1.0f;
     }
 
@@ -62,7 +63,8 @@ public:
      * @param[in] frame_count 采样数
      */
     void process(const float* input, float* output, std::size_t frame_count) noexcept {
-        if (output == nullptr) return;
+        if (output == nullptr)
+            return;
         if (input == nullptr) {
             std::fill_n(output, frame_count, 0.0f);
             return;
@@ -74,8 +76,9 @@ public:
     }
 
     /** @brief 返回近似稳态延迟（采样）。 */
-    static constexpr std::size_t latencySamples() noexcept { return kBufferSize / 2; }
-
+    static constexpr std::size_t latencySamples() noexcept {
+        return kBufferSize / 2;
+    }
 private:
     // ------------------------------------------------------------
     // 读头与跳转
@@ -136,8 +139,7 @@ private:
                 fade_len_ = std::floor(static_cast<float>(kCrossFade) / speed_abs);
                 if (speed_ > 0.0f) {
                     // fade 期间读头1 从触发点(1024)收缩，不能越过 0
-                    fade_len_ = std::min(fade_len_,
-                                         std::floor(static_cast<float>(kMinDelay) * 2.0f / speed_abs));
+                    fade_len_ = std::min(fade_len_, std::floor(static_cast<float>(kMinDelay) * 2.0f / speed_abs));
                 }
                 fade_len_ = std::clamp(fade_len_, 16.0f, static_cast<float>(kBufferSize) / 2.0f);
                 fade_progress_ = 0.0f;
@@ -150,7 +152,8 @@ private:
     /** @brief 将延迟线上延迟为 delay 的 kCrossFade 个采样复制到 dst。 */
     void copySegment(float* dst, int delay) const noexcept {
         int pos = write_pos_ - delay;
-        while (pos < 0) pos += static_cast<int>(kBufferSize);
+        while (pos < 0)
+            pos += static_cast<int>(kBufferSize);
         pos %= static_cast<int>(kBufferSize);
         for (std::size_t i = 0; i < kCrossFade; ++i) {
             dst[i] = buffer_[(pos + static_cast<int>(i)) % kBufferSize];
@@ -191,7 +194,8 @@ private:
         if (best_o == 0) {
             // 无显著峰（非周期段）：用全局最高分
             for (std::size_t o = 1; o < kSearch; ++o) {
-                if (scores[o] > scores[best_o]) best_o = o;
+                if (scores[o] > scores[best_o])
+                    best_o = o;
             }
         }
         // 抛物线亚采样细化（限制 ±0.5 采样）
@@ -218,8 +222,10 @@ private:
     /** @brief 4 点 Catmull-Rom 插值读取延迟线（dtime 为延迟）。 */
     float readInterp(float dtime) const noexcept {
         float read_pos = static_cast<float>(write_pos_) - dtime;
-        while (read_pos < 0.0f) read_pos += static_cast<float>(kBufferSize);
-        while (read_pos >= static_cast<float>(kBufferSize)) read_pos -= static_cast<float>(kBufferSize);
+        while (read_pos < 0.0f)
+            read_pos += static_cast<float>(kBufferSize);
+        while (read_pos >= static_cast<float>(kBufferSize))
+            read_pos -= static_cast<float>(kBufferSize);
         const auto i1 = static_cast<std::size_t>(std::floor(read_pos));
         const float t = read_pos - std::floor(read_pos);
         const auto i0 = (i1 + kBufferSize - 1) % kBufferSize;
@@ -239,10 +245,10 @@ private:
     std::array<float, kCrossFade> mem1_{};
     std::array<float, kCrossFade> mem2_{};
     std::size_t write_pos_ = 0;
-    float read_head1_ = 0.0f;  ///< 主读头（当前延迟，采样）
-    float read_head2_ = -1.0f; ///< 交叉淡化读头（新位置，采样）
-    float speed_ = 0.0f;       ///< 读头速度偏移（ratio - 1）
-    float target_speed_ = 0.0f;///< 目标速度偏移
+    float read_head1_ = 0.0f;   ///< 主读头（当前延迟，采样）
+    float read_head2_ = -1.0f;  ///< 交叉淡化读头（新位置，采样）
+    float speed_ = 0.0f;        ///< 读头速度偏移（ratio - 1）
+    float target_speed_ = 0.0f; ///< 目标速度偏移
     bool fade_ = false;
     float fade_progress_ = 1.0f;
     float fade_len_ = static_cast<float>(kCrossFade);

@@ -77,7 +77,6 @@ struct Psola {
         qwqdsp_support::AudioOps::Normalize(output);
         return output;
     }
-
 private:
     // ------------------------------------------------------------
     // 音高标记检测

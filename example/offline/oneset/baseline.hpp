@@ -120,7 +120,7 @@ public:
                 const float std = std::sqrt(flux_var);
                 // Std floor 0.07：稳定拍频 normFlux ≤ ~0.07，真实起始 ≥ ~0.19
                 is_transient = frames > 4 && cooldown == 0 && norm_flux > mean + threshold_ * std::max(0.07f, std)
-                               && norm_flux > mean * 1.35f;
+                            && norm_flux > mean * 1.35f;
                 update_flux_stats(norm_flux, is_transient ? 0.3f : 0.12f);
                 cooldown = is_transient ? 1 : (cooldown > 0 ? cooldown - 1 : 0);
                 odf_value = norm_flux;
@@ -140,7 +140,6 @@ public:
 
         return result;
     }
-
 private:
     size_t frame_size_ = kDefaultFrameSize;
     size_t hop_ = kDefaultFrameSize / 4;

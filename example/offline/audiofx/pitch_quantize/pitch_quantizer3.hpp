@@ -1,8 +1,6 @@
 #pragma once
 
 #include "scale_helper.hpp"
-#include <qwqdsp/window/hann.hpp>
-#include <qwqdsp/spectral/real_fft.hpp>
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -13,6 +11,8 @@
 #include <iostream>
 #include <limits>
 #include <numbers>
+#include <qwqdsp/spectral/real_fft.hpp>
+#include <qwqdsp/window/hann.hpp>
 #include <span>
 #include <vector>
 
@@ -105,9 +105,10 @@ public:
         const size_t hop = FindColaHop(fft_size, static_cast<size_t>(std::round(hop_desired)));
         const float actual_max_correction = sample_rate / (2.0f * static_cast<float>(hop));
 
-        std::cout << std::format("  Init2: desired_hop={:.1f}, cola_hop={}, "
-                                 "desired_max_corr={:.1f} Hz, actual_max_corr={:.1f} Hz\n",
-                                 hop_desired, hop, max_correction_freq, actual_max_correction)
+        std::cout << std::format(
+            "  Init2: desired_hop={:.1f}, cola_hop={}, "
+            "desired_max_corr={:.1f} Hz, actual_max_corr={:.1f} Hz\n",
+            hop_desired, hop, max_correction_freq, actual_max_correction)
                   << std::flush;
 
         Init(sample_rate, hop, fft_size);
@@ -120,8 +121,7 @@ public:
     }
 
     std::string KeyDescription() const {
-        return std::format("{} {}", ScaleHelper::kNoteNames[root_note_],
-                           ScaleHelper::TypeName(scale_type_));
+        return std::format("{} {}", ScaleHelper::kNoteNames[root_note_], ScaleHelper::TypeName(scale_type_));
     }
 
     std::vector<float> Process(std::span<const float> input) {
@@ -136,8 +136,7 @@ public:
         const size_t output_len = H * num_frames + N;
         std::vector<float> output(output_len, 0.0f);
 
-        std::cout << std::format("  frames={}, fft={}, hop={}\n", num_frames, N, H)
-                  << std::flush;
+        std::cout << std::format("  frames={}, fft={}, hop={}\n", num_frames, N, H) << std::flush;
 
         for (size_t i = 0; i < num_frames; ++i) {
             const float* frame = input.data() + i * H;
@@ -238,8 +237,7 @@ public:
                 if (peak_target == kNoBin)
                     continue;
 
-                const std::ptrdiff_t offset = static_cast<std::ptrdiff_t>(k)
-                                              - static_cast<std::ptrdiff_t>(peak);
+                const std::ptrdiff_t offset = static_cast<std::ptrdiff_t>(k) - static_cast<std::ptrdiff_t>(peak);
                 const std::ptrdiff_t target_signed = static_cast<std::ptrdiff_t>(peak_target) + offset;
                 if (target_signed <= 0 || target_signed >= static_cast<std::ptrdiff_t>(nb - 1))
                     continue;
@@ -250,8 +248,7 @@ public:
                 // 碰撞处理：保留幅度最大的源
                 if (src_gain_[k] > synth_gain_[target_idx]) {
                     synth_gain_[target_idx] = src_gain_[k];
-                    synth_omega_[target_idx] = peak_target_omega_[peak]
-                                               + omega_per_bin_ * static_cast<float>(offset);
+                    synth_omega_[target_idx] = peak_target_omega_[peak] + omega_per_bin_ * static_cast<float>(offset);
                     synth_source_idx_[target_idx] = k;
                 }
             }
@@ -288,8 +285,7 @@ public:
                     }
                     else {
                         // 无内容的 bin：按 bin 中心频率递推
-                        synth_phase_[k] += omega_per_bin_ * static_cast<float>(k)
-                                           * static_cast<float>(H);
+                        synth_phase_[k] += omega_per_bin_ * static_cast<float>(k) * static_cast<float>(H);
                         synth_phase_[k] = WrapPi(synth_phase_[k]);
                     }
                 }
@@ -344,8 +340,7 @@ public:
             for (float& x : output)
                 x *= scale;
 
-            std::cout << std::format("  ola_peak_gain={:.4f}, scale={:.4f}\n", peak_gain, scale)
-                      << std::flush;
+            std::cout << std::format("  ola_peak_gain={:.4f}, scale={:.4f}\n", peak_gain, scale) << std::flush;
         }
 
         return output;
@@ -358,7 +353,6 @@ public:
         std::fill(prev_src_im_.begin(), prev_src_im_.end(), 0.0f);
         std::fill(prev_src_pghi_phase_.begin(), prev_src_pghi_phase_.end(), 0.0f);
     }
-
 private:
     static constexpr size_t kNoBin = std::numeric_limits<size_t>::max();
 
@@ -381,14 +375,11 @@ private:
         std::fill(pghi_done_.begin(), pghi_done_.end(), false);
         pghi_heap_.clear();
         for (size_t k = 0; k < num_bins_; ++k) {
-            const float gain = std::sqrt(prev_src_re_[k] * prev_src_re_[k]
-                                         + prev_src_im_[k] * prev_src_im_[k]);
+            const float gain = std::sqrt(prev_src_re_[k] * prev_src_re_[k] + prev_src_im_[k] * prev_src_im_[k]);
             pghi_heap_.push_back({gain, k, true});
         }
 
-        const auto compare_gain = [](const PghiHeapItem& lhs, const PghiHeapItem& rhs) {
-            return lhs.gain < rhs.gain;
-        };
+        const auto compare_gain = [](const PghiHeapItem& lhs, const PghiHeapItem& rhs) { return lhs.gain < rhs.gain; };
         std::make_heap(pghi_heap_.begin(), pghi_heap_.end(), compare_gain);
 
         size_t processed = 0;
@@ -405,8 +396,8 @@ private:
                 const float cr = src_re_[k] * prev_src_re_[k] + src_im_[k] * prev_src_im_[k];
                 const float ci = src_im_[k] * prev_src_re_[k] - src_re_[k] * prev_src_im_[k];
                 const float phase_delta = std::atan2(ci, cr) - two_pi_hop * static_cast<float>(k);
-                src_pghi_phase_[k] = WrapPi(prev_src_pghi_phase_[k] + WrapPi(phase_delta)
-                                             + two_pi_hop * static_cast<float>(k));
+                src_pghi_phase_[k] =
+                    WrapPi(prev_src_pghi_phase_[k] + WrapPi(phase_delta) + two_pi_hop * static_cast<float>(k));
 
                 pghi_done_[k] = true;
                 ++processed;
@@ -422,13 +413,11 @@ private:
                 const float group_delay = std::atan2(ci, cr);
                 src_pghi_phase_[neighbor] = WrapPi(src_pghi_phase_[k] + group_delay);
                 pghi_done_[neighbor] = true;
-                const float gain = std::sqrt(src_re_[neighbor] * src_re_[neighbor]
-                                             + src_im_[neighbor] * src_im_[neighbor]);
+                const float gain =
+                    std::sqrt(src_re_[neighbor] * src_re_[neighbor] + src_im_[neighbor] * src_im_[neighbor]);
                 pghi_heap_.push_back({gain, neighbor, false});
                 std::push_heap(pghi_heap_.begin(), pghi_heap_.end(),
-                               [](const PghiHeapItem& lhs, const PghiHeapItem& rhs) {
-                                   return lhs.gain < rhs.gain;
-                               });
+                               [](const PghiHeapItem& lhs, const PghiHeapItem& rhs) { return lhs.gain < rhs.gain; });
             };
 
             if (k + 1 < num_bins_ && !pghi_done_[k + 1]) {
@@ -466,8 +455,7 @@ private:
         size_t peak_index = 0;
         for (size_t k = 0; k < num_bins_; ++k) {
             while (peak_index + 1 < peak_bins_.size()
-                   && k >= peak_bins_[peak_index]
-                               + (peak_bins_[peak_index + 1] - peak_bins_[peak_index] + 1) / 2) {
+                   && k >= peak_bins_[peak_index] + (peak_bins_[peak_index + 1] - peak_bins_[peak_index] + 1) / 2) {
                 ++peak_index;
             }
             src_peak_[k] = peak_bins_[peak_index];
@@ -531,8 +519,8 @@ private:
     size_t fft_size_ = 2048;
     size_t num_bins_ = 1025;
     bool first_frame_ = true;
-    float omega_per_bin_ = 0.0f;     // 2π / N
-    float fs_over_2pi_ = 0.0f;       // fs / (2π)
+    float omega_per_bin_ = 0.0f; // 2π / N
+    float fs_over_2pi_ = 0.0f;   // fs / (2π)
     float max_correction_ = 0.0f;
 
     // ---- 调性 ----

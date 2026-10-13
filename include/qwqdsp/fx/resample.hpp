@@ -63,7 +63,8 @@ public:
             float const frac = static_cast<float>(position - static_cast<double>(base));
             for (int tap = -half_len; tap <= half_len; ++tap) {
                 int const index = base + tap;
-                if (index < 0 || index >= static_cast<int>(x.size())) continue;
+                if (index < 0 || index >= static_cast<int>(x.size()))
+                    continue;
                 float const table_pos = static_cast<float>(half_len - tap) * static_cast<float>(oversample_plus1_)
                                       + frac * static_cast<float>(oversample_plus1_);
                 size_t const table_index = std::min(static_cast<size_t>(table_pos), kernel_.size() - 2);

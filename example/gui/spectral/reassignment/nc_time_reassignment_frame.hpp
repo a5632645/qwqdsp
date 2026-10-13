@@ -143,7 +143,7 @@ struct NcTimeReassignmentFrame {
             const int k_hi = rowToBinHi_[y];
             float best = dbFloor_;
             for (int k = k_lo; k <= k_hi; ++k) {
-                const float v = col_buf_[k];   // 第 0 个子列、NC bin k
+                const float v = col_buf_[k]; // 第 0 个子列、NC bin k
                 if (v > best)
                     best = v;
             }
@@ -174,9 +174,9 @@ private:
     qwqdsp_spectral::RealFftAdv fft_;
     std::vector<float> fft_in_;
     std::vector<std::complex<float>> X_, X_pf_;
-    std::vector<float> col_buf_;   // [subCol * ncSize_ + k]，原始 NC 网格，行 = NC bin
-    std::vector<float> colMax_;    // [outputHeight_]，频率网格每行 max dB
+    std::vector<float> col_buf_; // [subCol * ncSize_ + k]，原始 NC 网格，行 = NC bin
+    std::vector<float> colMax_;  // [outputHeight_]，频率网格每行 max dB
     std::vector<Color> column_;
-    std::vector<int> rowToBinLo_;  // [outputHeight_]，每行覆盖的 NC bin 区间下界
-    std::vector<int> rowToBinHi_;  // [outputHeight_]，每行覆盖的 NC bin 区间上界
+    std::vector<int> rowToBinLo_; // [outputHeight_]，每行覆盖的 NC bin 区间下界
+    std::vector<int> rowToBinHi_; // [outputHeight_]，每行覆盖的 NC bin 区间上界
 };

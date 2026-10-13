@@ -12,7 +12,10 @@
 namespace qwqdsp_test {
 
 /** 瞬态检测 ODF 类型：Flux（线性幅度谱通量）或 SuperFlux（对数滤波器组） */
-enum class OdfType { Flux, SuperFlux };
+enum class OdfType {
+    Flux,
+    SuperFlux
+};
 
 // ------------------------------------------------------------
 // PhaseGradientTransientVocoder
@@ -250,7 +253,6 @@ public:
         flux_hist_.clear();
         flux_cooldown_ = 0;
     }
-
 private:
     static float WrapToPi(float x) noexcept {
         return x - 2.0f * std::numbers::pi_v<float> * std::round(x / (2.0f * std::numbers::pi_v<float>));

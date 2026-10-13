@@ -1,7 +1,7 @@
 #pragma once
 
-#include <qwqdsp/window/hann.hpp>
 #include <qwqdsp/spectral/real_fft.hpp>
+#include <qwqdsp/window/hann.hpp>
 
 #include <algorithm>
 #include <array>
@@ -97,9 +97,10 @@ public:
         const size_t hop = FindColaHop(fft_size, static_cast<size_t>(std::round(hop_desired)));
         const float actual_max_correction = sample_rate / (2.0f * static_cast<float>(hop));
 
-        std::cout << std::format("  Init2: desired_hop={:.1f}, cola_hop={}, "
-                                 "desired_max_corr={:.1f} Hz, actual_max_corr={:.1f} Hz\n",
-                                 hop_desired, hop, max_correction_freq, actual_max_correction)
+        std::cout << std::format(
+            "  Init2: desired_hop={:.1f}, cola_hop={}, "
+            "desired_max_corr={:.1f} Hz, actual_max_corr={:.1f} Hz\n",
+            hop_desired, hop, max_correction_freq, actual_max_correction)
                   << std::flush;
 
         Init(sample_rate, hop, fft_size);
@@ -124,8 +125,7 @@ public:
         const size_t output_len = H * num_frames + N;
         std::vector<float> output(output_len, 0.0f);
 
-        std::cout << std::format("  frames={}, fft={}, hop={}\n", num_frames, N, H)
-                  << std::flush;
+        std::cout << std::format("  frames={}, fft={}, hop={}\n", num_frames, N, H) << std::flush;
 
         for (size_t i = 0; i < num_frames; ++i) {
             const float* frame = input.data() + i * H;
@@ -217,8 +217,7 @@ public:
                 if (peak_target == kNoBin)
                     continue;
 
-                const std::ptrdiff_t offset = static_cast<std::ptrdiff_t>(k)
-                                              - static_cast<std::ptrdiff_t>(peak);
+                const std::ptrdiff_t offset = static_cast<std::ptrdiff_t>(k) - static_cast<std::ptrdiff_t>(peak);
                 const std::ptrdiff_t target_signed = static_cast<std::ptrdiff_t>(peak_target) + offset;
                 if (target_signed <= 0 || target_signed >= static_cast<std::ptrdiff_t>(nb - 1))
                     continue;
@@ -229,8 +228,7 @@ public:
                 // 碰撞处理：保留幅度最大的源
                 if (src_gain_[k] > synth_gain_[target_idx]) {
                     synth_gain_[target_idx] = src_gain_[k];
-                    synth_omega_[target_idx] = peak_target_omega_[peak]
-                                               + omega_per_bin_ * static_cast<float>(offset);
+                    synth_omega_[target_idx] = peak_target_omega_[peak] + omega_per_bin_ * static_cast<float>(offset);
                     synth_source_idx_[target_idx] = k;
                 }
             }
@@ -267,8 +265,7 @@ public:
                     }
                     else {
                         // 无内容的 bin：按 bin 中心频率递推
-                        synth_phase_[k] += omega_per_bin_ * static_cast<float>(k)
-                                           * static_cast<float>(H);
+                        synth_phase_[k] += omega_per_bin_ * static_cast<float>(k) * static_cast<float>(H);
                         synth_phase_[k] = WrapPi(synth_phase_[k]);
                     }
                 }
@@ -302,7 +299,6 @@ public:
             for (size_t j = 0; j < N; ++j) {
                 output[i * H + j] += fft_buf_delay_[j] * window_[j];
             }
-
         }
 
         // ---- OLA 增益归一化 ----
@@ -320,8 +316,7 @@ public:
             for (float& x : output)
                 x *= scale;
 
-            std::cout << std::format("  ola_peak_gain={:.4f}, scale={:.4f}\n", peak_gain, scale)
-                      << std::flush;
+            std::cout << std::format("  ola_peak_gain={:.4f}, scale={:.4f}\n", peak_gain, scale) << std::flush;
         }
 
         return output;
@@ -331,7 +326,6 @@ public:
         first_frame_ = true;
         std::fill(synth_phase_.begin(), synth_phase_.end(), 0.0f);
     }
-
 private:
     static constexpr size_t kNoBin = std::numeric_limits<size_t>::max();
 
@@ -359,8 +353,7 @@ private:
         size_t peak_index = 0;
         for (size_t k = 0; k < num_bins_; ++k) {
             while (peak_index + 1 < peak_bins_.size()
-                   && k >= peak_bins_[peak_index]
-                               + (peak_bins_[peak_index + 1] - peak_bins_[peak_index] + 1) / 2) {
+                   && k >= peak_bins_[peak_index] + (peak_bins_[peak_index + 1] - peak_bins_[peak_index] + 1) / 2) {
                 ++peak_index;
             }
             src_peak_[k] = peak_bins_[peak_index];
@@ -405,8 +398,8 @@ private:
     size_t num_bins_ = 1025;
     float kp_ = 1.0f;
     bool first_frame_ = true;
-    float omega_per_bin_ = 0.0f;  // 2π / N
-    float fs_over_2pi_ = 0.0f;    // fs / (2π)
+    float omega_per_bin_ = 0.0f; // 2π / N
+    float fs_over_2pi_ = 0.0f;   // fs / (2π)
 
     // ---- DSP ----
     qwqdsp_spectral::RealFFT fft_;

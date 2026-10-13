@@ -93,7 +93,6 @@ public:
             }
         }
     }
-
 private:
     /// Hann 窗（周期性，与分析一致）
     static float Window(int n) noexcept {
@@ -148,7 +147,6 @@ public:
         uint64_t const r = read_.load(std::memory_order_relaxed);
         return static_cast<int>(w - r);
     }
-
 private:
     std::array<Frame, kCapacity> slots_{};
     std::atomic<uint64_t> write_{0};
@@ -184,7 +182,6 @@ public:
         read_.store(rd + 1, std::memory_order_release);
         return true;
     }
-
 private:
     std::array<PitchResult, kCapacity> slots_{};
     std::atomic<uint64_t> write_{0};
@@ -225,10 +222,9 @@ public:
     uint64_t OutputFrame() const noexcept {
         return out_frame_.load(std::memory_order_relaxed);
     }
-
 private:
     void Run() {
-        std::vector<float> window;   // 连续窗口缓冲 [W * 132]
+        std::vector<float> window; // 连续窗口缓冲 [W * 132]
         std::vector<float> pitch, conf;
 
         while (running_.load(std::memory_order_acquire)) {

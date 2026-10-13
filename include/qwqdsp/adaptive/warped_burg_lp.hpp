@@ -104,7 +104,6 @@ public:
         auto const zinv = std::polar(1.0f, -2.0f * std::numbers::pi_v<float> * freq_hz / sample_rate);
         return (warp_ + zinv) / (1.0f + warp_ * zinv);
     }
-
 private:
     std::vector<float> eb_;
     float warp_{0.0f};

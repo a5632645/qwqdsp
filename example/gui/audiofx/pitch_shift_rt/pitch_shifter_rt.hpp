@@ -8,21 +8,46 @@
 #include <numbers>
 
 #include <qwqdsp/spectral/real_fft.hpp>
-#include <qwqdsp/window/hann.hpp>
-#include <qwqdsp/window/blackman_harris_3term.hpp>
 #include <qwqdsp/window/blackman_harris.hpp>
+#include <qwqdsp/window/blackman_harris_3term.hpp>
+#include <qwqdsp/window/hann.hpp>
 
 namespace pitch_shift_rt {
 
-enum class WindowType { Hann, BlackmanHarrisThreeTerm, BlackmanHarris };
+enum class WindowType {
+    Hann,
+    BlackmanHarrisThreeTerm,
+    BlackmanHarris
+};
 
 namespace detail {
-template <WindowType kType> struct WindowTraits;
-template <> struct WindowTraits<WindowType::Hann> { static constexpr std::size_t kOverlap = 4; static constexpr float kOlaGain = 2.0f / 3.0f; using Type = qwqdsp_window::Hann; };
-template <> struct WindowTraits<WindowType::BlackmanHarrisThreeTerm> { static constexpr std::size_t kOverlap = 6; static constexpr float kOlaGain = 0.5431781f; using Type = qwqdsp_window::BlackmanHarrisThreeTerm; };
-template <> struct WindowTraits<WindowType::BlackmanHarris> { static constexpr std::size_t kOverlap = 8; static constexpr float kOlaGain = 0.4845649f; using Type = qwqdsp_window::BlackmanHarris; };
-constexpr std::size_t nextPowerOfTwo(std::size_t value) noexcept { std::size_t result = 1; while (result < value) result <<= 1; return result; }
+template <WindowType kType>
+struct WindowTraits;
+template <>
+struct WindowTraits<WindowType::Hann> {
+    static constexpr std::size_t kOverlap = 4;
+    static constexpr float kOlaGain = 2.0f / 3.0f;
+    using Type = qwqdsp_window::Hann;
+};
+template <>
+struct WindowTraits<WindowType::BlackmanHarrisThreeTerm> {
+    static constexpr std::size_t kOverlap = 6;
+    static constexpr float kOlaGain = 0.5431781f;
+    using Type = qwqdsp_window::BlackmanHarrisThreeTerm;
+};
+template <>
+struct WindowTraits<WindowType::BlackmanHarris> {
+    static constexpr std::size_t kOverlap = 8;
+    static constexpr float kOlaGain = 0.4845649f;
+    using Type = qwqdsp_window::BlackmanHarris;
+};
+constexpr std::size_t nextPowerOfTwo(std::size_t value) noexcept {
+    std::size_t result = 1;
+    while (result < value)
+        result <<= 1;
+    return result;
 }
+} // namespace detail
 
 /**
  * @brief 实时移调器使用的相位重建算法
@@ -204,8 +229,7 @@ private:
         if (uses_pghi) {
             constexpr std::size_t kHalfWindow = kWindowSize / 2;
             for (std::size_t i = 0; i < kHalfWindow; ++i) {
-                fft_input_[i] = input_ring_[(input_write_ + kHalfWindow + i) % kWindowSize]
-                              * window_[kHalfWindow + i];
+                fft_input_[i] = input_ring_[(input_write_ + kHalfWindow + i) % kWindowSize] * window_[kHalfWindow + i];
             }
             const std::size_t pad = kFrameSize - kHalfWindow;
             for (std::size_t i = 0; i < kHalfWindow; ++i) {
@@ -262,7 +286,8 @@ private:
             synthesis_ring_[index] += fft_input_[source] * window_[i] * kOlaGain;
         }
         for (std::size_t i = 0; i < kHalfWindow; ++i) {
-            const std::size_t index = static_cast<std::size_t>((synthesis_frame_start_ + kHalfWindow + i) % kSynthesisRingSize);
+            const std::size_t index =
+                static_cast<std::size_t>((synthesis_frame_start_ + kHalfWindow + i) % kSynthesisRingSize);
             const std::size_t source = uses_pghi ? i : kHalfWindow + i;
             synthesis_ring_[index] += fft_input_[source] * window_[kHalfWindow + i] * kOlaGain;
         }

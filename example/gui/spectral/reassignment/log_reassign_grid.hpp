@@ -212,8 +212,6 @@ struct LogReassignGrid {
     bool CalibrationReady() const noexcept {
         return cal_ready_;
     }
-
-
 private:
     /// @brief 时间双线性：把 mag 按子列坐标 c_pos 分写到相邻两个子列的同一格 base 上
     void SplatTime(int base, float c_pos, float mag) noexcept {
@@ -238,11 +236,11 @@ private:
     float logMin_{}, logMax_{}, dbFloor_{}, cal_{1.0f};
     bool cal_ready_{};
 
-    std::vector<float> row_f_lo_;    // [outputHeight] 该行频率下界 (Hz)
-    std::vector<float> row_cell_w_;  // [outputHeight] 该行子格宽 (Hz)
-    std::vector<int> row_k_;         // [outputHeight] 该行子格数
-    std::vector<int> row_offset_;    // [outputHeight] 该行子格在列块内的起始偏移
-    std::vector<float> col_buf_;     // [subColumns · Σk]
-    std::vector<float> cal_in_;      // [fftLen] 标定用合成信号
+    std::vector<float> row_f_lo_;   // [outputHeight] 该行频率下界 (Hz)
+    std::vector<float> row_cell_w_; // [outputHeight] 该行子格宽 (Hz)
+    std::vector<int> row_k_;        // [outputHeight] 该行子格数
+    std::vector<int> row_offset_;   // [outputHeight] 该行子格在列块内的起始偏移
+    std::vector<float> col_buf_;    // [subColumns · Σk]
+    std::vector<float> cal_in_;     // [fftLen] 标定用合成信号
     std::vector<std::complex<float>> win_fft_;
 };

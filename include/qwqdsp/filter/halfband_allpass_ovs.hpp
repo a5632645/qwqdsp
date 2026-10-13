@@ -28,7 +28,10 @@ inline constexpr std::array<float, 5> kHalfbandN19Chain0{
     3.993399361e-02f, 2.953322197e-01f, 5.952248425e-01f, 8.146834120e-01f, 9.656342782e-01f,
 };
 inline constexpr std::array<float, 4> kHalfbandN19Chain1{
-    1.478918562e-01f, 4.516440986e-01f, 7.163745215e-01f, 8.951804120e-01f,
+    1.478918562e-01f,
+    4.516440986e-01f,
+    7.163745215e-01f,
+    8.951804120e-01f,
 };
 inline constexpr std::size_t kHalfbandChain0Len = kHalfbandN19Chain0.size();
 inline constexpr std::size_t kHalfbandChain1Len = kHalfbandN19Chain1.size();
@@ -51,7 +54,9 @@ public:
         s_.fill(T{});
     }
 
-    void Reset() noexcept { s_.fill(T{}); }
+    void Reset() noexcept {
+        s_.fill(T{});
+    }
 
     [[nodiscard]] T Tick(T x) noexcept {
         T y = x;
@@ -71,7 +76,6 @@ public:
         }
         return y;
     }
-
 private:
     std::array<T, N> a_{};
     std::array<T, N> s_{};
@@ -100,9 +104,12 @@ public:
     }
 
     /// 分别取两条链（抽取用：偶相位走 A0、奇相位走 A1）
-    [[nodiscard]] T TickA0(T x) noexcept { return a0_.Tick(x); }
-    [[nodiscard]] T TickA1(T x) noexcept { return a1_.Tick(x); }
-
+    [[nodiscard]] T TickA0(T x) noexcept {
+        return a0_.Tick(x);
+    }
+    [[nodiscard]] T TickA1(T x) noexcept {
+        return a1_.Tick(x);
+    }
 private:
     ZetaAllpassChain<T, kHalfbandChain0Len, kRotated> a0_{};
     ZetaAllpassChain<T, kHalfbandChain1Len, kRotated> a1_{};
@@ -161,7 +168,6 @@ public:
             out[i] = src[i];
         }
     }
-
 private:
     /// 展开用的临时缓冲（最大 2^K 个）
     std::array<T, kFactor> ping_{};
@@ -241,7 +247,6 @@ public:
             im_prev_ = im_o;
         }
     }
-
 private:
     std::array<T, kFactor> ping_{};
     std::array<T, kFactor> pong_{};
@@ -300,7 +305,6 @@ public:
         }
         return buffer_[0];
     }
-
 private:
     std::array<T, kFactor> buffer_{};
     std::array<T, kFactor> prev_{};

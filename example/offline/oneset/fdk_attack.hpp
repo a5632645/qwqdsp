@@ -63,8 +63,8 @@ public:
 
         // 状态（跨帧保持，FDK 的 BLOCK_SWITCHING_CONTROL）
         float acc_window_nrg = 0.0f;
-        float last_attack = 0;          // 上一帧是否 attack
-        size_t last_attack_index = 0;   // 上一帧 attack 的子窗序号
+        float last_attack = 0;                               // 上一帧是否 attack
+        size_t last_attack_index = 0;                        // 上一帧 attack 的子窗序号
         std::vector<float> prev_filtered(kNumWindows, 0.0f); // 上一帧滤波能量
         float iir_state0 = 0.0f, iir_state1 = 0.0f;          // IIR 状态
 
@@ -90,8 +90,8 @@ public:
                     iir_state0 = x;
                     iir_state1 = (t1 - t2) * 2.0f;
 
-                    window_nrg += iir_state0 * iir_state0;     // 未滤波能量
-                    window_nrg_f += iir_state1 * iir_state1;   // 滤波能量
+                    window_nrg += iir_state0 * iir_state0;   // 未滤波能量
+                    window_nrg_f += iir_state1 * iir_state1; // 滤波能量
                 }
                 cur_filtered[w] = window_nrg_f;
                 en_max = std::max(en_max, window_nrg_f);
@@ -117,8 +117,7 @@ public:
             // 跨帧延续：上一帧 attack 且上一帧最后一窗仍远大于当前首窗
             // 原版：prev_last/16 > 10·cur_1/16（fMult 的定点换算），即 prev_last > 10·cur_1
             if (!attack && last_attack) {
-                if (prev_filtered[kNumWindows - 1] > 10.0f * cur_filtered[1]
-                    && last_attack_index == kNumWindows - 1) {
+                if (prev_filtered[kNumWindows - 1] > 10.0f * cur_filtered[1] && last_attack_index == kNumWindows - 1) {
                     attack = true;
                     attack_index = 0;
                 }
@@ -142,7 +141,6 @@ public:
 
         return result;
     }
-
 private:
     /** FDK-AAC 二阶高通系数 */
     static constexpr float kHiPassCoeff0 = -0.5095f;

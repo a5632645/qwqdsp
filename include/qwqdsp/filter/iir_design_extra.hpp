@@ -203,8 +203,8 @@ public:
         double k = 1.0;
 
         // 最接近0的零点
-        double const first_zero = std::cos(
-            (static_cast<double>(n) / 2.0 - 1.0 + 0.5) * std::numbers::pi_v<double> / static_cast<double>(n));
+        double const first_zero =
+            std::cos((static_cast<double>(n) / 2.0 - 1.0 + 0.5) * std::numbers::pi_v<double> / static_cast<double>(n));
         for (size_t kk = 1; kk <= num_filter; ++kk) {
             double phi = (2.0 * static_cast<double>(kk) - 1.0) * pi / (2.0 * static_cast<double>(n));
             if (!even_order_modify) {

@@ -33,8 +33,8 @@ struct Taylor {
             const double Fm = -(numerator / denominator);
 
             for (size_t i = 0; i < window.size(); ++i) {
-                const double x = 2.0 * std::numbers::pi_v<double> * (static_cast<double>(i) + 0.5)
-                              / static_cast<double>(window.size());
+                const double x = 2.0 * std::numbers::pi_v<double>
+                               * (static_cast<double>(i) + 0.5) / static_cast<double>(window.size());
                 window[i] += static_cast<float>(Fm * cos(static_cast<double>(m) * x));
             }
         }

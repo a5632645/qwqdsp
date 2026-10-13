@@ -146,7 +146,7 @@ private:
     vec latch_;             // 输入延迟线（Tick 用），latch_[0] = 本次 source
     vec k_;                 // RLS 增益向量
 
-    vec iir_latch_;         // 输出延迟线（Filter 用），与 latch_ 刻意分开
+    vec iir_latch_; // 输出延迟线（Filter 用），与 latch_ 刻意分开
 };
 } // namespace qwqdsp_adaptive
 

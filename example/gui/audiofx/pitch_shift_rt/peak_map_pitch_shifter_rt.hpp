@@ -9,8 +9,8 @@
 #include <limits>
 #include <numbers>
 
-#include <qwqdsp/window/hann.hpp>
 #include <qwqdsp/spectral/real_fft.hpp>
+#include <qwqdsp/window/hann.hpp>
 
 namespace pitch_shift_rt {
 
@@ -39,7 +39,7 @@ class RealtimePeakMapPitchShifter {
 public:
     static constexpr std::size_t kFrameSize = 2048;
     static constexpr std::size_t kHopSize = 512;
-    static constexpr std::size_t kNumBins = kFrameSize / 2 + 1;  // 1025
+    static constexpr std::size_t kNumBins = kFrameSize / 2 + 1; // 1025
     // 合成环形缓冲：帧长 2048 / hop 512，16 hop 容量，够覆盖帧跨度
     static constexpr std::size_t kSynthesisRingSize = kFrameSize * 4;
 
@@ -126,7 +126,6 @@ public:
     static constexpr std::size_t latencySamples() noexcept {
         return kFrameSize;
     }
-
 private:
     static constexpr std::size_t kNoBin = std::numeric_limits<std::size_t>::max();
     // 分析/综合共用 periodic Hann，2048/512 四倍重叠下任意点的 Σw ≡ 2.0，
@@ -226,8 +225,7 @@ private:
             if (peak_target == kNoBin)
                 continue;
 
-            const std::ptrdiff_t offset = static_cast<std::ptrdiff_t>(k)
-                                          - static_cast<std::ptrdiff_t>(peak);
+            const std::ptrdiff_t offset = static_cast<std::ptrdiff_t>(k) - static_cast<std::ptrdiff_t>(peak);
             const std::ptrdiff_t target_signed = static_cast<std::ptrdiff_t>(peak_target) + offset;
             if (target_signed <= 0 || target_signed >= static_cast<std::ptrdiff_t>(kNumBins - 1))
                 continue;
@@ -238,8 +236,7 @@ private:
             // 碰撞处理：保留幅度最大的源
             if (src_gain_[k] > synth_gain_[target_idx]) {
                 synth_gain_[target_idx] = src_gain_[k];
-                synth_omega_[target_idx] = peak_target_omega_[peak]
-                                           + omega_per_bin_ * static_cast<float>(offset);
+                synth_omega_[target_idx] = peak_target_omega_[peak] + omega_per_bin_ * static_cast<float>(offset);
                 synth_source_idx_[target_idx] = k;
             }
         }
@@ -276,8 +273,7 @@ private:
                 }
                 else {
                     // 无内容的 bin：按 bin 中心频率递推
-                    synth_phase_[k] += omega_per_bin_ * static_cast<float>(k)
-                                       * static_cast<float>(kHopSize);
+                    synth_phase_[k] += omega_per_bin_ * static_cast<float>(k) * static_cast<float>(kHopSize);
                     synth_phase_[k] = WrapPi(synth_phase_[k]);
                 }
             }
@@ -308,8 +304,7 @@ private:
         fft_.IFFT(fft_buf_.data(), fft_buf_delay_.data());
 
         for (std::size_t j = 0; j < kFrameSize; ++j) {
-            const std::size_t index = static_cast<std::size_t>(
-                (synthesis_frame_start_ + j) % kSynthesisRingSize);
+            const std::size_t index = static_cast<std::size_t>((synthesis_frame_start_ + j) % kSynthesisRingSize);
             synthesis_ring_[index] += fft_buf_delay_[j] * window_[j];
         }
         // 新合成帧在 hop 边界处的窗值为零，因此该边界样本已完整可读。
@@ -341,8 +336,7 @@ private:
         std::size_t peak_index = 0;
         for (std::size_t k = 0; k < kNumBins; ++k) {
             while (peak_index + 1 < peak_count_
-                   && k >= peak_bins_[peak_index]
-                               + (peak_bins_[peak_index + 1] - peak_bins_[peak_index] + 1) / 2) {
+                   && k >= peak_bins_[peak_index] + (peak_bins_[peak_index + 1] - peak_bins_[peak_index] + 1) / 2) {
                 ++peak_index;
             }
             src_peak_[k] = peak_bins_[peak_index];
@@ -375,8 +369,8 @@ private:
     float sample_rate_ = 48000.0f;
     float kp_ = 1.0f;
     bool first_frame_ = true;
-    float omega_per_bin_ = 0.0f;  // 2π / N
-    float fs_over_2pi_ = 0.0f;    // fs / (2π)
+    float omega_per_bin_ = 0.0f; // 2π / N
+    float fs_over_2pi_ = 0.0f;   // fs / (2π)
 
     // ---- DSP ----
     qwqdsp_spectral::RealFFT fft_;

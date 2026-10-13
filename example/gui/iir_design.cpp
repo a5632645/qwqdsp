@@ -94,13 +94,7 @@ enum class Prototype : int {
     ExtraChebyshev2,
 };
 static constexpr std::array<char const*, 7> kPrototypeNames{
-    "butterworth",
-    "cheby1",
-    "cheby2",
-    "elliptic",
-    "bw + atten",
-    "cheby1 extra",
-    "cheby2 extra",
+    "butterworth", "cheby1", "cheby2", "elliptic", "bw + atten", "cheby1 extra", "cheby2 extra",
 };
 
 enum class ResponseKind : int {
@@ -121,11 +115,11 @@ struct DesignParams {
     double q = 1.0;
     bool even_modify = false;
     // 按"含义"分别存值: 切换原型时同名旋钮会接到对应的值上
-    double passband_ripple_db = 1.0;   // 通带纹波 (cheby1 / elliptic / cheby1 extra)
-    double stopband_ripple_db = 40.0;  // 阻带涟漪 (cheby2 extra)
-    double stopband_atten_db = 40.0;   // 阻带衰减 (cheby2 / elliptic)
-    double cutoff_level_db = 3.0;      // 截止频率处的幅度 (extra 的三个原型)
-    double boost_db = 12.0;            // shelf 的提升量(负值即衰减)
+    double passband_ripple_db = 1.0;  // 通带纹波 (cheby1 / elliptic / cheby1 extra)
+    double stopband_ripple_db = 40.0; // 阻带涟漪 (cheby2 extra)
+    double stopband_atten_db = 40.0;  // 阻带衰减 (cheby2 / elliptic)
+    double cutoff_level_db = 3.0;     // 截止频率处的幅度 (extra 的三个原型)
+    double boost_db = 12.0;           // shelf 的提升量(负值即衰减)
 };
 
 /// 设计出来的标记线: 竖线是设计频率, 横线是设计电平
@@ -212,15 +206,15 @@ static float phaseToY(double phase_deg) noexcept {
 /// ripple 旋钮在不同原型下的含义
 enum class RippleRole {
     Unused,
-    PassbandRipple,  ///< 通带纹波, 通带边沿电平
-    StopbandRipple,  ///< 阻带涟漪, 阻带等波纹深度
+    PassbandRipple, ///< 通带纹波, 通带边沿电平
+    StopbandRipple, ///< 阻带涟漪, 阻带等波纹深度
 };
 
 /// atten 旋钮在不同原型下的含义
 enum class LevelRole {
     Unused,
-    StopbandAtten,  ///< 阻带衰减指标
-    CutoffLevel,    ///< 截止频率(1rad/sec)处的幅度
+    StopbandAtten, ///< 阻带衰减指标
+    CutoffLevel,   ///< 截止频率(1rad/sec)处的幅度
 };
 
 /**
@@ -230,14 +224,14 @@ enum class LevelRole {
  */
 static RippleRole rippleRoleOf(Prototype prototype) noexcept {
     switch (prototype) {
-    case Prototype::Chebyshev1:
-    case Prototype::Elliptic:
-    case Prototype::ExtraChebyshev1:
-        return RippleRole::PassbandRipple;
-    case Prototype::ExtraChebyshev2:
-        return RippleRole::StopbandRipple;
-    default:
-        return RippleRole::Unused;
+        case Prototype::Chebyshev1:
+        case Prototype::Elliptic:
+        case Prototype::ExtraChebyshev1:
+            return RippleRole::PassbandRipple;
+        case Prototype::ExtraChebyshev2:
+            return RippleRole::StopbandRipple;
+        default:
+            return RippleRole::Unused;
     }
 }
 
@@ -248,15 +242,15 @@ static RippleRole rippleRoleOf(Prototype prototype) noexcept {
  */
 static LevelRole levelRoleOf(Prototype prototype) noexcept {
     switch (prototype) {
-    case Prototype::Chebyshev2:
-    case Prototype::Elliptic:
-        return LevelRole::StopbandAtten;
-    case Prototype::ButterworthAtten:
-    case Prototype::ExtraChebyshev1:
-    case Prototype::ExtraChebyshev2:
-        return LevelRole::CutoffLevel;
-    default:
-        return LevelRole::Unused;
+        case Prototype::Chebyshev2:
+        case Prototype::Elliptic:
+            return LevelRole::StopbandAtten;
+        case Prototype::ButterworthAtten:
+        case Prototype::ExtraChebyshev1:
+        case Prototype::ExtraChebyshev2:
+            return LevelRole::CutoffLevel;
+        default:
+            return LevelRole::Unused;
     }
 }
 
@@ -282,16 +276,16 @@ static bool isShelfKind(ResponseKind kind) noexcept {
  */
 static bool isShelfPrototype(Prototype prototype) noexcept {
     switch (prototype) {
-    case Prototype::Butterworth:
-    case Prototype::ButterworthAtten:
-    case Prototype::Chebyshev1:
-    case Prototype::ExtraChebyshev1:
-    case Prototype::Chebyshev2:
-    case Prototype::ExtraChebyshev2:
-    case Prototype::Elliptic:
-        return true;
-    default:
-        return false;
+        case Prototype::Butterworth:
+        case Prototype::ButterworthAtten:
+        case Prototype::Chebyshev1:
+        case Prototype::ExtraChebyshev1:
+        case Prototype::Chebyshev2:
+        case Prototype::ExtraChebyshev2:
+        case Prototype::Elliptic:
+            return true;
+        default:
+            return false;
     }
 }
 
@@ -315,10 +309,8 @@ static bool usesShelfBandRipple(Prototype prototype) noexcept {
  * @note shelf 用的是不带修正的原型, 所以 shelf 模式下这个开关不显示
  */
 static bool usesEvenModify(Prototype prototype) noexcept {
-    return prototype == Prototype::Chebyshev1
-        || prototype == Prototype::Chebyshev2
-        || prototype == Prototype::ExtraChebyshev1
-        || prototype == Prototype::ExtraChebyshev2
+    return prototype == Prototype::Chebyshev1 || prototype == Prototype::Chebyshev2
+        || prototype == Prototype::ExtraChebyshev1 || prototype == Prototype::ExtraChebyshev2
         || prototype == Prototype::Elliptic;
 }
 
@@ -338,14 +330,14 @@ static double edgeLevelDb(DesignParams const& params) noexcept {
         return 0.5 * params.boost_db;
     }
     switch (params.prototype) {
-    case Prototype::Butterworth:
-    case Prototype::Chebyshev2:
-        return -10.0 * std::log10(2.0);
-    case Prototype::Chebyshev1:
-    case Prototype::Elliptic:
-        return -params.passband_ripple_db;
-    default:
-        return -params.cutoff_level_db;
+        case Prototype::Butterworth:
+        case Prototype::Chebyshev2:
+            return -10.0 * std::log10(2.0);
+        case Prototype::Chebyshev1:
+        case Prototype::Elliptic:
+            return -params.passband_ripple_db;
+        default:
+            return -params.cutoff_level_db;
     }
 }
 
@@ -362,15 +354,15 @@ static std::optional<double> extraLevelDb(DesignParams const& params) noexcept {
         return std::nullopt;
     }
     switch (params.prototype) {
-    case Prototype::Chebyshev2:
-    case Prototype::Elliptic:
-        return -params.stopband_atten_db;
-    case Prototype::ExtraChebyshev1:
-        return -params.passband_ripple_db;
-    case Prototype::ExtraChebyshev2:
-        return -params.stopband_ripple_db;
-    default:
-        return std::nullopt;
+        case Prototype::Chebyshev2:
+        case Prototype::Elliptic:
+            return -params.stopband_atten_db;
+        case Prototype::ExtraChebyshev1:
+            return -params.passband_ripple_db;
+        case Prototype::ExtraChebyshev2:
+            return -params.stopband_ripple_db;
+        default:
+            return std::nullopt;
     }
 }
 
@@ -406,68 +398,63 @@ static FilterDesign makeDesign(DesignParams const& params) {
         }
         else {
             switch (params.prototype) {
-            case Prototype::Butterworth:
-            case Prototype::ButterworthAtten:
-                IIRDesignShelf::Butterworth(proto, num_pairs, params.boost_db);
-                break;
-            case Prototype::Chebyshev1:
-            case Prototype::ExtraChebyshev1:
-                IIRDesignShelf::Chebyshev1(proto, num_pairs, params.boost_db, params.passband_ripple_db);
-                break;
-            case Prototype::Chebyshev2:
-            case Prototype::ExtraChebyshev2:
-                prototype_ok = IIRDesignShelf::Chebyshev2(
-                    proto, num_pairs, params.boost_db, params.passband_ripple_db);
-                break;
-            case Prototype::Elliptic:
-                prototype_ok = IIRDesignShelf::Elliptic(
-                    proto, num_pairs, params.boost_db, params.passband_ripple_db, params.stopband_atten_db);
-                break;
-            default:
-                prototype_ok = false;
-                break;
+                case Prototype::Butterworth:
+                case Prototype::ButterworthAtten:
+                    IIRDesignShelf::Butterworth(proto, num_pairs, params.boost_db);
+                    break;
+                case Prototype::Chebyshev1:
+                case Prototype::ExtraChebyshev1:
+                    IIRDesignShelf::Chebyshev1(proto, num_pairs, params.boost_db, params.passband_ripple_db,
+                                               params.even_modify);
+                    break;
+                case Prototype::Chebyshev2:
+                case Prototype::ExtraChebyshev2:
+                    prototype_ok = IIRDesignShelf::Chebyshev2(proto, num_pairs, params.boost_db,
+                                                              params.passband_ripple_db, params.even_modify);
+                    break;
+                case Prototype::Elliptic:
+                    prototype_ok =
+                        IIRDesignShelf::Elliptic(proto, num_pairs, params.boost_db, params.passband_ripple_db,
+                                                 params.stopband_atten_db, params.even_modify);
+                    break;
+                default:
+                    prototype_ok = false;
+                    break;
             }
         }
     }
     else {
         switch (params.prototype) {
-        case Prototype::Butterworth:
-            IIRDesign::Butterworth(proto, num_pairs);
-            break;
-        case Prototype::Chebyshev1:
-            IIRDesign::Chebyshev1(proto, num_pairs, params.passband_ripple_db, params.even_modify);
-            break;
-        case Prototype::Chebyshev2:
-            // IIRDesign::Chebyshev2 的 ripple 是负的阻带衰减
-            IIRDesign::Chebyshev2(proto, num_pairs, -params.stopband_atten_db, params.even_modify);
-            break;
-        case Prototype::Elliptic:
-            // 规格过陡时(阻带边沿与通带边沿重合)会返回 false, 此时不该继续算曲线
-            prototype_ok = IIRDesign::Elliptic(
-                proto, num_pairs, params.passband_ripple_db, params.stopband_atten_db, params.even_modify);
-            break;
-        case Prototype::ButterworthAtten:
-            // 这个原型的 atten 是截止频率处的幅度
-            IIRDesignExtra::ButterworthAttenDb(proto, num_pairs, params.cutoff_level_db);
-            break;
-        case Prototype::ExtraChebyshev1:
-            // 通带纹波 + 截止处幅度; 库里有 atten >= ripple 的断言, 这里先夹住
-            IIRDesignExtra::Chebyshev1(
-                proto,
-                num_pairs,
-                params.passband_ripple_db,
-                std::max(params.cutoff_level_db, params.passband_ripple_db),
-                params.even_modify);
-            break;
-        case Prototype::ExtraChebyshev2:
-            // 注意: 这个原型的 ripple 是阻带涟漪, atten 是截止处的幅度(与 Chebyshev1 相反)
-            IIRDesignExtra::Chebyshev2(
-                proto,
-                num_pairs,
-                params.stopband_ripple_db,
-                params.cutoff_level_db,
-                params.even_modify);
-            break;
+            case Prototype::Butterworth:
+                IIRDesign::Butterworth(proto, num_pairs);
+                break;
+            case Prototype::Chebyshev1:
+                IIRDesign::Chebyshev1(proto, num_pairs, params.passband_ripple_db, params.even_modify);
+                break;
+            case Prototype::Chebyshev2:
+                // IIRDesign::Chebyshev2 的 ripple 是负的阻带衰减
+                IIRDesign::Chebyshev2(proto, num_pairs, -params.stopband_atten_db, params.even_modify);
+                break;
+            case Prototype::Elliptic:
+                // 规格过陡时(阻带边沿与通带边沿重合)会返回 false, 此时不该继续算曲线
+                prototype_ok = IIRDesign::Elliptic(proto, num_pairs, params.passband_ripple_db,
+                                                   params.stopband_atten_db, params.even_modify);
+                break;
+            case Prototype::ButterworthAtten:
+                // 这个原型的 atten 是截止频率处的幅度
+                IIRDesignExtra::ButterworthAttenDb(proto, num_pairs, params.cutoff_level_db);
+                break;
+            case Prototype::ExtraChebyshev1:
+                // 通带纹波 + 截止处幅度; 库里有 atten >= ripple 的断言, 这里先夹住
+                IIRDesignExtra::Chebyshev1(proto, num_pairs, params.passband_ripple_db,
+                                           std::max(params.cutoff_level_db, params.passband_ripple_db),
+                                           params.even_modify);
+                break;
+            case Prototype::ExtraChebyshev2:
+                // 注意: 这个原型的 ripple 是阻带涟漪, atten 是截止处的幅度(与 Chebyshev1 相反)
+                IIRDesignExtra::Chebyshev2(proto, num_pairs, params.stopband_ripple_db, params.cutoff_level_db,
+                                           params.even_modify);
+                break;
         }
     }
 
@@ -483,20 +470,20 @@ static FilterDesign makeDesign(DesignParams const& params) {
     }
     else {
         switch (params.kind) {
-        case ResponseKind::Lowpass:
-            IIRDesign::ProtyleToLowpass(proto, num_pairs, wo);
-            break;
-        case ResponseKind::Highpass:
-            IIRDesign::ProtyleToHighpass(proto, num_pairs, wo);
-            break;
-        case ResponseKind::Bandpass:
-            IIRDesign::ProtyleToBandpass(proto, num_pairs, wo, params.q);
-            break;
-        case ResponseKind::Bandstop:
-            IIRDesign::ProtyleToBandstop(proto, num_pairs, wo, params.q);
-            break;
-        default:
-            break;
+            case ResponseKind::Lowpass:
+                IIRDesign::ProtyleToLowpass(proto, num_pairs, wo);
+                break;
+            case ResponseKind::Highpass:
+                IIRDesign::ProtyleToHighpass(proto, num_pairs, wo);
+                break;
+            case ResponseKind::Bandpass:
+                IIRDesign::ProtyleToBandpass(proto, num_pairs, wo, params.q);
+                break;
+            case ResponseKind::Bandstop:
+                IIRDesign::ProtyleToBandstop(proto, num_pairs, wo, params.q);
+                break;
+            default:
+                break;
         }
     }
 
@@ -513,8 +500,8 @@ static FilterDesign makeDesign(DesignParams const& params) {
         }
     }
     for (auto const& coeff : biquad) {
-        if (!std::isfinite(coeff.b0) || !std::isfinite(coeff.b1) || !std::isfinite(coeff.b2)
-            || !std::isfinite(coeff.a1) || !std::isfinite(coeff.a2)) {
+        if (!std::isfinite(coeff.b0) || !std::isfinite(coeff.b1) || !std::isfinite(coeff.b2) || !std::isfinite(coeff.a1)
+            || !std::isfinite(coeff.a2)) {
             out.valid = false;
         }
     }
@@ -587,9 +574,7 @@ static FilterDesign makeDesign(DesignParams const& params) {
  * @param w 数字角频率 (rad/sample)
  * @return 复频响 H(e^jw)
  */
-static std::complex<double> frequencyResponse(
-    std::span<qwqdsp_filter::BiquadCoeff const> biquad,
-    double w) {
+static std::complex<double> frequencyResponse(std::span<qwqdsp_filter::BiquadCoeff const> biquad, double w) {
     std::complex<float> const z{static_cast<float>(std::cos(w)), static_cast<float>(std::sin(w))};
     std::complex<double> h{1.0, 0.0};
     for (auto const& coeff : biquad) {
@@ -605,8 +590,7 @@ static std::complex<double> frequencyResponse(
  * @note 每列取多个子采样, 幅度用最小/最大值画成竖线, 相位取最后一个子采样
  */
 static void sampleCurve(FilterDesign const& design, CurveCache& curve) {
-    std::span<qwqdsp_filter::BiquadCoeff const> const biquad{
-        design.biquad.data(), design.num_sections};
+    std::span<qwqdsp_filter::BiquadCoeff const> const biquad{design.biquad.data(), design.num_sections};
     constexpr double kVeryLowDb = -300.0;
 
     for (int column = 0; column < kPlotColumns; ++column) {
@@ -614,8 +598,7 @@ static void sampleCurve(FilterDesign const& design, CurveCache& curve) {
         double db_high = -1.0e30;
         double phase_deg = 0.0;
         for (int sub = 0; sub < kSubSamples; ++sub) {
-            double const x = kPlotLeft + static_cast<double>(column)
-                           + (static_cast<double>(sub) + 0.5) / kSubSamples;
+            double const x = kPlotLeft + static_cast<double>(column) + (static_cast<double>(sub) + 0.5) / kSubSamples;
             double const freq = xToFreq(x);
             double const w = 2.0 * std::numbers::pi * freq / kFs;
             auto const h = frequencyResponse(biquad, w);
@@ -644,11 +627,7 @@ static void sampleCurve(FilterDesign const& design, CurveCache& curve) {
  * @param enabled 为 false 时画成灰色且不响应点击
  * @return 点击后应选中的项, 未点击则原样返回
  */
-static size_t drawSelector(
-    Rectangle bound,
-    std::span<char const* const> names,
-    size_t selected,
-    bool enabled = true) {
+static size_t drawSelector(Rectangle bound, std::span<char const* const> names, size_t selected, bool enabled = true) {
     auto const mouse_pos = GetMousePosition();
     size_t result = selected;
     float const item_width = bound.width / static_cast<float>(names.size());
@@ -674,21 +653,19 @@ static size_t drawSelector(
             DrawRectangleLinesEx(item, 1.0f, fore);
         }
         int const text_width = MeasureText(names[i], kSelectorFontSize);
-        DrawText(
-            names[i],
-            static_cast<int>(item.x + (item.width - static_cast<float>(text_width)) * 0.5f),
-            static_cast<int>(item.y + (item.height - static_cast<float>(kSelectorFontSize)) * 0.5f),
-            kSelectorFontSize,
-            fore);
+        DrawText(names[i], static_cast<int>(item.x + (item.width - static_cast<float>(text_width)) * 0.5f),
+                 static_cast<int>(item.y + (item.height - static_cast<float>(kSelectorFontSize)) * 0.5f),
+                 kSelectorFontSize, fore);
     }
     return result;
 }
 
 /// 频率轴的刻度 (标数字的那些)
-static constexpr std::array<double, 10> kFreqTicks{20.0, 50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0, 20000.0};
+static constexpr std::array<double, 10> kFreqTicks{20.0,   50.0,   100.0,  200.0,   500.0,
+                                                   1000.0, 2000.0, 5000.0, 10000.0, 20000.0};
 /// 频率轴的细网格
-static constexpr std::array<double, 16> kFreqGrid{
-    20.0, 30.0, 50.0, 70.0, 100.0, 200.0, 300.0, 500.0, 700.0, 1000.0, 2000.0, 3000.0, 5000.0, 7000.0, 10000.0, 20000.0};
+static constexpr std::array<double, 16> kFreqGrid{20.0,  30.0,   50.0,   70.0,   100.0,  200.0,  300.0,   500.0,
+                                                  700.0, 1000.0, 2000.0, 3000.0, 5000.0, 7000.0, 10000.0, 20000.0};
 
 /**
  * @brief 格式化频率刻度文字
@@ -717,12 +694,8 @@ static void drawFrequencyGrid() {
         DrawLineV({x, kPhasePanel.y}, {x, kPhasePanel.y + kPhasePanel.height}, Color{70, 70, 70, 255});
         auto const label = formatTick(freq);
         int const label_width = MeasureText(label.c_str(), kLabelFontSize);
-        DrawText(
-            label.c_str(),
-            static_cast<int>(x) - label_width / 2,
-            static_cast<int>(kPhasePanel.y + kPhasePanel.height) + 4,
-            kLabelFontSize,
-            LIGHTGRAY);
+        DrawText(label.c_str(), static_cast<int>(x) - label_width / 2,
+                 static_cast<int>(kPhasePanel.y + kPhasePanel.height) + 4, kLabelFontSize, LIGHTGRAY);
     }
     DrawRectangleLinesEx(kMagPanel, 1.0f, GRAY);
     DrawRectangleLinesEx(kPhasePanel, 1.0f, GRAY);
@@ -767,7 +740,8 @@ static void drawPhasePanel(CurveCache const& curve) {
         Color const color = (deg == 0) ? Color{90, 90, 90, 255} : Color{45, 45, 45, 255};
         DrawLineV({kPlotLeft, y}, {kPlotRight, y}, color);
         auto const label = std::format("{}", deg);
-        DrawText(label.c_str(), static_cast<int>(kPhasePanel.x) - 42, static_cast<int>(y) - 7, kLabelFontSize, LIGHTGRAY);
+        DrawText(label.c_str(), static_cast<int>(kPhasePanel.x) - 42, static_cast<int>(y) - 7, kLabelFontSize,
+                 LIGHTGRAY);
     }
 
     // 相位曲线: 相邻列一律连线, 不做断线处理。
@@ -821,12 +795,8 @@ static void drawMarkerLabels(FilterDesign const& design) {
         float const x = freqToX(design.markers.vertical_hz[i]);
         auto const label = std::format("fc {:.1f} Hz", design.markers.vertical_hz[i]);
         int const label_width = MeasureText(label.c_str(), kLabelFontSize);
-        DrawText(
-            label.c_str(),
-            static_cast<int>(x) - label_width / 2,
-            static_cast<int>(kMagPanel.y + kMagPanel.height) + 4,
-            kLabelFontSize,
-            RED);
+        DrawText(label.c_str(), static_cast<int>(x) - label_width / 2,
+                 static_cast<int>(kMagPanel.y + kMagPanel.height) + 4, kLabelFontSize, RED);
     }
 
     // 电平标签按行号从高到低排序, 相邻太近就把下面的往下推, 避免几条标签叠在一起。
@@ -835,9 +805,8 @@ static void drawMarkerLabels(FilterDesign const& design) {
     for (size_t i = 0; i < order.size(); ++i) {
         order[i] = i;
     }
-    std::sort(order.begin(), order.begin() + design.markers.num_level, [&](size_t a, size_t b) {
-        return design.markers.level_db[a] > design.markers.level_db[b];
-    });
+    std::sort(order.begin(), order.begin() + design.markers.num_level,
+              [&](size_t a, size_t b) { return design.markers.level_db[a] > design.markers.level_db[b]; });
 
     float const label_gap = static_cast<float>(kLabelFontSize + 2);
     std::array<float, 3> label_y{};
@@ -861,12 +830,8 @@ static void drawMarkerLabels(FilterDesign const& design) {
 
         auto const label = std::format("{:.2f} dB", level);
         int const label_width = MeasureText(label.c_str(), kLabelFontSize);
-        DrawText(
-            label.c_str(),
-            static_cast<int>(kPlotRight) - label_width - 4,
-            static_cast<int>(label_y[i]),
-            kLabelFontSize,
-            color);
+        DrawText(label.c_str(), static_cast<int>(kPlotRight) - label_width - 4, static_cast<int>(label_y[i]),
+                 kLabelFontSize, color);
 
         if (is_main) {
             // 设计频率处的实际曲线位置: 设计恰好达标时圆圈落在横线交点上,
@@ -908,8 +873,8 @@ static void bindParamKnobs(DesignParams& params, Knob& ripple_knob, Knob& level_
         }
         else if (isShelfPrototype(params.prototype)) {
             // Chebyshev1 shelf: 通带纹波; 巴特沃斯/椭圆不用这个旋钮(椭圆用下面的阻带电平)
-            bool const uses_ripple = params.prototype == Prototype::Chebyshev1
-                                  || params.prototype == Prototype::ExtraChebyshev1;
+            bool const uses_ripple =
+                params.prototype == Prototype::Chebyshev1 || params.prototype == Prototype::ExtraChebyshev1;
             if (uses_ripple) {
                 ripple_knob.set_title("pb ripple");
                 ripple_knob.set_range(0.01f, 6.0f, 0.01f, static_cast<float>(params.passband_ripple_db));
@@ -930,35 +895,35 @@ static void bindParamKnobs(DesignParams& params, Knob& ripple_knob, Knob& level_
     }
 
     switch (rippleRoleOf(params.prototype)) {
-    case RippleRole::PassbandRipple:
-        ripple_knob.set_title("pb ripple");
-        ripple_knob.set_range(0.01f, 6.0f, 0.01f, static_cast<float>(params.passband_ripple_db));
-        ripple_knob.SetEnable(true);
-        break;
-    case RippleRole::StopbandRipple:
-        ripple_knob.set_title("sb ripple");
-        ripple_knob.set_range(10.0f, 120.0f, 0.5f, static_cast<float>(params.stopband_ripple_db));
-        ripple_knob.SetEnable(true);
-        break;
-    case RippleRole::Unused:
-        ripple_knob.SetEnable(false);
-        break;
+        case RippleRole::PassbandRipple:
+            ripple_knob.set_title("pb ripple");
+            ripple_knob.set_range(0.01f, 6.0f, 0.01f, static_cast<float>(params.passband_ripple_db));
+            ripple_knob.SetEnable(true);
+            break;
+        case RippleRole::StopbandRipple:
+            ripple_knob.set_title("sb ripple");
+            ripple_knob.set_range(10.0f, 120.0f, 0.5f, static_cast<float>(params.stopband_ripple_db));
+            ripple_knob.SetEnable(true);
+            break;
+        case RippleRole::Unused:
+            ripple_knob.SetEnable(false);
+            break;
     }
 
     switch (levelRoleOf(params.prototype)) {
-    case LevelRole::StopbandAtten:
-        level_knob.set_title("sb atten");
-        level_knob.set_range(10.0f, 120.0f, 0.5f, static_cast<float>(params.stopband_atten_db));
-        level_knob.SetEnable(true);
-        break;
-    case LevelRole::CutoffLevel:
-        level_knob.set_title("cut level");
-        level_knob.set_range(0.5f, 60.0f, 0.1f, static_cast<float>(params.cutoff_level_db));
-        level_knob.SetEnable(true);
-        break;
-    case LevelRole::Unused:
-        level_knob.SetEnable(false);
-        break;
+        case LevelRole::StopbandAtten:
+            level_knob.set_title("sb atten");
+            level_knob.set_range(10.0f, 120.0f, 0.5f, static_cast<float>(params.stopband_atten_db));
+            level_knob.SetEnable(true);
+            break;
+        case LevelRole::CutoffLevel:
+            level_knob.set_title("cut level");
+            level_knob.set_range(0.5f, 60.0f, 0.1f, static_cast<float>(params.cutoff_level_db));
+            level_knob.SetEnable(true);
+            break;
+        case LevelRole::Unused:
+            level_knob.SetEnable(false);
+            break;
     }
 }
 
@@ -1045,14 +1010,14 @@ int main() {
             return;
         }
         switch (rippleRoleOf(g_params.prototype)) {
-        case RippleRole::PassbandRipple:
-            g_params.passband_ripple_db = value;
-            break;
-        case RippleRole::StopbandRipple:
-            g_params.stopband_ripple_db = value;
-            break;
-        case RippleRole::Unused:
-            break;
+            case RippleRole::PassbandRipple:
+                g_params.passband_ripple_db = value;
+                break;
+            case RippleRole::StopbandRipple:
+                g_params.stopband_ripple_db = value;
+                break;
+            case RippleRole::Unused:
+                break;
         }
         g_dirty = true;
     };
@@ -1062,14 +1027,14 @@ int main() {
     level_knob.value_to_text_function = [](float value) { return std::format("{:.1f} dB", value); };
     level_knob.on_value_change = [](float value) {
         switch (levelRoleOf(g_params.prototype)) {
-        case LevelRole::StopbandAtten:
-            g_params.stopband_atten_db = value;
-            break;
-        case LevelRole::CutoffLevel:
-            g_params.cutoff_level_db = value;
-            break;
-        case LevelRole::Unused:
-            break;
+            case LevelRole::StopbandAtten:
+                g_params.stopband_atten_db = value;
+                break;
+            case LevelRole::CutoffLevel:
+                g_params.cutoff_level_db = value;
+                break;
+            case LevelRole::Unused:
+                break;
         }
         g_dirty = true;
     };
@@ -1101,7 +1066,8 @@ int main() {
             ClearBackground(BLACK);
 
             // ----- 选择行 -----
-            size_t const prototype_index = drawSelector(proto_bound, kPrototypeNames, static_cast<size_t>(g_params.prototype));
+            size_t const prototype_index =
+                drawSelector(proto_bound, kPrototypeNames, static_cast<size_t>(g_params.prototype));
             if (prototype_index != static_cast<size_t>(g_params.prototype)) {
                 g_params.prototype = static_cast<Prototype>(prototype_index);
                 // 两个数字参数的含义随原型变化, 重新把旋钮接到对应角色上
@@ -1118,12 +1084,9 @@ int main() {
                 g_dirty = true;
             }
 
-            bool const even_enabled = usesEvenModify(g_params.prototype) && !isShelfKind(g_params.kind);
-            size_t const even_index = drawSelector(
-                even_bound,
-                kEvenNames,
-                g_params.even_modify ? 1 : 0,
-                even_enabled);
+            // bool const even_enabled = usesEvenModify(g_params.prototype) && !isShelfKind(g_params.kind);
+            bool const even_enabled = usesEvenModify(g_params.prototype);
+            size_t const even_index = drawSelector(even_bound, kEvenNames, g_params.even_modify ? 1 : 0, even_enabled);
             bool const even_modify = (even_index == 1);
             if (even_modify != g_params.even_modify) {
                 g_params.even_modify = even_modify;
@@ -1161,41 +1124,38 @@ int main() {
                 drawMarkerLabels(g_design);
             }
             else if (isShelfKind(g_params.kind) && !isShelfPrototype(g_params.prototype)) {
-                DrawText(
-                    "this prototype has no shelf construction; try butterworth / cheby1 / cheby2 / elliptic",
-                    static_cast<int>(kPlotLeft),
-                    static_cast<int>(kMagPanel.y) + 20,
-                    20,
-                    RED);
+                DrawText("this prototype has no shelf construction; try butterworth / cheby1 / cheby2 / elliptic",
+                         static_cast<int>(kPlotLeft), static_cast<int>(kMagPanel.y) + 20, 20, RED);
             }
             else {
-                DrawText("parameter set has no finite solution", static_cast<int>(kPlotLeft), static_cast<int>(kMagPanel.y) + 20, 20, RED);
+                DrawText("parameter set has no finite solution", static_cast<int>(kPlotLeft),
+                         static_cast<int>(kMagPanel.y) + 20, 20, RED);
             }
 
             // ----- 文字信息 -----
             size_t const order = 2 * g_design.num_sections;
             auto const info = std::format(
-                "order {}  |  {} biquad  |  fs {} Hz  |  markers: {} (vertical) + design level (horizontal)",
-                order,
-                g_design.num_sections,
-                static_cast<int>(kFs),
-                isShelfKind(g_params.kind) ? "midpoint fc" : "cutoff fc");
+                "order {}  |  {} biquad  |  fs {} Hz  |  markers: {} (vertical) + design level (horizontal)", order,
+                g_design.num_sections, static_cast<int>(kFs), isShelfKind(g_params.kind) ? "midpoint fc" : "cutoff fc");
             DrawText(info.c_str(), 10, 588, kLabelFontSize, LIGHTGRAY);
 
             auto const used = std::format(
                 "used: pairs, fc{}{}{}{}{}{}{}",
                 isShelfKind(g_params.kind)
-                    ? ((g_params.prototype == Prototype::Chebyshev1
-                        || g_params.prototype == Prototype::ExtraChebyshev1
-                        || usesShelfBandRipple(g_params.prototype)) ? ", band ripple" : "")
+                    ? ((g_params.prototype == Prototype::Chebyshev1 || g_params.prototype == Prototype::ExtraChebyshev1
+                        || usesShelfBandRipple(g_params.prototype))
+                           ? ", band ripple"
+                           : "")
                     : (rippleRoleOf(g_params.prototype) == RippleRole::PassbandRipple ? ", passband ripple" : ""),
                 isShelfKind(g_params.kind)
                     ? (g_params.prototype == Prototype::Elliptic ? ", stopband atten" : "")
                     : (rippleRoleOf(g_params.prototype) == RippleRole::StopbandRipple ? ", stopband ripple" : ""),
                 levelRoleOf(g_params.prototype) == LevelRole::StopbandAtten && !isShelfKind(g_params.kind)
-                    ? ", stopband atten" : "",
+                    ? ", stopband atten"
+                    : "",
                 levelRoleOf(g_params.prototype) == LevelRole::CutoffLevel && !isShelfKind(g_params.kind)
-                    ? ", cutoff level" : "",
+                    ? ", cutoff level"
+                    : "",
                 is_band ? ", q" : "",
                 usesEvenModify(g_params.prototype) && !isShelfKind(g_params.kind) ? ", even modify" : "",
                 isShelfKind(g_params.kind) && isShelfPrototype(g_params.prototype) ? ", boost" : "");

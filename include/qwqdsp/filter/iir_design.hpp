@@ -217,7 +217,7 @@ struct IIRDesign {
                     p = -p;
                 }
                 if (p.real() > 0.0) {
-                    p = -std::conj(p);      // 反射到左半平面(幅度响应不变)
+                    p = -std::conj(p); // 反射到左半平面(幅度响应不变)
                 }
                 ret[k - 1].p = p;
                 if (cos_phi * cos_phi > c2) {
@@ -225,7 +225,7 @@ struct IIRDesign {
                     ret[k - 1].z = std::complex{0.0, 1.0 / xz};
                 }
                 else {
-                    ret[k - 1].z = std::nullopt;   // 最靠近 0dB 的那个零点推到无穷远
+                    ret[k - 1].z = std::nullopt; // 最靠近 0dB 的那个零点推到无穷远
                 }
             }
             else {

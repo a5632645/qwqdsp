@@ -36,9 +36,9 @@ public:
      * @brief 窗口模式（对应原版三种预设）。
      */
     enum class WindowMode {
-        kSmall,   ///< 鼓组：窗 128，关闭 ACF
-        kMedium,  ///< 通用：窗 1024，启用 ACF
-        kLarge,   ///< 人声：窗 2048，启用 ACF
+        kSmall,  ///< 鼓组：窗 128，关闭 ACF
+        kMedium, ///< 通用：窗 1024，启用 ACF
+        kLarge,  ///< 人声：窗 2048，启用 ACF
     };
 
     PitcherWsola() {
@@ -98,7 +98,6 @@ public:
         fade_ = false;
         fader_ = CosineFade{};
     }
-
 private:
     // ------------------------------------------------------------
     // RingBuffer — 单声道环形缓冲（4 点 Catmull-Rom 插值读取）
@@ -150,10 +149,8 @@ private:
             const float a2 = -1.5f * t3 + 2.0f * t2 + 0.5f * t;
             const float a3 = 0.5f * t3 - 0.5f * t2;
 
-            return a0 * buffer_[static_cast<size_t>(i0)]
-                 + a1 * buffer_[static_cast<size_t>(i1)]
-                 + a2 * buffer_[static_cast<size_t>(i2)]
-                 + a3 * buffer_[static_cast<size_t>(i3)];
+            return a0 * buffer_[static_cast<size_t>(i0)] + a1 * buffer_[static_cast<size_t>(i1)]
+                 + a2 * buffer_[static_cast<size_t>(i2)] + a3 * buffer_[static_cast<size_t>(i3)];
         }
 
         void CopyFromBuffer(float* target, int delay, int copy_length) const noexcept {
@@ -177,7 +174,6 @@ private:
         int Size() const noexcept {
             return size_;
         }
-
     private:
         std::vector<float> buffer_;
         int write_pos_ = 0;
@@ -193,8 +189,8 @@ private:
         float y2 = 0.0f;
         float b1 = 0.0f;
         float count = 1.0f;
-        float prev_len = 0.0f;  // 上一次淡化长度（Nc）
-        float weight = 0.0f;    // 当前淡化权重 [0,1]
+        float prev_len = 0.0f; // 上一次淡化长度（Nc）
+        float weight = 0.0f;   // 当前淡化权重 [0,1]
 
         void Prepare(float n) noexcept {
             if (n < 2.0f)
@@ -214,7 +210,7 @@ private:
             const float clamped = std::max(2.0f, n);
             const float step = std::numbers::pi_v<float> / (clamped - 1.0f);
             b1 = 2.0f * std::cos(step);
-            count *= clamped / prev_len;  // 保持淡化进度比例
+            count *= clamped / prev_len; // 保持淡化进度比例
             prev_len = clamped;
         }
 
@@ -235,9 +231,9 @@ private:
     static constexpr int kOrderMedium = 10;
     static constexpr int kOrderLarge = 11;
 
-    static constexpr int kWindowSmall = 1 << kOrderSmall;    // 128
-    static constexpr int kWindowMedium = 1 << kOrderMedium;  // 1024
-    static constexpr int kWindowLarge = 1 << kOrderLarge;    // 2048
+    static constexpr int kWindowSmall = 1 << kOrderSmall;   // 128
+    static constexpr int kWindowMedium = 1 << kOrderMedium; // 1024
+    static constexpr int kWindowLarge = 1 << kOrderLarge;   // 2048
 
     static int WindowSize(WindowMode mode) noexcept {
         switch (mode) {
@@ -354,8 +350,8 @@ private:
         // 速度平滑（原版 setSpeed 的 EMA）与淡化长度自适应
         read_head_speed_ = read_head_speed_ * 0.999f + 0.001f * target_speed_;
         if (std::fabs(read_head_speed_ - last_head_speed_) > 0.0001f)
-            fader_.Resize(static_cast<float>(cross_fade_samples_)
-                              / std::max(1.1f, std::fabs(read_head_speed_)) - 16.0f);
+            fader_.Resize(static_cast<float>(cross_fade_samples_) / std::max(1.1f, std::fabs(read_head_speed_))
+                          - 16.0f);
         last_head_speed_ = read_head_speed_;
 
         read_head1_ -= read_head_speed_;
@@ -404,8 +400,8 @@ private:
                     ring_.CopyFromBuffer(fftmem2_.data(), target, cross_fade_samples_);
                     cmax_position = ComputeMaxAcfPosition();
                 }
-                fader_.Prepare(std::floor(static_cast<float>(cross_fade_samples_)
-                                          / std::max(1.1f, std::fabs(read_head_speed_))));
+                fader_.Prepare(
+                    std::floor(static_cast<float>(cross_fade_samples_) / std::max(1.1f, std::fabs(read_head_speed_))));
                 read_head2_ = static_cast<float>(target) - cmax_position;
                 fade_ = true;
             }
@@ -420,16 +416,16 @@ private:
     CosineFade fader_;
 
     qwqdsp_spectral::RealFFT fft_;
-    std::vector<float> fftmem1_;  // ACF 输入 A / ACF 输出
-    std::vector<float> fftmem2_;  // ACF 输入 B
-    std::vector<float> spect1_;   // CCS 频谱缓冲（N+2）
-    std::vector<float> spect2_;   // CCS 频谱缓冲（N+2）
+    std::vector<float> fftmem1_; // ACF 输入 A / ACF 输出
+    std::vector<float> fftmem2_; // ACF 输入 B
+    std::vector<float> spect1_;  // CCS 频谱缓冲（N+2）
+    std::vector<float> spect2_;  // CCS 频谱缓冲（N+2）
 
     float read_head1_ = 0.0f;
     float read_head2_ = 0.0f;
     float last_head_speed_ = 0.0f;
     float read_head_speed_ = 0.0f;
-    float target_speed_ = 0.0f;  // 目标读头速度偏移（由半音换算）
+    float target_speed_ = 0.0f; // 目标读头速度偏移（由半音换算）
     float out_sample_ = 0.0f;
 
     bool fade_ = false;

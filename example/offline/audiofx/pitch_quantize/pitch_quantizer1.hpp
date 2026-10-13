@@ -1,8 +1,6 @@
 #pragma once
 
 #include "scale_helper.hpp"
-#include <qwqdsp/window/hann.hpp>
-#include <qwqdsp/spectral/real_fft.hpp>
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -13,6 +11,8 @@
 #include <iostream>
 #include <limits>
 #include <numbers>
+#include <qwqdsp/spectral/real_fft.hpp>
+#include <qwqdsp/window/hann.hpp>
 #include <span>
 #include <vector>
 
@@ -94,9 +94,10 @@ public:
         const size_t hop = FindColaHop(fft_size, static_cast<size_t>(std::round(hop_desired)));
         const float actual_max_correction = sample_rate / (2.0f * static_cast<float>(hop));
 
-        std::cout << std::format("  Init2: desired_hop={:.1f}, cola_hop={}, "
-                                 "desired_max_corr={:.1f} Hz, actual_max_corr={:.1f} Hz\n",
-                                 hop_desired, hop, max_correction_freq, actual_max_correction)
+        std::cout << std::format(
+            "  Init2: desired_hop={:.1f}, cola_hop={}, "
+            "desired_max_corr={:.1f} Hz, actual_max_corr={:.1f} Hz\n",
+            hop_desired, hop, max_correction_freq, actual_max_correction)
                   << std::flush;
 
         Init(sample_rate, hop, fft_size);
@@ -117,8 +118,7 @@ public:
      * @brief 获取当前调性描述
      */
     std::string KeyDescription() const {
-        return std::format("{} {}", ScaleHelper::kNoteNames[root_note_],
-                           ScaleHelper::TypeName(scale_type_));
+        return std::format("{} {}", ScaleHelper::kNoteNames[root_note_], ScaleHelper::TypeName(scale_type_));
     }
 
     /**
@@ -145,8 +145,8 @@ public:
         // 最大可修正频率偏移 (Hz)
         const float max_correction = fs / (2.0f * static_cast<float>(H));
 
-        std::cout << std::format("  frames={}, fft={}, hop={}, max_correction={:.1f} Hz\n",
-                                 num_frames, N, H, max_correction)
+        std::cout << std::format("  frames={}, fft={}, hop={}, max_correction={:.1f} Hz\n", num_frames, N, H,
+                                 max_correction)
                   << std::flush;
 
         // 逐帧处理
@@ -180,8 +180,7 @@ public:
                 for (size_t k = 0; k < num_bins; ++k) {
                     // 跳过 DC / Nyquist（相位信息不可靠）和低幅度 bin
                     if (k == 0 || k == N / 2 || mag[k] < 1e-6f) {
-                        synth_phase_[k] += two_pi * static_cast<float>(k)
-                                           * static_cast<float>(H) * inv_N;
+                        synth_phase_[k] += two_pi * static_cast<float>(k) * static_cast<float>(H) * inv_N;
                         continue;
                     }
 
@@ -190,13 +189,12 @@ public:
                     // 解卷绕到 (-π, π]
                     delta -= two_pi * std::round(delta / two_pi);
                     // 减去 bin 中心预期相位差
-                    const float expected = two_pi * static_cast<float>(k)
-                                           * static_cast<float>(H) * inv_N;
+                    const float expected = two_pi * static_cast<float>(k) * static_cast<float>(H) * inv_N;
                     const float deviation = delta - expected;
 
                     // 瞬时频率 (Hz)
-                    const float f_inst = static_cast<float>(k) * fs * inv_N
-                                         + deviation * fs / (two_pi * static_cast<float>(H));
+                    const float f_inst =
+                        static_cast<float>(k) * fs * inv_N + deviation * fs / (two_pi * static_cast<float>(H));
 
                     // ---- 音高量化 ----
                     const float f_midi = FindNearestAllowedMidi(f_inst);
@@ -217,8 +215,8 @@ public:
                             synth_phase_[k] += synth_delta;
                         }
                         else {
-                            synth_phase_[k] += two_pi * static_cast<float>(k)
-                                               * static_cast<float>(H) / static_cast<float>(N);
+                            synth_phase_[k] +=
+                                two_pi * static_cast<float>(k) * static_cast<float>(H) / static_cast<float>(N);
                         }
                     }
                 }
@@ -271,8 +269,7 @@ public:
                 x *= scale;
             }
 
-            std::cout << std::format("  ola_peak_gain={:.4f}, scale={:.4f}\n", peak_gain, scale)
-                      << std::flush;
+            std::cout << std::format("  ola_peak_gain={:.4f}, scale={:.4f}\n", peak_gain, scale) << std::flush;
         }
 
         return output;
@@ -283,7 +280,6 @@ public:
         std::fill(prev_phase_.begin(), prev_phase_.end(), 0.0f);
         std::fill(synth_phase_.begin(), synth_phase_.end(), 0.0f);
     }
-
 private:
     /**
      * @brief 查找满足 Hann COLA 的最近 hop

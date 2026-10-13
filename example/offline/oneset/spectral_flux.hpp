@@ -107,7 +107,6 @@ public:
 
         return result;
     }
-
 private:
     size_t frame_size_ = kDefaultFrameSize;
     size_t hop_ = kDefaultFrameSize / 4;

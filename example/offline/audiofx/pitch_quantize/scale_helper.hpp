@@ -23,8 +23,8 @@
 struct ScaleHelper {
     enum class Type : uint8_t {
         // 核心基础
-        kMajor,         ///< 自然大调 (Ionian)
-        kMinorNatural,  ///< 自然小调 (Aeolian)
+        kMajor,        ///< 自然大调 (Ionian)
+        kMinorNatural, ///< 自然小调 (Aeolian)
         // 教会调式
         kDorian,
         kPhrygian,
@@ -40,7 +40,7 @@ struct ScaleHelper {
         kBlues,
         kWholeTone,
         // 半音阶
-        kChromatic,     ///< 半音阶（全部 12 个音）
+        kChromatic, ///< 半音阶（全部 12 个音）
     };
 
     static constexpr std::array<int, 7> kMajorIntervals{0, 2, 4, 5, 7, 9, 11};
@@ -68,48 +68,48 @@ struct ScaleHelper {
         uint16_t mask = 0;
         std::span<const int> intervals;
         switch (type) {
-        case Type::kMajor:
-            intervals = kMajorIntervals;
-            break;
-        case Type::kMinorNatural:
-            intervals = kMinorNaturalIntervals;
-            break;
-        case Type::kDorian:
-            intervals = kDorianIntervals;
-            break;
-        case Type::kPhrygian:
-            intervals = kPhrygianIntervals;
-            break;
-        case Type::kLydian:
-            intervals = kLydianIntervals;
-            break;
-        case Type::kMixolydian:
-            intervals = kMixolydianIntervals;
-            break;
-        case Type::kLocrian:
-            intervals = kLocrianIntervals;
-            break;
-        case Type::kMinorHarmonic:
-            intervals = kMinorHarmonicIntervals;
-            break;
-        case Type::kMinorMelodic:
-            intervals = kMinorMelodicIntervals;
-            break;
-        case Type::kMajorPentatonic:
-            intervals = kMajorPentatonicIntervals;
-            break;
-        case Type::kMinorPentatonic:
-            intervals = kMinorPentatonicIntervals;
-            break;
-        case Type::kBlues:
-            intervals = kBluesIntervals;
-            break;
-        case Type::kWholeTone:
-            intervals = kWholeToneIntervals;
-            break;
-        case Type::kChromatic:
-            intervals = kChromaticIntervals;
-            break;
+            case Type::kMajor:
+                intervals = kMajorIntervals;
+                break;
+            case Type::kMinorNatural:
+                intervals = kMinorNaturalIntervals;
+                break;
+            case Type::kDorian:
+                intervals = kDorianIntervals;
+                break;
+            case Type::kPhrygian:
+                intervals = kPhrygianIntervals;
+                break;
+            case Type::kLydian:
+                intervals = kLydianIntervals;
+                break;
+            case Type::kMixolydian:
+                intervals = kMixolydianIntervals;
+                break;
+            case Type::kLocrian:
+                intervals = kLocrianIntervals;
+                break;
+            case Type::kMinorHarmonic:
+                intervals = kMinorHarmonicIntervals;
+                break;
+            case Type::kMinorMelodic:
+                intervals = kMinorMelodicIntervals;
+                break;
+            case Type::kMajorPentatonic:
+                intervals = kMajorPentatonicIntervals;
+                break;
+            case Type::kMinorPentatonic:
+                intervals = kMinorPentatonicIntervals;
+                break;
+            case Type::kBlues:
+                intervals = kBluesIntervals;
+                break;
+            case Type::kWholeTone:
+                intervals = kWholeToneIntervals;
+                break;
+            case Type::kChromatic:
+                intervals = kChromaticIntervals;
+                break;
         }
         for (int iv : intervals) {
             mask |= static_cast<uint16_t>(1u << ((root + iv) % 12));
@@ -129,40 +129,39 @@ struct ScaleHelper {
      */
     static const char* TypeName(Type type) noexcept {
         switch (type) {
-        case Type::kMajor:
-            return "Major";
-        case Type::kMinorNatural:
-            return "Minor";
-        case Type::kDorian:
-            return "Dorian";
-        case Type::kPhrygian:
-            return "Phrygian";
-        case Type::kLydian:
-            return "Lydian";
-        case Type::kMixolydian:
-            return "Mixolydian";
-        case Type::kLocrian:
-            return "Locrian";
-        case Type::kMinorHarmonic:
-            return "Harmonic Minor";
-        case Type::kMinorMelodic:
-            return "Melodic Minor";
-        case Type::kMajorPentatonic:
-            return "Major Pentatonic";
-        case Type::kMinorPentatonic:
-            return "Minor Pentatonic";
-        case Type::kBlues:
-            return "Blues";
-        case Type::kWholeTone:
-            return "Whole Tone";
-        case Type::kChromatic:
-            return "Chromatic";
+            case Type::kMajor:
+                return "Major";
+            case Type::kMinorNatural:
+                return "Minor";
+            case Type::kDorian:
+                return "Dorian";
+            case Type::kPhrygian:
+                return "Phrygian";
+            case Type::kLydian:
+                return "Lydian";
+            case Type::kMixolydian:
+                return "Mixolydian";
+            case Type::kLocrian:
+                return "Locrian";
+            case Type::kMinorHarmonic:
+                return "Harmonic Minor";
+            case Type::kMinorMelodic:
+                return "Melodic Minor";
+            case Type::kMajorPentatonic:
+                return "Major Pentatonic";
+            case Type::kMinorPentatonic:
+                return "Minor Pentatonic";
+            case Type::kBlues:
+                return "Blues";
+            case Type::kWholeTone:
+                return "Whole Tone";
+            case Type::kChromatic:
+                return "Chromatic";
         }
         return "Unknown";
     }
 
     static constexpr size_t kNumTypes = 14;
 
-    static constexpr const char* kNoteNames[12] = {"C", "C#", "D", "D#", "E", "F",
-                                                    "F#", "G", "G#", "A", "A#", "B"};
+    static constexpr const char* kNoteNames[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
 };

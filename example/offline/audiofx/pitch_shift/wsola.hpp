@@ -58,7 +58,6 @@ public:
         }
         size_ = 0;
     }
-
 private:
     std::vector<float> buffer_;
     size_t ola_add_pos_{};

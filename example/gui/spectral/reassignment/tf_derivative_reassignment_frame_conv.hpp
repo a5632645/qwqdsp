@@ -161,7 +161,6 @@ struct TfDerivativeReassignmentFrameConv {
     float Calibration() const noexcept {
         return grid_.Calibration();
     }
-
 private:
     void InitDerivativeWindow() noexcept {
         qwqdsp_window::BlackmanHarrisThreeTerm::Window(window_, true);

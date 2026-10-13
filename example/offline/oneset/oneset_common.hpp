@@ -20,7 +20,8 @@ static inline float PrincArg(float x) noexcept {
 static inline void MakePeriodicHann(std::span<float> w) noexcept {
     const size_t n = w.size();
     for (size_t i = 0; i < n; ++i) {
-        w[i] = 0.5f * (1.0f - std::cos(2.0f * std::numbers::pi_v<float> * static_cast<float>(i) / static_cast<float>(n)));
+        w[i] =
+            0.5f * (1.0f - std::cos(2.0f * std::numbers::pi_v<float> * static_cast<float>(i) / static_cast<float>(n)));
     }
 }
 
@@ -103,7 +104,8 @@ public:
  */
 static inline std::vector<size_t> PeakPick(std::span<const float> odf, size_t hop, float sample_rate, float delta) {
     const auto ms_to_frames = [&](double ms) {
-        return std::max<size_t>(1, static_cast<size_t>(std::lround(ms * 0.001 * static_cast<double>(sample_rate) / static_cast<double>(hop))));
+        return std::max<size_t>(1, static_cast<size_t>(std::lround(ms * 0.001 * static_cast<double>(sample_rate)
+                                                                   / static_cast<double>(hop))));
     };
     const size_t pre_max = ms_to_frames(30.0);
     const size_t post_max = ms_to_frames(30.0);
@@ -162,8 +164,8 @@ static inline std::vector<size_t> PeakPick(std::span<const float> odf, size_t ho
  * @brief 检测结果：ODF 序列 + 峰值拾取得到的 onset 位置。
  */
 struct OnsetResult {
-    std::vector<float> odf;         ///< 每帧一个 onset 强度值
-    std::vector<size_t> onset_frames; ///< onset 帧下标（升序）
+    std::vector<float> odf;            ///< 每帧一个 onset 强度值
+    std::vector<size_t> onset_frames;  ///< onset 帧下标（升序）
     std::vector<size_t> onset_samples; ///< onset 采样位置（帧下标 × hop）
 };
 

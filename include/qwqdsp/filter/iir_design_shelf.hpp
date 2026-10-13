@@ -130,7 +130,6 @@ private:
         double const q = std::exp(-pi * kpk1 / (static_cast<double>(n) * kk1));
         return IIRDesign::EllipticHelperCephes::Cay(q);
     }
-
 public:
     /**
      * @brief 巴特沃斯 highshelf 原型
@@ -154,7 +153,7 @@ public:
             return;
         }
         size_t const n = 2 * num_filter;
-        double const amp = std::pow(10.0, boost_db / 20.0);  // 幅度棚高 |H(inf)|
+        double const amp = std::pow(10.0, boost_db / 20.0); // 幅度棚高 |H(inf)|
         double const b = std::sqrt(amp);
         double const s = std::pow(b, 1.0 / static_cast<double>(n));
 
@@ -182,7 +181,7 @@ public:
      * @param ripple_db 通带纹波(dB, >0); 提升时纹波落在 0dB 参考线下方, 衰减时落上方
      * @note ripple_db 趋近 0 时退化成巴特沃斯形状
      */
-    static void Chebyshev1(std::span<ZPK> ret, size_t num_filter, double boost_db, double ripple_db) {
+    static void Chebyshev1(std::span<ZPK> ret, size_t num_filter, double boost_db, double ripple_db, bool even_modify) {
         assert(ret.size() >= num_filter);
         assert(num_filter <= kMaxPrototypePairs);
 
@@ -191,11 +190,11 @@ public:
             return;
         }
         size_t const n = 2 * num_filter;
-        double const g = std::pow(10.0, boost_db / 10.0);   // 棚高(功率比)
-        double const d = std::pow(10.0, ripple_db / 10.0);  // 纹波深度(功率比)
+        double const g = std::pow(10.0, boost_db / 10.0);  // 棚高(功率比)
+        double const d = std::pow(10.0, ripple_db / 10.0); // 纹波深度(功率比)
         // 通带参考点(直流, F = eps 处)的原始电平: 提升时直流取纹波上沿, 衰减时取下沿
         double const a0 = (boost_db > 0.0) ? d : 1.0 / d;
-        double const b2 = std::sqrt(g * a0);                // b^2, 且 b^4 = g*a0 是高频端原始电平
+        double const b2 = std::sqrt(g * a0); // b^2, 且 b^4 = g*a0 是高频端原始电平
         double const b = std::sqrt(b2);
         double const eps2 = (1.0 - a0) * b2 / (a0 - b2 * b2);
         double const eps = std::sqrt(eps2 > 0.0 ? eps2 : 0.0);
@@ -212,12 +211,12 @@ public:
 
         std::array<ZPK, kMaxPrototypePairs> scratch{};
         // 零点: "特征 b*F"的原型极点
-        IIRDesign::Chebyshev1(std::span{scratch}.first(num_filter), num_filter, DbOfEps(eps * b), false);
+        IIRDesign::Chebyshev1(std::span{scratch}.first(num_filter), num_filter, DbOfEps(eps * b), even_modify);
         for (size_t i = 0; i < num_filter; ++i) {
             ret[i].z = scratch[i].p * lam;
         }
         // 极点: "特征 F/b"的原型极点
-        IIRDesign::Chebyshev1(std::span{scratch}.first(num_filter), num_filter, DbOfEps(eps / b), false);
+        IIRDesign::Chebyshev1(std::span{scratch}.first(num_filter), num_filter, DbOfEps(eps / b), even_modify);
         for (size_t i = 0; i < num_filter; ++i) {
             ret[i].p = scratch[i].p * lam;
             ret[i].k = 1.0;
@@ -252,8 +251,8 @@ public:
      * @note 频率尺度 m 的实现方式是把原型的极点与零点整体乘 m(传输零点一起搬, 所以
      *       两组零点仍然逐点相同; 无穷远处的那个零点保持不动)
      */
-    [[nodiscard]] static bool Chebyshev2(std::span<ZPK> ret, size_t num_filter, double boost_db,
-                                         double ripple_db) {
+    [[nodiscard]] static bool Chebyshev2(std::span<ZPK> ret, size_t num_filter, double boost_db, double ripple_db,
+                                         bool even_modify) {
         assert(ret.size() >= num_filter);
         assert(num_filter <= kMaxPrototypePairs);
 
@@ -263,7 +262,7 @@ public:
         }
         // 衰减方向 = 提升方向的倒数: 先按 |boost| 设计, 最后交换零点与极点
         bool const invert = boost_db < 0.0;
-        double const beta2 = std::pow(10.0, std::abs(boost_db) / 20.0);   // 幅度棚高
+        double const beta2 = std::pow(10.0, std::abs(boost_db) / 20.0); // 幅度棚高
         double const beta4 = beta2 * beta2;
         // ripple -> 0 时过渡带无限宽, ripple -> |boost| 时退化成半高, 两端都夹一下
         double const ripple = std::clamp(ripple_db, 1.0e-3, std::abs(boost_db) * 0.999);
@@ -274,7 +273,7 @@ public:
             return false;
         }
         double const eps2 = std::sqrt(eps2_sq);
-        double const eps1 = beta2 * eps2;                                  // (eps1/eps2)^2 = beta^4
+        double const eps1 = beta2 * eps2; // (eps1/eps2)^2 = beta^4
 
         // 频率尺度 m: 解 T~(m) = 1/(eps2*beta), 使中点落在 (1)rad/sec
         size_t const n = 2 * num_filter;
@@ -288,13 +287,11 @@ public:
             return false;
         }
         // eps -> Chebyshev2Natural 要的阻带衰减 dB
-        auto const rs_of_eps = [](double eps) {
-            return 10.0 * std::log10(eps * eps / (1.0 + eps * eps));
-        };
+        auto const rs_of_eps = [](double eps) { return 10.0 * std::log10(eps * eps / (1.0 + eps * eps)); };
 
         std::array<ZPK, kMaxPrototypePairs> scratch{};
         // 第一批: eps1 的原型, 极点乘 m 后当 H 的极点(衰减方向则当零点)
-        IIRDesign::Chebyshev2Natural(std::span{scratch}.first(num_filter), num_filter, rs_of_eps(eps1), true);
+        IIRDesign::Chebyshev2Natural(std::span{scratch}.first(num_filter), num_filter, rs_of_eps(eps1), even_modify);
         for (size_t i = 0; i < num_filter; ++i) {
             if (invert) {
                 ret[i].z = scratch[i].p * m;
@@ -304,7 +301,7 @@ public:
             }
         }
         // 第二批: eps2 的原型, 极点乘 m 后当 H 的零点(衰减方向则当极点)
-        IIRDesign::Chebyshev2Natural(std::span{scratch}.first(num_filter), num_filter, rs_of_eps(eps2), true);
+        IIRDesign::Chebyshev2Natural(std::span{scratch}.first(num_filter), num_filter, rs_of_eps(eps2), even_modify);
         for (size_t i = 0; i < num_filter; ++i) {
             if (invert) {
                 ret[i].p = scratch[i].p * m;
@@ -346,8 +343,8 @@ public:
      *       - 阻带很浅且 boost 很大时(例如 ripple=6dB / stopband=10dB / boost=40dB)
      *         缺口可超过 30dB, 这种参数下应当改用巴特沃斯或切比雪夫
      */
-    [[nodiscard]] static bool Elliptic(std::span<ZPK> ret, size_t num_filter, double boost_db,
-                                       double ripple_db, double stopband_db) {
+    [[nodiscard]] static bool Elliptic(std::span<ZPK> ret, size_t num_filter, double boost_db, double ripple_db,
+                                       double stopband_db, bool even_modify) {
         assert(ret.size() >= num_filter);
         assert(num_filter <= kMaxPrototypePairs);
 
@@ -370,7 +367,7 @@ public:
         }
         // 解 b: b^4 = g * (1 + b^2*m1)/(1 + m1/b^2), 即 b^4 + m1*b^2*(1-g) - g = 0
         double const c = m1 * (1.0 - g);
-        double const y = (std::sqrt(c * c + 4.0 * g) - c) / 2.0;  // y = b^2
+        double const y = (std::sqrt(c * c + 4.0 * g) - c) / 2.0; // y = b^2
         if (!(y > 0.0)) {
             return false;
         }
@@ -384,16 +381,16 @@ public:
         // 这里只用原型的极点(当 shelf 的零点/极点用), 基线是未修正的偶数阶椭圆,
         // 所以不做偶数阶修正 —— 修正会搬动极点, 破坏下面注释里实测过的偏差量级
         // 零点: "特征 e_num"的椭圆原型极点
-        if (!IIRDesign::Elliptic(
-                std::span{scratch}.first(num_filter), num_filter, DbOfEps(e_num), DbOfEps(e_num / m1), false)) {
+        if (!IIRDesign::Elliptic(std::span{scratch}.first(num_filter), num_filter, DbOfEps(e_num), DbOfEps(e_num / m1),
+                                 even_modify)) {
             return false;
         }
         for (size_t i = 0; i < num_filter; ++i) {
             ret[i].z = scratch[i].p * scale;
         }
         // 极点: "特征 e_den"的椭圆原型极点
-        if (!IIRDesign::Elliptic(
-                std::span{scratch}.first(num_filter), num_filter, DbOfEps(e_den), DbOfEps(e_den / m1), false)) {
+        if (!IIRDesign::Elliptic(std::span{scratch}.first(num_filter), num_filter, DbOfEps(e_den), DbOfEps(e_den / m1),
+                                 even_modify)) {
             return false;
         }
         for (size_t i = 0; i < num_filter; ++i) {
