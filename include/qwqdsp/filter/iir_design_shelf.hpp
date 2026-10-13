@@ -2,6 +2,7 @@
 #include "iir_design.hpp"
 #include <algorithm>
 #include <array>
+#include <limits>
 
 namespace qwqdsp_filter {
 /**
@@ -13,7 +14,8 @@ namespace qwqdsp_filter {
  * 幅度语义(与常见 EQ 的 highshelf 一致):
  * - 低频端 |H| = 0dB
  * - 中频(1)rad/sec 处 |H| = boost/2 dB
- * - 高频端 |H| = boost dB
+ * - 幅度极值 = boost dB; 未修正的 Chebyshev2 / 椭圆在 w -> inf 处到不了它(极值落在棚带
+ *   内的传输零点上), 其余原型在 w -> inf 处就是极值
  *
  * 构造用书里 (10.12)/(10.13a) 的混合式 |H|^2 = (1 + b^2*F^2)/(1 + F^2/b^2),
  * 其中 F 是原型的归一化特征函数(|G|^2 = 1/(1+F^2), F(1) = 1):
@@ -130,6 +132,87 @@ private:
         double const q = std::exp(-pi * kpk1 / (static_cast<double>(n) * kk1));
         return IIRDesign::EllipticHelperCephes::Cay(q);
     }
+
+    /**
+     * @brief 由原型节复算特征函数 F(w) = sqrt(1/|G(jw)|^2 - 1)
+     * @param sections 原型节(库的原型函数输出, 零点为空表示无穷远)
+     * @param num_filter 节数
+     * @param w 频率(rad/sec), 原型以 (1)rad/sec 为通带边沿
+     * @return F(w); |G| = 1 处为 0
+     * @note 就是原型定义式 |G|^2 = 1/(1+F^2) 的反解, 用来查形状函数
+     */
+    static double PrototypeChar(std::span<ZPK const> sections, size_t num_filter, double w) noexcept {
+        std::complex<double> const jw{0.0, w};
+        std::complex<double> h{1.0, 0.0};
+        for (size_t i = 0; i < num_filter; ++i) {
+            ZPK const& s = sections[i];
+            std::complex<double> num{1.0, 0.0};
+            if (s.z) {
+                num = (jw - *s.z) * (jw - std::conj(*s.z));
+            }
+            h *= s.k * num / ((jw - s.p) * (jw - std::conj(s.p)));
+        }
+        double const v = 1.0 / std::norm(h) - 1.0;
+        return v > 0.0 ? std::sqrt(v) : 0.0;
+    }
+
+    /**
+     * @brief 中点条件在"低频通带电平偏离 0dB 不超过 3dB"时需要的 R(1/lambda)
+     *
+     * 未修正的椭圆 shelf 里 R(1/lambda) 越大, 低频通带的直流电平 C 越靠近 1; 提升时 R 小到
+     * 1 + amp 的平方根、衰减时 R 大到 1 + 1/amp 的平方根, C 就会塌到 0 或冲成无穷。这里
+     * 取使 C = 1/2(提升) / 2(衰减) 的值, 也就是低频通带偏离 0dB 不超过 3dB。
+     *
+     * @param amp 中点电平(幅度), = 10^(boost/40)
+     * @return 目标形状函数值
+     */
+    static double RhoForBandDeviation(double amp) noexcept {
+        return std::sqrt((amp + 1.0) * std::max(2.0 - 1.0 / amp, 2.0 / amp - 1.0));
+    }
+
+    /**
+     * @brief 把频率尺度推进椭圆原型阻带的单调段, 求形状函数达到目标值的频率
+     *
+     * R(1/lambda) 在 [1/sqrt(k), 1/k] 上从 R(1/sqrt(k)) 单调升到 1/m1, 在 [1/k, 第一个
+     * 传输零点] 上再从 1/m1 单调升到无穷, 目标值落在哪一段就二分哪一段。
+     *
+     * @param ref 参考原型(eps = 1)的节
+     * @param num_filter 节数
+     * @param m1 eps_p/eps_s, 1/m1 是 R 在阻带边沿的值
+     * @param w_start 搜索起点(1/sqrt(k)), 该处形状函数值必须小于目标值
+     * @param rho_target 目标形状函数值
+     * @return 刚达到目标值的频率; 区间退化时返回起点
+     */
+    static double ShapeInverse(std::span<ZPK const> ref, size_t num_filter, double m1, double w_start,
+                               double rho_target) noexcept {
+        double w_lo = w_start;
+        double w_hi;
+        if (rho_target <= 1.0 / m1) {
+            w_hi = w_start * w_start; // R(1/k) = 1/m1
+        }
+        else {
+            // 比阻带边沿还大的值只能落在第一个传输零点之前的那一段
+            w_hi = std::numeric_limits<double>::max();
+            for (size_t i = 0; i < num_filter; ++i) {
+                if (ref[i].z) {
+                    w_hi = std::min(w_hi, std::abs(*ref[i].z));
+                }
+            }
+        }
+        if (!(w_hi > w_lo)) {
+            return w_lo;
+        }
+        for (int i = 0; i < 80; ++i) {
+            double const mid = std::sqrt(w_lo * w_hi);
+            if (PrototypeChar(ref, num_filter, mid) < rho_target) {
+                w_lo = mid;
+            }
+            else {
+                w_hi = mid;
+            }
+        }
+        return w_hi;
+    }
 public:
     /**
      * @brief 巴特沃斯 highshelf 原型
@@ -170,15 +253,19 @@ public:
     /**
      * @brief 切比雪夫 I 型 highshelf 原型
      *
-     * 特征函数 F = eps*T_N(w/lam)。偶数阶时 F(0) = eps != 0, 低频端会跟着抬起来,
-     * 所以这里把 ripple_db 定义成"成品 shelf 通带的实际纹波", 由它反解 eps 与 lam,
-     * 使 0dB / boost/2 dB / boost dB 三个电平同时精确成立。
+     * 特征函数 F = eps*Phi(w/lam), 未修正时 Phi = T_N, 修正时 Phi = T_N(sqrt((1-c^2)w^2+c^2))
+     * (c 是最小的那个切比雪夫节点, 修正把直流钉到 0dB)。三次电平(直流 / 中点 / 棚顶)
+     * 由 (eps, lam) 精确满足, ripple_db 决定 eps 也就是成品 shelf 低频通带的实际纹波:
+     * - 未修正: F(0) = eps != 0, 直流是纹波的一侧(提升时通带落在 0dB 下方, 衰减时上方);
+     * - 修正后: F(0) = 0(直流定死 0dB), 通带只能向另一侧鼓出(提升时向 0dB 上方,
+     *   衰减时下方), 因此要它落在 0dB 下方就用不了修正版。
      *
      * @param ret 输出的零极点节, 至少 num_filter 个
      * @param num_filter 极点对数, 阶数 = 2 * num_filter
      * @param boost_db 高频端相对低频端的提升(dB), 可正可负(负值即反向 shelf),
      *        为 0 时输出直通
-     * @param ripple_db 通带纹波(dB, >0); 提升时纹波落在 0dB 参考线下方, 衰减时落上方
+     * @param ripple_db 通带纹波(dB, >0), 含义见上
+     * @param even_modify 用偶数阶修正原型; 修正后 ripple_db 会被夹到 (0, |boost_db|)
      * @note ripple_db 趋近 0 时退化成巴特沃斯形状
      */
     static void Chebyshev1(std::span<ZPK> ret, size_t num_filter, double boost_db, double ripple_db, bool even_modify) {
@@ -190,23 +277,42 @@ public:
             return;
         }
         size_t const n = 2 * num_filter;
-        double const g = std::pow(10.0, boost_db / 10.0);  // 棚高(功率比)
-        double const d = std::pow(10.0, ripple_db / 10.0); // 纹波深度(功率比)
+        double const g = std::pow(10.0, boost_db / 10.0); // 棚高(功率比)
+        // 修正后 eps 的分母是 a0 - b^4 = a0 - g, 要它为正就得 ripple < |boost|
+        double const ripple = even_modify ? std::clamp(ripple_db, 1.0e-3, std::abs(boost_db) * 0.999) : ripple_db;
+        double const d = std::pow(10.0, ripple / 10.0); // 纹波深度(功率比)
         // 通带参考点(直流, F = eps 处)的原始电平: 提升时直流取纹波上沿, 衰减时取下沿
         double const a0 = (boost_db > 0.0) ? d : 1.0 / d;
-        double const b2 = std::sqrt(g * a0); // b^2, 且 b^4 = g*a0 是高频端原始电平
+        // b^2: 棚带极值(功率) = C*b^4 = g, C 是直流电平。未修正时 C = 1/a0;
+        // 修正后直流处的 F = 0 使 C 只能是 1, 于是 b^4 = g 而不是 g*a0
+        double const b2 = even_modify ? std::sqrt(g) : std::sqrt(g * a0);
         double const b = std::sqrt(b2);
         double const eps2 = (1.0 - a0) * b2 / (a0 - b2 * b2);
         double const eps = std::sqrt(eps2 > 0.0 ? eps2 : 0.0);
 
-        // 中点的原始电平: |H(1)|^2/a0 应为 sqrt(g)(即 boost/2 dB), 由此解特征值 f
-        double const a = std::sqrt(g) * a0;
-        double const f2 = (a - 1.0) / (b2 - a / b2);
-        double const f = (f2 > 0.0) ? std::sqrt(f2) : 0.0;
-        // 频率标定: eps*T_N(1/lam) = f
+        // 频率标定 lam: 让中点落在 (1)rad/sec
         double lam = 1.0;
-        if (eps > 0.0 && f > eps) {
-            lam = 1.0 / std::cosh(std::acosh(f / eps) / static_cast<double>(n));
+        if (even_modify) {
+            // 中点要求 F(1) = 1, 即 eps*Phi(1/lam) = 1; Phi(w) = T_N(sqrt((1-c^2)w^2+c^2)),
+            // 反解出 Phi 的宗量 u, 再由 sqrt((1-c^2)/lam^2+c^2) = u 得 lam
+            if (eps > 0.0) {
+                double const c = std::cos(pi * (static_cast<double>(n) - 1.0) / (2.0 * static_cast<double>(n)));
+                // T_N(u) = 1/eps: 1/eps < 1 时 u 落在 [c, 1], 否则落在 [1, inf)
+                double const r = 1.0 / eps;
+                double const u = (r >= 1.0) ? std::cosh(std::acosh(r) / static_cast<double>(n))
+                                            : std::cos(std::acos(r) / static_cast<double>(n));
+                lam = std::sqrt((1.0 - c * c) / (u * u - c * c));
+            }
+        }
+        else {
+            // 中点的原始电平: |H(1)|^2/a0 应为 sqrt(g)(即 boost/2 dB), 由此解特征值 f
+            double const a = std::sqrt(g) * a0;
+            double const f2 = (a - 1.0) / (b2 - a / b2);
+            double const f = (f2 > 0.0) ? std::sqrt(f2) : 0.0;
+            // eps*T_N(1/lam) = f
+            if (eps > 0.0 && f > eps) {
+                lam = 1.0 / std::cosh(std::acosh(f / eps) / static_cast<double>(n));
+            }
         }
 
         std::array<ZPK, kMaxPrototypePairs> scratch{};
@@ -247,9 +353,12 @@ public:
      * @retval false 参数退化(boost 为 0 不算, 那种情况输出直通)
      * @note 低频端"最平坦", 等波纹落在**棚带**里(与 Chebyshev1 shelf 相反, 那个的
      *       纹波在低频通带)。ripple_db 越小, 棚带越平, 但过渡带越宽(m 越大)。
-     * @note 用偶数阶修正原型, 否则高频端会饱和在半高(|H(inf)| = beta 而不是 beta^2)
+     * @note 不用偶数阶修正时高频端会落在棚带的低谷处(|H(inf)| = boost - ripple_db dB, 而不是
+     *       棚高), 但棚带的极值仍精确等于 beta^2(在有限频率处达到)
      * @note 频率尺度 m 的实现方式是把原型的极点与零点整体乘 m(传输零点一起搬, 所以
-     *       两组零点仍然逐点相同; 无穷远处的那个零点保持不动)
+     *       两组零点仍然逐点相同; 无穷远处的那个零点保持不动)。未修正时特征函数是
+     *       1/(eps*T~_N(m/w)), 直接解 T~_N(m) = 1/(eps2*beta); 修正后特征函数的宗量
+     *       多一层 sqrt((1-c^2)(m/w)^2+c^2) 的映射, 要把它反解回 m
      */
     [[nodiscard]] static bool Chebyshev2(std::span<ZPK> ret, size_t num_filter, double boost_db, double ripple_db,
                                          bool even_modify) {
@@ -275,14 +384,19 @@ public:
         double const eps2 = std::sqrt(eps2_sq);
         double const eps1 = beta2 * eps2; // (eps1/eps2)^2 = beta^4
 
-        // 频率尺度 m: 解 T~(m) = 1/(eps2*beta), 使中点落在 (1)rad/sec
+        // 频率尺度 m: 让中点落在 (1)rad/sec, 即在 w = 1 处 F_p = 1/b(见类注释的三电平条件)
         size_t const n = 2 * num_filter;
-        double const c = std::cos(pi * (static_cast<double>(n) - 1.0) / (2.0 * static_cast<double>(n)));
         double const r = 1.0 / (eps2 * std::sqrt(beta2));
         double u = (r >= 1.0) ? std::cosh(std::acosh(r) / static_cast<double>(n))
                               : std::cos(std::acos(std::min(r, 1.0)) / static_cast<double>(n));
-        u = std::max(u, c);
-        double const m = std::sqrt((u * u - c * c) / (1.0 - c * c));
+        // 未修正的特征函数是 1/(eps*T~_N(m/w)): 直接 T~_N(m) = r, 所以 m 就是 u。
+        // 修正后是 1/(eps*T~_N(sqrt((1-c^2)(m/w)^2+c^2))): u 是那个 sqrt 里的值, 要反解
+        double m = u;
+        if (even_modify) {
+            double const c = std::cos(pi * (static_cast<double>(n) - 1.0) / (2.0 * static_cast<double>(n)));
+            u = std::max(u, c);
+            m = std::sqrt((u * u - c * c) / (1.0 - c * c));
+        }
         if (!(m > 0.0) || !std::isfinite(m)) {
             return false;
         }
@@ -322,26 +436,26 @@ public:
      * (虚轴上那对零点)完全相同, 对消后消失, 只剩两组左半平面极点分别当 H 的零点
      * 与极点, 因此不会出现"分子零点处塌成 0、分母零点处冲成无穷"的毛病。
      *
-     * 椭圆的设计模数 k(即过渡带宽度)只由纹波与阶数决定, 没有切比雪夫那样的额外
-     * 频率标定自由度: 书里 (10.14) 注明偶数阶 EMQF 的参考点不是 w = 0 与 w = inf,
-     * 而是特征函数取 0 与 inf 的那两个点, 因此这里只有直流端精确, 高频端的幅度会比
-     * |boost| 少一点(纹波"向内", 即书 Fig. 10.13 的形状)。
+     * 形状函数 R(只由阶数与 m1 = eps_p/eps_s 决定)配两个 eps 一起定出三个电平:
+     * 直流 0dB、中点 boost/2 dB、棚带极值 boost dB。未修正时高频端本身到不了那个极值
+     * (R(inf) 是有限的), 极值出现在棚带的传输零点上; 修正后 R(0) = 0 且 R(inf) = inf,
+     * 直流电平就是 1、w -> inf 就是极值。频率尺度取 sqrt(k)(通带边沿 1 与阻带边沿 1/k
+     * 的几何中点); 未修正时若该尺度下三个电平不可兼得(低频通带电平会塌成深陷波),
+     * 就把尺度推进原型的阻带, 直到低频通带电平偏离 0dB 不超过 3dB。
      *
      * @param ret 输出的零极点节, 至少 num_filter 个
      * @param num_filter 极点对数, 阶数 = 2 * num_filter
      * @param boost_db 高频端相对低频端的提升(dB), 可正可负(负值即反向 shelf),
      *        为 0 时输出直通
-     * @param ripple_db 通带纹波(dB, >0), 即椭圆原型的通带边沿电平
+     * @param ripple_db 通带纹波(dB, >0), 与 stopband_db 一起定出形状函数
      * @param stopband_db 阻带衰减(dB, >ripple_db), 决定过渡带陡度
+     * @param even_modify 用偶数阶修正原型: 直流精确 0dB, 且 w -> inf 精确到棚高
      * @return 成功返回 true
-     * @retval false 规格过陡(阻带边沿与通带边沿重合, 模数在 double 下就是 1),
+     * @retval false 参数退化: 阻带 <= 通带纹波, 或规格过陡(模数在 double 下就是 1),
      *         与 IIRDesign::Elliptic 的失败条件一致
-     * @note 高频端的缺口(boost 与高频端幅度之差)随 ripple_db 增大、stopband_db 减小
-     *       而变大。实测(阶数 2~16, |boost| <= 24dB):
-     *       - stopband >= 40dB 时 缺口 <= 0.4dB, 中点偏差 <= 0.25dB;
-     *       - stopband = 30dB 时 缺口 <= 1.2dB, 中点偏差 <= 0.6dB;
-     *       - 阻带很浅且 boost 很大时(例如 ripple=6dB / stopband=10dB / boost=40dB)
-     *         缺口可超过 30dB, 这种参数下应当改用巴特沃斯或切比雪夫
+     * @note 三个电平是按参考原型(eps = 1)的形状函数解出来的, 因此会继承 IIRDesign::Elliptic
+     *       形状函数的数值误差(阶数越高、阻带越浅越大): 常规规格下偏差在 1e-9 dB 内, 16 阶
+     *       配 20dB 阻带约 1e-4 dB, 16 阶配 10dB 阻带可到 0.3dB(此时原型自身已接近退化)
      */
     [[nodiscard]] static bool Elliptic(std::span<ZPK> ret, size_t num_filter, double boost_db, double ripple_db,
                                        double stopband_db, bool even_modify) {
@@ -358,28 +472,56 @@ public:
             return false;
         }
         double const m1 = eps_p / eps_s;
-        double const root_m1 = std::sqrt(m1);
-        // 提升与衰减是同一个方程的两个方向: 用 |boost| 定 b, 再按需要交换零点与极点
-        double const g = std::pow(10.0, std::abs(boost_db) / 10.0);
         double const k_ref = DesignModulus(num_filter, ripple_db, stopband_db);
         if (!(k_ref > 0.0 && k_ref < 1.0)) {
             return false;
         }
-        // 解 b: b^4 = g * (1 + b^2*m1)/(1 + m1/b^2), 即 b^4 + m1*b^2*(1-g) - g = 0
-        double const c = m1 * (1.0 - g);
-        double const y = (std::sqrt(c * c + 4.0 * g) - c) / 2.0; // y = b^2
-        if (!(y > 0.0)) {
+        // 形状函数 R 只由阶数与 m1 决定, 与 eps 的绝对大小无关: 用 eps = 1 的参考原型查值
+        std::array<ZPK, kMaxPrototypePairs> ref{};
+        if (!IIRDesign::Elliptic(std::span{ref}.first(num_filter), num_filter, DbOfEps(1.0), DbOfEps(1.0 / m1),
+                                 even_modify)) {
             return false;
         }
-        double const b = std::sqrt(y);
-        // 衰减方向: 把"特征 b*F"与"特征 F/b"的角色互换
-        double const e_num = (boost_db > 0.0) ? root_m1 * b : root_m1 / b;
-        double const e_den = (boost_db > 0.0) ? root_m1 / b : root_m1 * b;
+        std::span<ZPK const> const ref_view{ref.data(), num_filter};
+
+        double const amp = std::pow(10.0, boost_db / 20.0);            // 中点目标电平(幅度), 也记作 b
+        double const peak = amp * amp;                                 // 棚带极值(功率比), 可正可负
+        double scale = std::sqrt(k_ref);                               // 通带边沿(1)与阻带边沿(1/k)的几何中点
+        double rho = PrototypeChar(ref_view, num_filter, 1.0 / scale); // R(1/scale)
+        if (!(rho > 0.0) || !std::isfinite(rho)) {
+            return false;
+        }
+        double b2;    // b^2: 零点特征函数与极点特征函数的尺度比
+        double e_den; // 极点原型的 eps
+        if (even_modify) {
+            // 修正原型: R(0) = 0 => 直流电平 C = 1, 棚带极值就是 b^4; R(inf) = inf 让它
+            // 恰好落在 w -> inf。中点要求 F_p(1) = e_den*R(1/scale) = 1/b
+            b2 = amp;
+            e_den = 1.0 / (std::sqrt(b2) * rho);
+        }
+        else {
+            // 未修正原型: R(0) = 1, 直流电平 C = (1+e_den^2)/(1+b^4*e_den^2) 由 b 与 e_den 定,
+            // 于是"棚带极值 = C*b^4 = peak"与"中点电平 = amp"正好解出这两个量 —— 前提是
+            // 尺度给的 R(1/scale) 足够大; 不足时 C 会塌到 0(低频通带变成深陷波), 把 1/scale
+            // 推进原型阻带的单调段再解一次
+            double const rho_min = RhoForBandDeviation(amp);
+            if (rho < rho_min) {
+                scale = 1.0 / ShapeInverse(ref_view, num_filter, m1, 1.0 / scale, rho_min);
+                rho = PrototypeChar(ref_view, num_filter, 1.0 / scale);
+            }
+            double const rho2 = rho * rho;
+            double const C = (rho2 * (amp - 1.0) - (peak - 1.0)) / (rho2 * (amp - 1.0) - amp * (peak - 1.0) / peak);
+            double const e_den2 = (1.0 - C) / (peak - 1.0);
+            if (!(C > 0.0) || !(e_den2 > 0.0) || !std::isfinite(rho)) {
+                return false;
+            }
+            b2 = std::sqrt(peak / C);
+            e_den = std::sqrt(e_den2);
+        }
+        double const e_num = b2 * e_den;
 
         std::array<ZPK, kMaxPrototypePairs> scratch{};
-        double const scale = std::sqrt(k_ref);
-        // 这里只用原型的极点(当 shelf 的零点/极点用), 基线是未修正的偶数阶椭圆,
-        // 所以不做偶数阶修正 —— 修正会搬动极点, 破坏下面注释里实测过的偏差量级
+        // 只用原型的极点(当 shelf 的零点/极点用), 传输零点对消后不出现
         // 零点: "特征 e_num"的椭圆原型极点
         if (!IIRDesign::Elliptic(std::span{scratch}.first(num_filter), num_filter, DbOfEps(e_num), DbOfEps(e_num / m1),
                                  even_modify)) {
