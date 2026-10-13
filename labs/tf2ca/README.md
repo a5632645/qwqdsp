@@ -32,6 +32,11 @@ Hc(z) = 1/2 * ( A0(z) - A1(z) )        HP（功率互补：|H|^2 + |Hc|^2 = 1）
 - **偶数阶**：实系数两路全通做不到（Nyquist 奇偶性），但放开**复系数全通 + 复权重**后
   偶数阶同样能分解（`H = alpha*A1 + conj(alpha)*A2`，只算一条复链再取实部）。
   推导、数据与未验证边界见 **[even_order.md](even_order.md)**，脚本 `even_order.py`。
+  ⚠️ 这条对**极点互异**的设计成立；分母含**重极点**时（典型：Linkwitz–Riley `LR_{2n} = (BW_n)^2`）
+  两条链（实/复、带不带 `z^-k` 都不行）做不到，正确结构是**三条链**（权重 `1/4, 1/2, 1/4`）——
+  见 **[even_order_repeated.md](even_order_repeated.md)** / `even_order_repeated.py`。
+  另外重极点下 `even_order.md` 的「逐极点 alpha 一致性」判据会**假阳性**（实测离散度 4e-8
+  而真实残差 0.54），必须改用系数空间残差。
 
 ## 运行
 
@@ -45,10 +50,15 @@ python qwqdsp/labs/tf2ca/odd_order.py --kind cheby2 --order 9 --cutoff 0.25 --st
 
 # 批量校验表（四族 × 3/5/7/9/11 阶 × 多截止频率）
 python qwqdsp/labs/tf2ca/odd_order.py --check
+
+# 偶数阶 + 重极点（Linkwitz–Riley）：双链做不到，正确结构是三链
+python qwqdsp/labs/tf2ca/even_order_repeated.py --half-order 2 --cutoff 0.25
+python qwqdsp/labs/tf2ca/even_order_repeated.py --check
 ```
 
 （`odd_order.py` 只跑**奇数阶**；偶数阶的**复系数**分解见 `even_order.py`，
-结论摘要见 [even_order.md](even_order.md)。）
+结论摘要见 [even_order.md](even_order.md)；偶数阶 + **重极点**（LR）见
+`even_order_repeated.py` / [even_order_repeated.md](even_order_repeated.md)。）
 
 输出图片在 `output/`（本地生成）。`odd_order.py` 会打印每条全通链的 1 阶/2 阶节点系数，
 可直接对照 `include/qwqdsp/filter/allpass.hpp` 里的 `AllpassOrder1` / `AllpassOrder2` 实现。
@@ -265,6 +275,14 @@ cheby2 n=9, cutoff=0.2 的节点（按 |p| 排序）：
 
 ## 数值注意
 
+**重极点**（`A` 有重根，如 `LR_{2n} = (BW_n)^2`）：
+
+- `split_by_radius` / `split_by_bc` / `even_order.py` 的共轭分组都建立在「每个极点只属于一条链」
+  上；重极点让同一条链里出现重根、甚至两条链共享极点，这时**双链分解根本不存在**
+  （`even_order_repeated.md`），要改用三链。
+- `even_order.py` 的「逐极点 `alpha` 一致性」判据在重极点下会**假阳性**（值条件不足以定住
+  次数 `n` 的恒等式，实测离散度 4e-8 而真实残差 0.54），判分法要用**系数空间残差**。
+
 `B_c^2 = B^2 - A*A^#` 是两个近似多项式的差，**窄带 / 高阶**时会严重消位（条件数问题），
 `split_by_bc` 的精度随之下降。四族经典设计建议直接用 `split_by_radius`（只依赖极点，
 自 `--check` 表可见绝大多数组合频响偏差 < 1e-7）。另外用 `np.roots`/`np.poly` 反复
@@ -279,6 +297,8 @@ cheby2 n=9, cutoff=0.2 的节点（按 |p| 排序）：
 | `odd_order.py` | 奇数阶（实系数）：设计→分解→校验→打印节点→对照 MATLAB 样例→出图；`--check` 批量校验 |
 | `even_order.py` | 偶数阶（复系数复权重）：共轭分组枚举、最小二乘、逐极点判据、单链形式、实系数对照 |
 | `even_order.md` | 偶数阶分解的研究总结（结论 / 推导 / 数据 / 未验证边界） |
+| `even_order_repeated.py` | 偶数阶 + **重极点**（Linkwitz–Riley）：全部谱因子穷举、SVD 最小二乘、判据假阳性演示、三链分解与校验 |
+| `even_order_repeated.md` | 重极点（LR）的 tf2ca 行为总结：两链做不到（实/复/带延迟）、判据的充要形式、三链结构 |
 | `hilbert_even.py` | 偶阶「解析滤波器 / Hilbert」构造：半带 → 复全通分解 → 旋转；`--header` 给头文件固定系数打分 |
 | `hilbert_even.md` | 上面这条路线的研究总结（含"让数字极点在虚轴上"的三条设计条件与 `Wn` 闭式解） |
 | `hilbert_odd.py` | 奇阶「解析滤波器 / Hilbert」构造：半带 → 两组 `z^-2` AP 链 + 延迟 → 旋转（= `iir_hilbert.hpp` 的形式） |
