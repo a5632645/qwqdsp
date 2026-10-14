@@ -11,6 +11,9 @@ add_qwqdsp_lab(minimum_phase_fir filter/minimum_phase_fir.cpp)
 add_qwqdsp_lab(residual_chebyshev filter/residual_chebyshev.cpp)
 add_qwqdsp_lab(reverse_iir filter/reverse_iir.cpp)
 
+add_qwqdsp_lab(thiran_allpass thiran_filter/allpass.cpp)
+add_qwqdsp_lab(thiran_allpole thiran_filter/allpole.cpp)
+
 add_qwqdsp_lab(fft_interpolation spectral/fft_interpolation.cpp)
 add_qwqdsp_lab(ifft_random_phase spectral/ifft_random_phase.cpp)
 add_qwqdsp_lab(fft_fold spectral/fold.cpp)
