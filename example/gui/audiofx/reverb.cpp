@@ -6,6 +6,7 @@
 #include "miniaudio.h"
 #include "raylib.h"
 
+#include "reverb/gardner_reverb_gui.hpp"
 #include "reverb/peak_meter.hpp"
 #include "reverb/plate_reverb_gui.hpp"
 #include "reverb/shimmer_reverb_gui.hpp"
@@ -40,12 +41,20 @@ concept ReverbGuiConcept = requires(T& obj, const float* in, float* ol, float* o
 // ------------------------------------------------------------
 static ShimmerReverbGui s_shimmer;
 static PlateReverbGui s_plate;
+static GardnerRoomGui s_gardner_room;
+static GardnerHallGui s_gardner_hall;
 
 static_assert(ReverbGuiConcept<ShimmerReverbGui>,
               "ShimmerReverbGui 必须满足 ReverbGuiConcept：需要 kWindowWidth/kWindowHeight "
               "静态常量，以及 Init/Process/CreateKnobs/DisplayKnobs 方法");
 static_assert(ReverbGuiConcept<PlateReverbGui>,
               "PlateReverbGui 必须满足 ReverbGuiConcept：需要 kWindowWidth/kWindowHeight "
+              "静态常量，以及 Init/Process/CreateKnobs/DisplayKnobs 方法");
+static_assert(ReverbGuiConcept<GardnerRoomGui>,
+              "GardnerRoomGui 必须满足 ReverbGuiConcept：需要 kWindowWidth/kWindowHeight "
+              "静态常量，以及 Init/Process/CreateKnobs/DisplayKnobs 方法");
+static_assert(ReverbGuiConcept<GardnerHallGui>,
+              "GardnerHallGui 必须满足 ReverbGuiConcept：需要 kWindowWidth/kWindowHeight "
               "静态常量，以及 Init/Process/CreateKnobs/DisplayKnobs 方法");
 
 struct ReverbAlgorithm {
@@ -56,7 +65,7 @@ struct ReverbAlgorithm {
     void (*DisplayKnobs)();
 };
 
-static const std::array<ReverbAlgorithm, 2> kAlgorithms{{
+static const std::array<ReverbAlgorithm, 4> kAlgorithms{{
     {
         "Shimmer Reverb",
         [](float sample_rate) { s_shimmer.Init(sample_rate); },
@@ -70,6 +79,20 @@ static const std::array<ReverbAlgorithm, 2> kAlgorithms{{
         [](const float* in, float* l, float* r, size_t n) noexcept { s_plate.Process(in, l, r, n); },
         [] { s_plate.CreateKnobs(); },
         [] { s_plate.DisplayKnobs(); },
+    },
+    {
+        "Gardner Room",
+        [](float sample_rate) { s_gardner_room.Init(sample_rate); },
+        [](const float* in, float* l, float* r, size_t n) noexcept { s_gardner_room.Process(in, l, r, n); },
+        [] { s_gardner_room.CreateKnobs(); },
+        [] { s_gardner_room.DisplayKnobs(); },
+    },
+    {
+        "Gardner Hall",
+        [](float sample_rate) { s_gardner_hall.Init(sample_rate); },
+        [](const float* in, float* l, float* r, size_t n) noexcept { s_gardner_hall.Process(in, l, r, n); },
+        [] { s_gardner_hall.CreateKnobs(); },
+        [] { s_gardner_hall.DisplayKnobs(); },
     },
 }};
 
