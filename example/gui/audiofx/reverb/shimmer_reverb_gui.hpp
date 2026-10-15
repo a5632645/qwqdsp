@@ -27,8 +27,6 @@ struct ShimmerReverbGui {
     std::atomic<float> pitch_shift_{12.0f}; // semitones
     std::atomic<bool> params_dirty_{true};
 
-    static constexpr const char* kWindowTitle = "Shimmer Reverb — ShimmerReverb";
-
     static constexpr int kWindowWidth = 620;
     static constexpr int kWindowHeight = 300;
 

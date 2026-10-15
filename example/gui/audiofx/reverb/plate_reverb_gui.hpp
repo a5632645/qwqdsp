@@ -25,8 +25,6 @@ struct PlateReverbGui {
     std::atomic<float> damping_{5000.0f}; // Hz
     std::atomic<bool> params_dirty_{true};
 
-    static constexpr const char* kWindowTitle = "Plate Reverb — PlateReverb";
-
     static constexpr int kWindowWidth = 620;
     static constexpr int kWindowHeight = 280;
 

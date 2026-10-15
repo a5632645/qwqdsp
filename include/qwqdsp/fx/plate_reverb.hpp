@@ -331,6 +331,9 @@ private:
 //    size:       The size of our imaginary plate.
 //    damping:    How much high frequencies are filtered during reverb.
 //
+// 与论文的差异：论文的输入通路是单声道；此处左右声道各有一套预延迟、低通与扩散链，
+// 两者作为 2 通道 FDN 的两路输入分别注入对应 Tank（两 Tank 之间交叉反馈）。
+//
 //------------------------------------------------------------------------------
 
 //==============================================================================
@@ -352,19 +355,22 @@ public:
         // Dattorro's paper.
         float r = float(sample_rate_ / 29761.0f);
 
-        // Predelay
-        predelay_line_.Init((size_t)std::ceil(sample_rate_ * kMaxPredelay));
+        // Predelay（左右各一条）
+        predelay_left_.Init((size_t)std::ceil(sample_rate_ * kMaxPredelay));
+        predelay_right_.Init((size_t)std::ceil(sample_rate_ * kMaxPredelay));
 
         // Lowpass filters
-        lowpass_.Init(sample_rate_);
+        lowpass_left_.Init(sample_rate_);
+        lowpass_right_.Init(sample_rate_);
         left_tank_.damping_.Init(sample_rate_);
         right_tank_.damping_.Init(sample_rate_);
 
-        // Diffusers
-        diffusers_[0].Init((size_t)std::ceil(142 * r), 0.75f);
-        diffusers_[1].Init((size_t)std::ceil(107 * r), 0.75f);
-        diffusers_[2].Init((size_t)std::ceil(379 * r), 0.625f);
-        diffusers_[3].Init((size_t)std::ceil(277 * r), 0.625f);
+        // Diffusers（每声道各一条扩散链）
+        for (size_t i = 0; i < kNumDiffusers; ++i) {
+            size_t const size = (size_t)std::ceil(kDiffuserDelays[i] * r);
+            diffusers_left_[i].Init(size, kDiffuserGains[i]);
+            diffusers_right_[i].Init(size, kDiffuserGains[i]);
+        }
 
         // Tanks
         float max_mod_depth = float(8.0f * kMaxSize * r);
@@ -432,7 +438,8 @@ public:
      */
     void SetLowpass(float cutoff) noexcept {
         cutoff = std::clamp(cutoff, 16.0f, 20000.0f);
-        lowpass_.SetCutoff(cutoff);
+        lowpass_left_.SetCutoff(cutoff);
+        lowpass_right_.SetCutoff(cutoff);
     }
 
     /**
@@ -481,29 +488,23 @@ public:
      * @param dry_right 干信号右声道
      * @param[out] left_out  处理后左声道
      * @param[out] right_out 处理后右声道
-     * @note 使用合成立体声（synthetic stereo）：左右声道求和后送入混响，
-     *       再通过交叉 Tap 生成立体声输出。
      */
     void Process(float dry_left, float dry_right, float* left_out, float* right_out) noexcept {
-        // Note that this is "synthetic stereo".  We produce a stereo pair
-        // of output samples based on the summed input.
-        float sum = dry_left + dry_right;
+        // 输入通路：左右声道各自预延迟、低通、扩散
+        float in_left = predelay_left_.TapAndPush(predelay_, dry_left);
+        float in_right = predelay_right_.TapAndPush(predelay_, dry_right);
 
-        // Predelay
-        sum = predelay_line_.TapAndPush(predelay_, sum);
+        in_left = lowpass_left_.Process(in_left);
+        in_right = lowpass_right_.Process(in_right);
 
-        // Input lowpass
-        sum = lowpass_.Process(sum);
+        for (size_t i = 0; i < kNumDiffusers; ++i) {
+            in_left = diffusers_left_[i].Process(in_left, (float)diffusers_left_[i].GetSize());
+            in_right = diffusers_right_[i].Process(in_right, (float)diffusers_right_[i].GetSize());
+        }
 
-        // Diffusers
-        sum = diffusers_[0].Process(sum, (float)diffusers_[0].GetSize());
-        sum = diffusers_[1].Process(sum, (float)diffusers_[1].GetSize());
-        sum = diffusers_[2].Process(sum, (float)diffusers_[2].GetSize());
-        sum = diffusers_[3].Process(sum, (float)diffusers_[3].GetSize());
-
-        // Tanks
-        float left_in = sum + right_tank_.out_ * right_tank_.GetDecayGain();
-        float right_in = sum + left_tank_.out_ * left_tank_.GetDecayGain();
+        // 2 通道 FDN：两 Tank 的输出按各自衰减增益交叉注入对方
+        float left_in = in_left + right_tank_.out_ * right_tank_.GetDecayGain();
+        float right_in = in_right + left_tank_.out_ * left_tank_.GetDecayGain();
         left_tank_.Process(left_in);
         right_tank_.Process(right_in);
 
@@ -544,23 +545,35 @@ public:
      * @brief 复位所有延迟线和滤波器状态。
      */
     void Reset() noexcept {
-        predelay_line_.Reset();
-        lowpass_.Reset();
+        predelay_left_.Reset();
+        predelay_right_.Reset();
+        lowpass_left_.Reset();
+        lowpass_right_.Reset();
 
-        for (auto& d : diffusers_)
+        for (auto& d : diffusers_left_)
+            d.Reset();
+        for (auto& d : diffusers_right_)
             d.Reset();
 
         left_tank_.Reset();
         right_tank_.Reset();
     }
 private:
+    // Dattorro 输入扩散链的长度（论文采样率下的样本数）与系数
+    static constexpr size_t kNumDiffusers = 4;
+    static constexpr std::array<float, kNumDiffusers> kDiffuserDelays = {142.0f, 107.0f, 379.0f, 277.0f};
+    static constexpr std::array<float, kNumDiffusers> kDiffuserGains = {0.75f, 0.75f, 0.625f, 0.625f};
+
     float sample_rate_ = 1.0f;
 
     float mix_ = 0.0f;
     float predelay_ = 0.0f;
-    detail::DelayLine predelay_line_;
-    detail::OnePoleFilter lowpass_;
-    std::array<detail::DelayAllpass, 4> diffusers_;
+    detail::DelayLine predelay_left_;
+    detail::DelayLine predelay_right_;
+    detail::OnePoleFilter lowpass_left_;
+    detail::OnePoleFilter lowpass_right_;
+    std::array<detail::DelayAllpass, kNumDiffusers> diffusers_left_;
+    std::array<detail::DelayAllpass, kNumDiffusers> diffusers_right_;
 
     detail::Tank left_tank_;
     detail::Tank right_tank_;
