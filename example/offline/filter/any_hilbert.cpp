@@ -14,7 +14,7 @@ int main() {
     constexpr int64_t N = 1 << 18; // 262144 样本
     constexpr int kSampleRate = 48000;
 
-    AnyHilbert<float> hilbert;
+    AnyHilbert<float, hilbert_coeff::Ellip32> hilbert;
     hilbert.Reset();
 
     // 生成脉冲响应（立体声: ch0=实部, ch1=虚部）
