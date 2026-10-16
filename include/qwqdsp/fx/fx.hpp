@@ -1,5 +1,6 @@
 #pragma once
 #include "delay_line.hpp"
+#include "fdn_reverb.hpp"
 #include "gardner_reverb.hpp"
 #include "limiter.hpp"
 #include "oversample.hpp"

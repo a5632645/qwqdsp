@@ -6,6 +6,7 @@
 #include "miniaudio.h"
 #include "raylib.h"
 
+#include "reverb/fdn_reverb_gui.hpp"
 #include "reverb/gardner_reverb_gui.hpp"
 #include "reverb/peak_meter.hpp"
 #include "reverb/plate_reverb_gui.hpp"
@@ -43,6 +44,9 @@ static ShimmerReverbGui s_shimmer;
 static PlateReverbGui s_plate;
 static GardnerRoomGui s_gardner_room;
 static GardnerHallGui s_gardner_hall;
+static Fdn4SmallGui s_fdn_small;
+static Fdn4MediumGui s_fdn_medium;
+static Fdn4LargeGui s_fdn_large;
 
 static_assert(ReverbGuiConcept<ShimmerReverbGui>,
               "ShimmerReverbGui 必须满足 ReverbGuiConcept：需要 kWindowWidth/kWindowHeight "
@@ -56,6 +60,15 @@ static_assert(ReverbGuiConcept<GardnerRoomGui>,
 static_assert(ReverbGuiConcept<GardnerHallGui>,
               "GardnerHallGui 必须满足 ReverbGuiConcept：需要 kWindowWidth/kWindowHeight "
               "静态常量，以及 Init/Process/CreateKnobs/DisplayKnobs 方法");
+static_assert(ReverbGuiConcept<Fdn4SmallGui>,
+              "Fdn4SmallGui 必须满足 ReverbGuiConcept：需要 kWindowWidth/kWindowHeight "
+              "静态常量，以及 Init/Process/CreateKnobs/DisplayKnobs 方法");
+static_assert(ReverbGuiConcept<Fdn4MediumGui>,
+              "Fdn4MediumGui 必须满足 ReverbGuiConcept：需要 kWindowWidth/kWindowHeight "
+              "静态常量，以及 Init/Process/CreateKnobs/DisplayKnobs 方法");
+static_assert(ReverbGuiConcept<Fdn4LargeGui>,
+              "Fdn4LargeGui 必须满足 ReverbGuiConcept：需要 kWindowWidth/kWindowHeight "
+              "静态常量，以及 Init/Process/CreateKnobs/DisplayKnobs 方法");
 
 struct ReverbAlgorithm {
     const char* name;
@@ -65,16 +78,16 @@ struct ReverbAlgorithm {
     void (*DisplayKnobs)();
 };
 
-static const std::array<ReverbAlgorithm, 4> kAlgorithms{{
+static const std::array<ReverbAlgorithm, 7> kAlgorithms{{
     {
-        "Shimmer Reverb",
+        "Shimmer",
         [](float sample_rate) { s_shimmer.Init(sample_rate); },
         [](const float* in, float* l, float* r, size_t n) noexcept { s_shimmer.Process(in, l, r, n); },
         [] { s_shimmer.CreateKnobs(); },
         [] { s_shimmer.DisplayKnobs(); },
     },
     {
-        "Plate Reverb",
+        "Plate",
         [](float sample_rate) { s_plate.Init(sample_rate); },
         [](const float* in, float* l, float* r, size_t n) noexcept { s_plate.Process(in, l, r, n); },
         [] { s_plate.CreateKnobs(); },
@@ -94,6 +107,27 @@ static const std::array<ReverbAlgorithm, 4> kAlgorithms{{
         [] { s_gardner_hall.CreateKnobs(); },
         [] { s_gardner_hall.DisplayKnobs(); },
     },
+    {
+        "FDN Small",
+        [](float sample_rate) { s_fdn_small.Init(sample_rate); },
+        [](const float* in, float* l, float* r, size_t n) noexcept { s_fdn_small.Process(in, l, r, n); },
+        [] { s_fdn_small.CreateKnobs(); },
+        [] { s_fdn_small.DisplayKnobs(); },
+    },
+    {
+        "FDN Medium",
+        [](float sample_rate) { s_fdn_medium.Init(sample_rate); },
+        [](const float* in, float* l, float* r, size_t n) noexcept { s_fdn_medium.Process(in, l, r, n); },
+        [] { s_fdn_medium.CreateKnobs(); },
+        [] { s_fdn_medium.DisplayKnobs(); },
+    },
+    {
+        "FDN Large",
+        [](float sample_rate) { s_fdn_large.Init(sample_rate); },
+        [](const float* in, float* l, float* r, size_t n) noexcept { s_fdn_large.Process(in, l, r, n); },
+        [] { s_fdn_large.CreateKnobs(); },
+        [] { s_fdn_large.DisplayKnobs(); },
+    },
 }};
 
 // 当前选中的算法下标，UI 线程写入、音频线程读取
@@ -109,16 +143,27 @@ static PeakMeter s_peak_meter;
 //  顶部算法按钮
 // ------------------------------------------------------------
 namespace algorithm_bar {
-// 占用窗口顶部空白区：旋钮自 y=42 起、电平表自 x=514 起，按钮行均不与两者重叠
+// 占用窗口顶部空白区：旋钮自 y=42 起、电平表自 x=514 起，按钮行均不与两者重叠。
+// 算法名长短不一，按钮宽度按文字实测宽度自适应，整行从 x 起依次排开。
 static constexpr float kX = 14.0f;
 static constexpr float kY = 6.0f;
-static constexpr float kWidth = 116.0f;
 static constexpr float kHeight = 26.0f;
-static constexpr float kGap = 8.0f;
-static constexpr int kFontSize = 12;
+static constexpr float kGap = 6.0f;
+static constexpr float kPadding = 6.0f;
+static constexpr int kFontSize = 10;
 
+/// @brief 第 index 个按钮的宽度（文字宽度 + 两侧留白）
+static float WidthOf(size_t index) {
+    return static_cast<float>(MeasureText(kAlgorithms[index].name, kFontSize)) + 2 * kPadding;
+}
+
+/// @brief 第 index 个按钮的矩形
 static Rectangle Bounds(size_t index) {
-    return Rectangle{kX + static_cast<float>(index) * (kWidth + kGap), kY, kWidth, kHeight};
+    float x = kX;
+    for (size_t i = 0; i < index; ++i) {
+        x += WidthOf(i) + kGap;
+    }
+    return Rectangle{x, kY, WidthOf(index), kHeight};
 }
 
 /// @brief 返回鼠标位置命中的算法下标，未命中返回 -1
