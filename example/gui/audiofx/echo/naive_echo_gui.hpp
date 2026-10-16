@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cstddef>
+#include <cstdint>
 
 #include "raylib.h"
 #include "slider.hpp"
@@ -44,15 +45,20 @@ struct NaiveEchoGui {
 
     // --------------------------------------------------------
     //  Process — 音频线程回调
+    //
+    //  整个 echo 都在该格式的运算域里跑：输入转换、延迟读取、反馈乘、饱和加、干+湿
+    //  混音、写回；只有进出 miniaudio 缓冲时做浮点换算。
     // --------------------------------------------------------
     void Process(const float* input, float* output, size_t frame_count) noexcept {
         size_t const delay_samples = SampleDelay(delay_ms_.load(std::memory_order_relaxed));
-        float const feedback = feedback_.load(std::memory_order_relaxed);
+        // 反馈量也进同一格式
+        Value const gain = Storage::FromFloat(feedback_.load(std::memory_order_relaxed));
 
         for (size_t i = 0; i < frame_count; ++i) {
-            float const delayed = line_.GetBeforePush(delay_samples);
-            output[i] = input[i] + delayed;
-            line_.Push(input[i] + feedback * delayed);
+            Value const in = ConvertIn(input[i]);
+            Value const delayed = line_.GetBeforePush(delay_samples);
+            line_.Push(Storage::Add(in, ConvertMul(gain, delayed)));
+            output[i] = Storage::ToFloat(Storage::Add(in, delayed));
         }
     }
 
@@ -91,6 +97,27 @@ struct NaiveEchoGui {
     }
 private:
     using Line = typename Storage::Line;
+    using Value = typename Storage::Value;
+
+    /// @brief 浮点输入 → 该格式（16 位格式带一阶误差反馈）
+    Value ConvertIn(float x) noexcept {
+        if constexpr (Storage::kUseErrorFeedback) {
+            return Storage::FromFloatShaped(x, ef_in_);
+        }
+        else {
+            return Storage::FromFloat(x);
+        }
+    }
+
+    /// @brief 该格式的定点乘（16 位格式带一阶误差反馈）
+    Value ConvertMul(Value a, Value b) noexcept {
+        if constexpr (Storage::kUseErrorFeedback) {
+            return Storage::MulShaped(a, b, ef_mul_);
+        }
+        else {
+            return Storage::Mul(a, b);
+        }
+    }
 
     static constexpr int kGap = 18;
 
@@ -120,5 +147,8 @@ private:
     }
 
     float sample_rate_ = 48000.0f;
+    // 16 位格式的一阶误差反馈余量（1/256 LSB 细网格）
+    int64_t ef_in_ = 0;
+    int64_t ef_mul_ = 0;
     Line line_;
 };

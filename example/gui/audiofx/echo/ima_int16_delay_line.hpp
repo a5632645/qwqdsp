@@ -8,16 +8,18 @@
 //    偏移 2     int8         = 块开始前的步长索引（0..88）
 //    偏移 3..18 16 字节       = 32 个 4bit 码字，低半字节存放块内靠前的样本
 //
-//  块头只承载跨块的编解码状态，块内 32 个样点全部被编码；编解码都在 int16 域内
-//  做饱和加，步长表用标准 IMA/DVI4 原值。与标准 IMA WAV 的差别只有 nibble 顺序。
+//  块头在块开始时写入、只承载跨块的编解码状态，块内 32 个样点全部被编码；编解码都在
+//  int16 域内做饱和加，步长表用标准 IMA/DVI4 原值。与标准 IMA WAV 的差别只有 nibble
+//  顺序。写入路径带一阶误差反馈：把上一码字的重建误差加回输入再编码。
 // ------------------------------------------------------------
 
 #include <algorithm>
 #include <array>
-#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
+
+#include "quantized_delay_line.hpp"
 
 namespace echo_demo {
 
@@ -30,16 +32,20 @@ struct ImaInt16State {
 // ------------------------------------------------------------
 //  ImaInt16DelayLine — 以 19 字节块为存储单元的整数延迟线
 //
-//  写侧按 32 个样点聚成一块编码，读侧按需解出目标所在块。
+//  写侧逐样本编码进当前块，读侧按需解出目标所在块。
 // ------------------------------------------------------------
 class ImaInt16DelayLine {
 public:
+    using Value = int16_t;
+
     static constexpr size_t kSamplesPerBlock = 32;
     static constexpr size_t kBlockBytes = 19;
     static constexpr size_t kIndexOffset = 2;
     static constexpr size_t kDataOffset = 3;
     static constexpr size_t kStepIndexCount = 89;
     static constexpr int32_t kStepIndexMax = static_cast<int32_t>(kStepIndexCount) - 1;
+    /// @brief 误差反馈状态的上限，防止极端输入把反馈项撑大
+    static constexpr int32_t kCodecErrorLimit = 1 << 14;
 
     /// @brief 最小可用延迟样本数：整块写完才能解码
     static constexpr size_t kMinDelaySamples = kSamplesPerBlock;
@@ -49,49 +55,20 @@ public:
     /// @param[in] samples 块内 kSamplesPerBlock 个 int16 样点
     /// @param[out] block 收 kBlockBytes 字节的块
     static void EncodeBlock(ImaInt16State& state, const int16_t* samples, uint8_t* block) noexcept {
-        int32_t predictor = state.predictor;
-        int32_t index = state.index;
-        StoreLe16(block, static_cast<int16_t>(predictor));
-        block[kIndexOffset] = static_cast<uint8_t>(static_cast<int8_t>(index));
-
-        uint8_t* p = block + kDataOffset;
-        for (size_t i = 0; i < kSamplesPerBlock / 2; ++i) {
-            uint8_t byte = 0;
-            for (size_t k = 0; k < 2; ++k) {
-                int32_t const sample = samples[2 * i + k];
-                int32_t step = kStepTable[index];
-                int32_t diff = sample - predictor;
-                int32_t code = 0;
-                int32_t delta = step >> 3;
-                if (diff < 0) {
-                    diff = -diff;
-                    code = 8;
-                }
-                if (diff >= step) {
-                    code |= 4;
-                    diff -= step;
-                    delta += step;
-                }
-                step >>= 1;
-                if (diff >= step) {
-                    code |= 2;
-                    diff -= step;
-                    delta += step;
-                }
-                step >>= 1;
-                if (diff >= step) {
-                    code |= 1;
-                    delta += step;
-                }
-                predictor = Sat16(predictor + (((code & 8) != 0) ? -delta : delta));
-                index = std::clamp(index + kIndexTable[code & 7], 0, kStepIndexMax);
-                byte = static_cast<uint8_t>(byte | ((k == 0) ? code : (code << 4)));
-            }
-            *p++ = byte;
+        StoreLe16(block, static_cast<int16_t>(state.predictor));
+        block[kIndexOffset] = static_cast<uint8_t>(static_cast<int8_t>(state.index));
+        for (size_t i = 0; i < kSamplesPerBlock; ++i) {
+            EncodeOne(state, samples[i], block, i);
         }
+    }
 
-        state.predictor = predictor;
-        state.index = index;
+    /// @brief 编码块内第 index 个样点，码字写进块，返回解码端会重建出的值
+    static int16_t EncodeOne(ImaInt16State& state, int16_t sample, uint8_t* block, size_t index) noexcept {
+        uint8_t const code = Encode(state, sample);
+        uint8_t& byte = block[kDataOffset + index / 2];
+        byte = ((index % 2) == 0) ? static_cast<uint8_t>((byte & 0xF0) | code)
+                                  : static_cast<uint8_t>((byte & 0x0F) | (code << 4));
+        return static_cast<int16_t>(state.predictor);
     }
 
     /// @brief 从 19 字节块解出 kSamplesPerBlock 个 int16 样点，起始状态取自块头
@@ -129,29 +106,35 @@ public:
     void Init(size_t max_samples) {
         block_count_ = std::max<size_t>((max_samples + kSamplesPerBlock - 1) / kSamplesPerBlock, 2);
         buffer_.assign(block_count_ * kBlockBytes, 0);
-        pending_.fill(0);
         scratch_.fill(0);
         state_ = ImaInt16State{};
+        codec_error_ = 0;
         write_index_ = 0;
         cached_block_ = kNoBlock;
     }
 
-    /// @brief 编码并写入一个样本，凑满一块时整块落盘
-    void Push(float x) noexcept {
+    /// @brief 带一阶误差反馈地编码一个样本
+    void Push(Value x) noexcept {
         size_t const in_block = write_index_ % kSamplesPerBlock;
-        pending_[in_block] = ToInt16(x);
-        ++write_index_;
-        if (in_block + 1 == kSamplesPerBlock) {
-            EncodeBlock(state_, pending_.data(), &buffer_[BlockOffset(write_index_ / kSamplesPerBlock - 1)]);
+        size_t const block = write_index_ / kSamplesPerBlock;
+        uint8_t* const bytes = &buffer_[BlockOffset(block)];
+        if (in_block == 0) {
+            StoreLe16(bytes, static_cast<int16_t>(state_.predictor));
+            bytes[kIndexOffset] = static_cast<uint8_t>(static_cast<int8_t>(state_.index));
         }
+        // 把上一码字的重建误差加回输入：编码噪声被高通整形，带内噪声下降
+        int32_t const shaped = std::clamp(static_cast<int32_t>(x) + codec_error_, -32768, 32767);
+        int16_t const reconstructed = EncodeOne(state_, static_cast<int16_t>(shaped), bytes, in_block);
+        codec_error_ = std::clamp(shaped - reconstructed, -kCodecErrorLimit, kCodecErrorLimit);
+        ++write_index_;
     }
 
     /// @brief 读取 delay_samples 次 Push 之前写入的样本
     /// @param[in] delay_samples 延迟样本数，内部钳到 [kMinDelaySamples, Capacity()]
-    float GetBeforePush(size_t delay_samples) noexcept {
+    Value GetBeforePush(size_t delay_samples) noexcept {
         size_t const delay = std::clamp(delay_samples, kMinDelaySamples, Capacity());
         if (write_index_ < delay) {
-            return 0.0f;
+            return 0;
         }
         size_t const target = write_index_ - delay;
         size_t const block = target / kSamplesPerBlock;
@@ -159,7 +142,7 @@ public:
             DecodeBlock(&buffer_[BlockOffset(block)], scratch_.data());
             cached_block_ = block;
         }
-        return ToFloat(scratch_[target % kSamplesPerBlock]);
+        return scratch_[target % kSamplesPerBlock];
     }
 
     /// @brief 可用延迟样本数上限（块对齐，留一块给正在写入的块）
@@ -169,8 +152,6 @@ public:
     size_t BlockCount() const noexcept { return block_count_; }
 private:
     static constexpr size_t kNoBlock = static_cast<size_t>(-1);
-    static constexpr float kScale = 32768.0f;
-    static constexpr float kInvScale = 1.0f / kScale;
 
     static constexpr int8_t kIndexTable[8] = {-1, -1, -1, -1, 2, 4, 6, 8};
     static constexpr int16_t kStepTable[89] = {
@@ -183,11 +164,37 @@ private:
 
     static int32_t Sat16(int32_t v) noexcept { return std::clamp(v, -32768, 32767); }
 
-    static int16_t ToInt16(float x) noexcept {
-        return static_cast<int16_t>(std::lrintf(std::clamp(x * kScale, -kScale, kScale - 1.0f)));
+    /// @brief 把一个样本编码成 4bit 码字并推进状态
+    static uint8_t Encode(ImaInt16State& state, int16_t sample) noexcept {
+        int32_t const step = kStepTable[state.index];
+        int32_t diff = sample - state.predictor;
+        int32_t code = 0;
+        int32_t delta = step >> 3;
+        if (diff < 0) {
+            diff = -diff;
+            code = 8;
+        }
+        if (diff >= step) {
+            code |= 4;
+            diff -= step;
+            delta += step;
+        }
+        int32_t const half = step >> 1;
+        if (diff >= half) {
+            code |= 2;
+            diff -= half;
+            delta += half;
+        }
+        int32_t const quarter = step >> 2;
+        if (diff >= quarter) {
+            code |= 1;
+            delta += quarter;
+        }
+        delta = ((code & 8) != 0) ? -delta : delta;
+        state.predictor = Sat16(state.predictor + delta);
+        state.index = std::clamp(state.index + kIndexTable[code & 7], 0, kStepIndexMax);
+        return static_cast<uint8_t>(code);
     }
-
-    static float ToFloat(int16_t v) noexcept { return static_cast<float>(v) * kInvScale; }
 
     static void StoreLe16(uint8_t* p, int16_t v) noexcept {
         uint16_t const u = static_cast<uint16_t>(v);
@@ -202,22 +209,53 @@ private:
     size_t BlockOffset(size_t block) const noexcept { return (block % block_count_) * kBlockBytes; }
 
     std::vector<uint8_t> buffer_;
-    std::array<int16_t, kSamplesPerBlock> pending_{};
     std::array<int16_t, kSamplesPerBlock> scratch_{};
     ImaInt16State state_;
+    int32_t codec_error_ = 0;
     size_t write_index_ = 0;
     size_t block_count_ = 0;
     size_t cached_block_ = kNoBlock;
 };
 
 // ------------------------------------------------------------
-//  ImaInt16Storage — int16 域的 4bit IMA ADPCM 块压缩格式
+//  ImaInt16Pcm24Line — 24bit 运算域 + int16 压缩存储的适配延迟线
+//
+//  写入时按厂商语义把 24bit 值降到 16bit 再编码（降位走一阶误差反馈），读出时 << 8
+//  抬回 24bit；延迟线内部始终是 16bit 的压缩块。
 // ------------------------------------------------------------
-struct ImaInt16Storage {
-    using Line = ImaInt16DelayLine;
+class ImaInt16Pcm24Line {
+public:
+    using Value = int32_t;
+
+    static constexpr size_t kMinDelaySamples = ImaInt16DelayLine::kMinDelaySamples;
+    static constexpr size_t kBlockBytes = ImaInt16DelayLine::kBlockBytes;
+
+    void Init(size_t max_samples) { line_.Init(max_samples); }
+
+    /// @brief 写入一个 24bit 值（降位后编码进块）
+    void Push(Value x) noexcept { line_.Push(detail::QuantizeInt16Fine(x, reduce_error_)); }
+
+    /// @brief 读取 delay_samples 次 Push 之前写入的值，抬回 24bit
+    Value GetBeforePush(size_t delay_samples) noexcept {
+        return static_cast<Value>(line_.GetBeforePush(delay_samples)) << 8;
+    }
+
+    size_t Capacity() const noexcept { return line_.Capacity(); }
+
+    size_t BlockCount() const noexcept { return line_.BlockCount(); }
+private:
+    int64_t reduce_error_ = 0;   // 24bit LSB 单位的降位余量
+    ImaInt16DelayLine line_;
+};
+
+// ------------------------------------------------------------
+//  ImaInt16Storage — 4bit IMA 压缩存储（int16）+ 24bit 混音域
+// ------------------------------------------------------------
+struct ImaInt16Storage : Q24Arithmetic {
+    using Line = ImaInt16Pcm24Line;
 
     static constexpr const char* kName = "IMA16";
-    static constexpr const char* kDescription = "4 bit IMA, int16 domain, 32 samples/19 B";
+    static constexpr const char* kDescription = "4 bit IMA storage (int16) + 24 bit mixing";
 };
 
 } // namespace echo_demo

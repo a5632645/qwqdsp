@@ -39,6 +39,8 @@ template <int kMagnitudeBits = 7>
 class AdpcmDelayLine {
     static_assert(kMagnitudeBits >= 3 && kMagnitudeBits <= 7, "幅度位数需落在 [3, 7]");
 public:
+    using Value = int32_t;
+
     static constexpr int kCodeBits = kMagnitudeBits + 1;
     static constexpr size_t kSamplesPerBlock = 64;
     static constexpr size_t kCodesPerByte = 8 / kCodeBits;
@@ -104,9 +106,9 @@ public:
     }
 
     /// @brief 编码并写入一个样本，凑满一块时整块落盘
-    void Push(float x) noexcept {
+    void Push(Value x) noexcept {
         size_t const in_block = write_index_ % kSamplesPerBlock;
-        pending_[in_block] = Quantize<23, 32>(x);
+        pending_[in_block] = x;
         ++write_index_;
         if (in_block + 1 == kSamplesPerBlock) {
             EncodeBlock(encoder_state_, pending_.data(), &buffer_[BlockOffset(write_index_ / kSamplesPerBlock - 1)]);
@@ -115,10 +117,10 @@ public:
 
     /// @brief 读取 delay_samples 次 Push 之前写入的样本
     /// @param[in] delay_samples 延迟样本数，内部钳到 [kMinDelaySamples, Capacity()]
-    float GetBeforePush(size_t delay_samples) noexcept {
+    Value GetBeforePush(size_t delay_samples) noexcept {
         size_t const delay = std::clamp(delay_samples, kMinDelaySamples, Capacity());
         if (write_index_ < delay) {
-            return 0.0f;
+            return 0;
         }
         size_t const target = write_index_ - delay;
         size_t const block = target / kSamplesPerBlock;
@@ -126,7 +128,7 @@ public:
             DecodeBlock(&buffer_[BlockOffset(block)], scratch_.data());
             cached_block_ = block;
         }
-        return static_cast<float>(scratch_[target % kSamplesPerBlock]) * kInvScale;
+        return scratch_[target % kSamplesPerBlock];
     }
 
     /// @brief 可用延迟样本数上限（块对齐，留一块给正在写入的块）
@@ -138,7 +140,6 @@ private:
     static constexpr size_t kNoBlock = static_cast<size_t>(-1);
     /// @brief 预测值钳位上限（Q8.23 的整数位范围 ±128），保证差分不出 int32
     static constexpr int32_t kPredictorLimit = 1 << 30;
-    static constexpr float kInvScale = 1.0f / static_cast<float>(uint32_t{1} << 23);
 
     static constexpr int8_t kIndexAdjust[8] = {-1, -1, -1, -1, 2, 4, 6, 8};
     static constexpr int16_t kStepTable[89] = {
@@ -219,13 +220,13 @@ private:
 };
 
 // ------------------------------------------------------------
-//  Adpcm8Storage — Q8.23 域的 8bit IMA 块压缩格式
+//  Adpcm8Storage — 8bit IMA 块压缩存储，运算域沿用 Q8.23（int32）
 // ------------------------------------------------------------
-struct Adpcm8Storage {
+struct Adpcm8Storage : Q8_23Storage {
     using Line = AdpcmDelayLine<7>;
 
     static constexpr const char* kName = "IMA23/8";
-    static constexpr const char* kDescription = "8 bit IMA, Q8.23 domain, 64 samples/69 B";
+    static constexpr const char* kDescription = "8 bit IMA storage + Q8.23 (int32) arithmetic";
 };
 
 } // namespace echo_demo
