@@ -24,6 +24,7 @@ add_qwqdsp_lab(stupid_resynthsis synth/stupid_resynthsis.cpp)
 add_qwqdsp_lab(convolution audiofx/convolution.cpp)
 
 # ----- 参数扫描 / 算法对照 -----
+add_qwqdsp_lab(lp2bp_noise filter/lp2bp/noise.cpp)
 add_qwqdsp_lab(piwarp5_comb audiofx/piwarp5_comb.cpp)
 add_qwqdsp_lab(pmpm-vs-pyin pitch/pmpm_vs_pyin.cpp)
 
