@@ -12,8 +12,6 @@ add_qwqdsp_test(iir_design_shelf filter/iir_design_shelf.cpp)
 add_qwqdsp_test(halfband_allpass_ovs filter/halfband_allpass_ovs.cpp)
 add_qwqdsp_test(tpt_filters filter/tpt_filters.cpp)
 
-add_qwqdsp_test(autocorrelation_pitch_shift_rt audiofx/autocorrelation_delay_pitch_shifter_test.cpp)
-
 add_qwqdsp_test(pyin pitch/pyin.cpp)
 add_qwqdsp_test(pmpm pitch/pmpm.cpp)
 add_qwqdsp_test(pitch_algorithms pitch/pitch_algorithms.cpp)

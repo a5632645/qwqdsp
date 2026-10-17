@@ -12,7 +12,6 @@
 
 #include "peak_map_pitch_shifter_rt.hpp"
 #include "pitch_shifter_rt.hpp"
-#include "autocorrelation_delay_pitch_shifter_rt.hpp"
 
 namespace pitch_shift_rt {
 
@@ -20,8 +19,8 @@ static constexpr float kSampleRate = 48000.0f;
 static constexpr int kWindowWidth = 900;
 static constexpr int kWindowHeight = 300;
 static constexpr const char* kWindowTitle = "Pitch Shifter - Real-time";
-static constexpr std::array<const char*, 7> kAlgorithmNames{"PGHI", "PGHI+Flux", "PGHI+SFlux", "PhaseLock",
-                                                             "Transient", "PeakMap", "AutoCorr Delay"};
+    static constexpr std::array<const char*, 6> kAlgorithmNames{"PGHI", "PGHI+Flux", "PGHI+SFlux", "PhaseLock",
+                                                             "Transient", "PeakMap"};
 
 class PitchShiftDemo {
 public:
@@ -31,7 +30,6 @@ public:
     void init() {
         spectral_.init(kSampleRate);
         peak_map_.init(kSampleRate);
-        autocorrelation_.init(kSampleRate);
         pitch_knob_.set_bound((kWindowWidth - 92) / 2, 158, 92, 98)
             .set_title("Pitch Shift")
             .set_range(-12.0f, 12.0f, 1.0f, 0.0f)
@@ -58,10 +56,6 @@ public:
             // PeakMap：峰域映射相位声码器
             peak_map_.setPitchShift(semitones);
             peak_map_.process(input, output, frame_count);
-        }
-        else if (algorithm == 6) {
-            autocorrelation_.setPitchShift(semitones);
-            autocorrelation_.process(input, output, frame_count);
         }
         else {
             // 频谱类算法（0-4）：先时间拉伸再重采样
@@ -125,7 +119,7 @@ private:
         constexpr float kTop = 82.0f;
         constexpr float kGap = 5.0f;
         constexpr float kHeight = 31.0f;
-        constexpr float kWidth = (static_cast<float>(kWindowWidth) - 2.0f * kLeft - 6.0f * kGap) / 7.0f;
+        constexpr float kWidth = (static_cast<float>(kWindowWidth) - 2.0f * kLeft - 5.0f * kGap) / 6.0f;
         const Vector2 mouse = GetMousePosition();
         const int selected = algorithm_.load(std::memory_order_relaxed);
 
@@ -203,7 +197,6 @@ private:
 
     RealtimePitchShifter<WindowType::BlackmanHarrisThreeTerm, 512> spectral_;
     RealtimePeakMapPitchShifter<> peak_map_;
-    AutocorrelationDelayPitchShifter autocorrelation_;
     Knob pitch_knob_;
     std::atomic<float> pitch_shift_{0.0f};
     std::atomic<int> algorithm_{0};
