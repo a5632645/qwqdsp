@@ -1,5 +1,6 @@
 #pragma once
 #include "biquad_coeff.hpp"
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <complex>
@@ -1069,6 +1070,8 @@ struct IIRDesign {
      *      否则解引用空的 optional 是未定义行为
      * @warning 系数按 float 存放: 高选择性/窄陷波设计的实测频响会与设计值有偏差,
      *          偏差量随极点靠近单位圆而变大
+     * @note 高 Q/窄带级联请先用 @ref NormalizeSectionGains 重分配节增益,
+     *       否则 TDF2 等直接型结构的状态范围可能达到 1e±N, 放大量化噪声
      */
     static void TfToBiquad(std::span<ZPK> digital, std::span<BiquadCoeff> biquad) {
         assert(biquad.size() >= digital.size());
@@ -1090,6 +1093,76 @@ struct IIRDesign {
             coeff.b1 = b1;
             coeff.b2 = b2;
         }
+    }
+
+    /**
+     * @brief 按级联 L∞ 峰值重新分配各 SOS 的增益项
+     *
+     * 对级联 ZPK 节逐级计算原始响应的峰值 P_i, 第 i 节的增益乘以
+     * P_{i-1}/P_i (首节 1/P_0), 使每一级累计响应峰值都为 1。
+     * 这样极点造成的巨大/微小节增益会被相邻级的零点/增益抵消, 避免
+     * TDF2 等直接型结构出现 1e±N 的状态范围。
+     *
+     * 峰值在每节极点/零点角附近的小邻域内搜索(设计期近似); 近似只影响
+     * 增益如何分配, 返回的 P_n 仍精确保持总传递函数。
+     *
+     * @param digital 数字域 ZPK 节(Bilinear 之后, 每节应有有限零点)
+     * @return 级联末端应乘上的总增益 P_n(归一化后级联的峰值响应为 1)
+     * @note 不改变总传递函数: H = P_n * (归一化级联); 输出端乘 P_n 即可还原
+     * @note 节顺序会影响 P_i 与最终的 P_n, 但不会改变总传递函数
+     */
+    static double NormalizeSectionGains(std::span<ZPK> digital) {
+        if (digital.empty()) {
+            return 1.0;
+        }
+
+        // 候选频率: 0/pi + 每节极点角(带通/谐振峰的近似位置)。峰值只需
+        // 近似用于分配增益, 总传递函数由返回的 P_n 精确保持, 因此不需要
+        // 全局细网格。
+        std::vector<double> candidates;
+        candidates.reserve(2 + digital.size());
+        candidates.push_back(0.0);
+        candidates.push_back(pi);
+        for (auto const& s : digital) {
+            double const w0 = std::abs(std::arg(s.p));
+            if (w0 > 0.0 && w0 < pi) {
+                candidates.push_back(w0);
+            }
+        }
+
+        std::vector<std::complex<double>> zi(candidates.size());
+        for (size_t j = 0; j < candidates.size(); ++j) {
+            zi[j] = std::polar(1.0, -candidates[j]);
+        }
+
+        // 先记录原始级联的累计峰值；后续缩放不能影响这些峰值
+        std::vector<double> peaks(digital.size());
+        std::vector<std::complex<double>> cumulative(candidates.size(), {1.0, 0.0});
+        for (size_t i = 0; i < digital.size(); ++i) {
+            auto const& s = digital[i];
+            std::complex<double> const p_conj = std::conj(s.p);
+            std::complex<double> const z = s.z ? *s.z : std::complex<double>{0.0, 0.0};
+            std::complex<double> const z_conj = std::conj(z);
+            double peak = 0.0;
+            for (size_t j = 0; j < candidates.size(); ++j) {
+                std::complex<double> num{1.0, 0.0};
+                if (s.z) {
+                    num = (1.0 - z * zi[j]) * (1.0 - z_conj * zi[j]);
+                }
+                auto const den = (1.0 - s.p * zi[j]) * (1.0 - p_conj * zi[j]);
+                cumulative[j] *= s.k * num / den;
+                peak = std::max(peak, std::abs(cumulative[j]));
+            }
+            peaks[i] = std::max(peak, 1e-300);
+        }
+
+        double previous_peak = 1.0;
+        for (size_t i = 0; i < digital.size(); ++i) {
+            double const scale = (i == 0) ? 1.0 / peaks[0] : previous_peak / peaks[i];
+            digital[i].k *= scale;
+            previous_peak = peaks[i];
+        }
+        return peaks.back();
     }
 
     /**
