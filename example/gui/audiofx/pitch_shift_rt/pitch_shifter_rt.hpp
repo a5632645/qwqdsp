@@ -54,8 +54,7 @@ constexpr std::size_t nextPowerOfTwo(std::size_t value) noexcept {
  */
 enum class Algorithm {
     Pghi,
-    PghiFlux,
-    PghiSuperFlux,
+    PghiDSPark,
     PhaseLock,
     TransientVocoder,
 };
@@ -72,9 +71,9 @@ static inline float wrapToPi(float phase) noexcept {
 /**
  * @brief 使用固定容量缓冲的实时频域移调器
  *
- * 处理器采用 2048 点 STFT 和八倍重叠。可变分析 hop 完成时间拉伸，
- * 固定合成 hop 保证 COLA，随后对连续 OLA 信号流式重采样完成移调。
- * 五种模式只切换相位传播和瞬态处理策略。初始化完成后音频处理路径
+ * 处理器采用加窗 STFT 和固定合成 hop 完成时间拉伸，
+ * 随后对连续 OLA 信号流式重采样完成移调。
+ * 四种模式只切换相位传播和瞬态处理策略。初始化完成后音频处理路径
  * 不进行动态内存分配。
  */
 template <WindowType kWindowType = WindowType::Hann, std::size_t kHopSize = 512>
@@ -91,8 +90,10 @@ public:
     void init(float sample_rate) {
         sample_rate_ = sample_rate;
         fft_.Init(kFrameSize);
+        detector_fft_.Init(kDetectorFrameSize);
         detail::WindowTraits<kWindowType>::Type::Window(window_, true);
-        buildSuperFluxFilterBank();
+        qwqdsp_window::Hann::Window(detector_window_, true);
+        buildDetectorFilterBank();
         reset();
     }
 
@@ -187,10 +188,16 @@ public:
     }
 private:
     static constexpr std::size_t kSynthesisRingSize = kFrameSize * 16;
-    static constexpr std::size_t kFluxHistorySize = 32;
     static constexpr std::size_t kHeapCapacity = kNumBins * 2;
-    static constexpr std::size_t kMaxSuperFluxBands = 256;
-    static constexpr std::size_t kMaxSuperFluxWeights = kNumBins * 3;
+    // 瞬态检测器使用独立的固定几何，与主链窗函数和帧长无关。
+    static constexpr std::size_t kDetectorWindowSize = kWindowSize < 2048 ? kWindowSize : 2048;
+    static constexpr std::size_t kDetectorFrameSize = detail::nextPowerOfTwo(kDetectorWindowSize * 2);
+    static constexpr std::size_t kDetectorNumBins = kDetectorFrameSize / 2 + 1;
+    static constexpr std::size_t kMaxDetectorBands = 256;
+    static constexpr std::size_t kMaxDetectorWeights = kDetectorNumBins * 3;
+    static constexpr std::size_t kDsFluxHistorySize = 12;
+    static constexpr float kDsFluxDelta = 0.02f;
+    static constexpr float kDsFluxCooldownMs = 64.0f;
     // 八倍重叠下周期三项 Blackman-Harris 窗平方和为常数。
     static constexpr float kOlaGain = detail::WindowTraits<kWindowType>::kOlaGain;
 
@@ -201,30 +208,28 @@ private:
     };
 
     void resetPhaseState() {
-        previous_re_.fill(0.0f);
-        previous_im_.fill(0.0f);
         previous_analysis_phase_.fill(0.0f);
         previous_synthesis_phase_.fill(0.0f);
         previous_magnitude_.fill(0.0f);
-        flux_history_.fill(0.0f);
-        flux_history_count_ = 0;
-        flux_history_write_ = 0;
-        flux_cooldown_ = 0;
         transient_mean_ = 0.0f;
         transient_variance_ = 0.0f;
         transient_frames_ = 0;
         transient_cooldown_ = 0;
         transient_has_mean_ = false;
-        superflux_current_.fill(0.0f);
-        superflux_previous_max_.fill(0.0f);
+        dsflux_current_.fill(0.0f);
+        dsflux_previous_max_.fill(0.0f);
+        dsflux_history_.fill(0.0f);
+        dsflux_scratch_.fill(0.0f);
+        dsflux_history_write_ = 0;
+        dsflux_history_count_ = 0;
+        dsflux_cooldown_ = 0;
         first_frame_ = true;
     }
 
     void processFrame(std::size_t analysis_hop) {
         current_ratio_ += 0.25f * (target_ratio_ - current_ratio_);
 
-        const bool uses_pghi = algorithm_ == Algorithm::Pghi || algorithm_ == Algorithm::PghiFlux
-                            || algorithm_ == Algorithm::PghiSuperFlux;
+        const bool uses_pghi = algorithm_ == Algorithm::Pghi || algorithm_ == Algorithm::PghiDSPark;
         fft_input_.fill(0.0f);
         if (uses_pghi) {
             constexpr std::size_t kHalfWindow = kWindowSize / 2;
@@ -250,13 +255,14 @@ private:
             current_analysis_phase_[bin] = std::atan2(current_im_[bin], current_re_[bin]);
         }
 
-        bool reset_phase = first_frame_;
-        if (algorithm_ == Algorithm::PghiSuperFlux) {
-            reset_phase = detectSuperFluxTransient();
+        if (algorithm_ == Algorithm::PghiDSPark) {
+            processDetectorSpectrum();
         }
-        else if (!first_frame_) {
-            if (algorithm_ == Algorithm::PghiFlux) {
-                reset_phase = detectFluxTransient();
+
+        bool reset_phase = first_frame_;
+        if (!first_frame_) {
+            if (algorithm_ == Algorithm::PghiDSPark) {
+                reset_phase = detectDsParkTransient(analysis_hop);
             }
             else if (algorithm_ == Algorithm::TransientVocoder) {
                 reset_phase = detectVocoderTransient();
@@ -266,8 +272,7 @@ private:
         if (reset_phase) {
             current_synthesis_phase_ = current_analysis_phase_;
         }
-        else if (algorithm_ == Algorithm::Pghi || algorithm_ == Algorithm::PghiFlux
-                 || algorithm_ == Algorithm::PghiSuperFlux) {
+        else if (algorithm_ == Algorithm::Pghi || algorithm_ == Algorithm::PghiDSPark) {
             propagatePghi(analysis_hop);
         }
         else {
@@ -295,8 +300,6 @@ private:
         synthesis_available_ = synthesis_frame_start_ + kHopSize + 1;
         synthesis_frame_start_ += kHopSize;
 
-        previous_re_ = current_re_;
-        previous_im_ = current_im_;
         previous_analysis_phase_ = current_analysis_phase_;
         previous_synthesis_phase_ = current_synthesis_phase_;
         previous_magnitude_ = current_magnitude_;
@@ -402,62 +405,88 @@ private:
         }
     }
 
-    bool detectFluxTransient() {
-        float positive_difference = 0.0f;
-        for (std::size_t bin = 0; bin < kNumBins; ++bin) {
-            positive_difference += std::max(0.0f, current_magnitude_[bin] - previous_magnitude_[bin]);
+    void processDetectorSpectrum() {
+        detector_input_.fill(0.0f);
+        constexpr std::size_t kHalfWindow = kDetectorWindowSize / 2;
+        for (std::size_t i = 0; i < kHalfWindow; ++i) {
+            detector_input_[i] = input_ring_[(input_write_ + kHalfWindow + i) % kWindowSize]
+                               * detector_window_[kHalfWindow + i];
         }
-        const float flux = positive_difference / static_cast<float>(kNumBins);
-
-        float baseline = 0.0f;
-        if (flux_history_count_ > 0) {
-            flux_scratch_ = flux_history_;
-            const auto middle = flux_scratch_.begin() + static_cast<std::ptrdiff_t>(flux_history_count_ / 2);
-            std::nth_element(flux_scratch_.begin(), middle,
-                             flux_scratch_.begin() + static_cast<std::ptrdiff_t>(flux_history_count_));
-            baseline = *middle;
+        constexpr std::size_t kPad = kDetectorFrameSize - kHalfWindow;
+        for (std::size_t i = 0; i < kHalfWindow; ++i) {
+            detector_input_[kPad + i] = input_ring_[(input_write_ + i) % kWindowSize] * detector_window_[i];
         }
-        const bool transient = flux_cooldown_ == 0 && flux > std::max(4.0f * baseline, 0.02f);
-        flux_cooldown_ = transient ? 6 : (flux_cooldown_ > 0 ? flux_cooldown_ - 1 : 0);
-        if (!transient) {
-            flux_history_[flux_history_write_] = flux;
-            flux_history_write_ = (flux_history_write_ + 1) % kFluxHistorySize;
-            flux_history_count_ = std::min(flux_history_count_ + 1, kFluxHistorySize);
+        detector_fft_.FFT(detector_input_.data(), detector_output_.data());
+        for (std::size_t bin = 0; bin < kDetectorNumBins; ++bin) {
+            detector_magnitude_[bin] = std::hypot(detector_output_[2 * bin], detector_output_[2 * bin + 1]);
         }
-        return transient;
     }
 
-    bool detectSuperFluxTransient() {
-        if (superflux_band_count_ == 0) {
+    /**
+     * @brief 用 Hann 窗独立分析谱的对数频带正向通量是否超过中值基准。
+     */
+    bool detectDsParkTransient(std::size_t analysis_hop) {
+        if (detector_band_count_ == 0) {
             return false;
         }
 
         float flux = 0.0f;
-        constexpr float kReferenceFrameSize = 4096.0f;
-        const float scale = kReferenceFrameSize / static_cast<float>(kFrameSize);
-        for (std::size_t band = 0; band < superflux_band_count_; ++band) {
+        constexpr float kReferenceFrameSize = 2048.0f;
+        const float scale = kReferenceFrameSize / static_cast<float>(kDetectorFrameSize);
+        for (std::size_t band = 0; band < detector_band_count_; ++band) {
             float magnitude = 0.0f;
-            for (std::size_t i = 0; i < superflux_band_sizes_[band]; ++i) {
-                const std::size_t bin = superflux_band_starts_[band] + i;
-                magnitude += current_magnitude_[bin] * superflux_weights_[superflux_band_offsets_[band] + i];
+            for (std::size_t i = 0; i < detector_band_sizes_[band]; ++i) {
+                const std::size_t bin = detector_band_starts_[band] + i;
+                magnitude += detector_magnitude_[bin] * detector_weights_[detector_band_offsets_[band] + i];
             }
-            superflux_current_[band] = std::log10(magnitude * scale + 1.0f);
-            if (!first_frame_) {
-                flux += std::max(0.0f, superflux_current_[band] - superflux_previous_max_[band]);
+            dsflux_current_[band] = std::log10(magnitude * scale + 1.0f);
+            flux += std::max(0.0f, dsflux_current_[band] - dsflux_previous_max_[band]);
+        }
+        flux /= static_cast<float>(detector_band_count_);
+
+        bool rise = false;
+        if (dsflux_history_count_ >= kDsFluxHistorySize) {
+            dsflux_scratch_ = dsflux_history_;
+            for (std::size_t i = 1; i < kDsFluxHistorySize; ++i) {
+                const float value = dsflux_scratch_[i];
+                std::size_t j = i;
+                while (j > 0 && dsflux_scratch_[j - 1] > value) {
+                    dsflux_scratch_[j] = dsflux_scratch_[j - 1];
+                    --j;
+                }
+                dsflux_scratch_[j] = value;
             }
+            // 阈值随分析 hop 缩放，保证不同变调量下的时间灵敏度一致。
+            const float scaled_delta =
+                kDsFluxDelta * static_cast<float>(analysis_hop) / static_cast<float>(kHopSize);
+            rise = (flux - dsflux_scratch_[kDsFluxHistorySize / 2]) >= scaled_delta;
+        }
+        dsflux_history_[dsflux_history_write_] = flux;
+        dsflux_history_write_ = (dsflux_history_write_ + 1) % kDsFluxHistorySize;
+        dsflux_history_count_ = std::min(dsflux_history_count_ + 1, kDsFluxHistorySize);
+
+        for (std::size_t band = 0; band < detector_band_count_; ++band) {
+            float maximum = dsflux_current_[band];
+            if (band > 0) {
+                maximum = std::max(maximum, dsflux_current_[band - 1]);
+            }
+            if (band + 1 < detector_band_count_) {
+                maximum = std::max(maximum, dsflux_current_[band + 1]);
+            }
+            dsflux_previous_max_[band] = maximum;
         }
 
-        for (std::size_t band = 0; band < superflux_band_count_; ++band) {
-            float maximum = superflux_current_[band];
-            if (band > 0) {
-                maximum = std::max(maximum, superflux_current_[band - 1]);
-            }
-            if (band + 1 < superflux_band_count_) {
-                maximum = std::max(maximum, superflux_current_[band + 1]);
-            }
-            superflux_previous_max_[band] = maximum;
-        }
-        return !first_frame_ && flux / static_cast<float>(superflux_band_count_) > 0.03f;
+        const bool transient = dsflux_cooldown_ == 0 && rise;
+        dsflux_cooldown_ = transient ? cooldownFramesForHop(kDsFluxCooldownMs, analysis_hop)
+                                     : (dsflux_cooldown_ > 0 ? dsflux_cooldown_ - 1 : 0);
+        return transient;
+    }
+
+    std::size_t cooldownFramesForHop(float milliseconds, std::size_t analysis_hop) const noexcept {
+        const float samples = milliseconds * sample_rate_ / 1000.0f;
+        const std::size_t hop = analysis_hop > 0 ? analysis_hop : 1;
+        const std::size_t frames = static_cast<std::size_t>(samples / static_cast<float>(hop) + 0.5f);
+        return frames < 1 ? 1 : frames;
     }
 
     bool detectVocoderTransient() {
@@ -532,13 +561,13 @@ private:
         return output;
     }
 
-    void buildSuperFluxFilterBank() {
+    void buildDetectorFilterBank() {
         constexpr float kMinimumFrequency = 27.5f;
         constexpr float kMaximumFrequency = 16000.0f;
         constexpr int kBandsPerOctave = 24;
-        std::array<std::size_t, kMaxSuperFluxBands + 2> centers{};
+        std::array<std::size_t, kMaxDetectorBands + 2> centers{};
         std::size_t center_count = 0;
-        const float bin_hz = sample_rate_ / static_cast<float>(kFrameSize);
+        const float bin_hz = sample_rate_ / static_cast<float>(kDetectorFrameSize);
         const float maximum_frequency = std::min(kMaximumFrequency, sample_rate_ * 0.5f * 0.999f);
 
         for (int index = 0; center_count < centers.size(); ++index) {
@@ -548,32 +577,32 @@ private:
                 break;
             }
             const std::size_t bin =
-                std::min<std::size_t>(static_cast<std::size_t>(std::lround(frequency / bin_hz)), kNumBins - 1);
+                std::min<std::size_t>(static_cast<std::size_t>(std::lround(frequency / bin_hz)), kDetectorNumBins - 1);
             if (center_count == 0 || bin > centers[center_count - 1]) {
                 centers[center_count++] = bin;
             }
         }
 
-        superflux_band_count_ = 0;
-        superflux_weight_count_ = 0;
+        detector_band_count_ = 0;
+        detector_weight_count_ = 0;
         for (std::size_t center = 1; center + 1 < center_count; ++center) {
             const std::size_t low = centers[center - 1];
             const std::size_t middle = centers[center];
             const std::size_t high = centers[center + 1];
             const std::size_t size = high - low + 1;
-            if (low >= middle || middle >= high || superflux_band_count_ == kMaxSuperFluxBands
-                || superflux_weight_count_ + size > kMaxSuperFluxWeights) {
+            if (low >= middle || middle >= high || detector_band_count_ == kMaxDetectorBands
+                || detector_weight_count_ + size > kMaxDetectorWeights) {
                 continue;
             }
 
-            const std::size_t band = superflux_band_count_++;
-            superflux_band_starts_[band] = low;
-            superflux_band_sizes_[band] = size;
-            superflux_band_offsets_[band] = superflux_weight_count_;
+            const std::size_t band = detector_band_count_++;
+            detector_band_starts_[band] = low;
+            detector_band_sizes_[band] = size;
+            detector_band_offsets_[band] = detector_weight_count_;
             for (std::size_t bin = low; bin <= high; ++bin) {
                 const float weight = bin <= middle ? static_cast<float>(bin - low) / static_cast<float>(middle - low)
                                                    : static_cast<float>(high - bin) / static_cast<float>(high - middle);
-                superflux_weights_[superflux_weight_count_++] = weight;
+                detector_weights_[detector_weight_count_++] = weight;
             }
         }
     }
@@ -622,14 +651,17 @@ private:
     bool first_frame_ = true;
 
     qwqdsp_spectral::RealFFT fft_;
+    qwqdsp_spectral::RealFFT detector_fft_;
     std::array<float, kWindowSize> window_{};
     std::array<float, kWindowSize> input_ring_{};
     std::array<float, kSynthesisRingSize> synthesis_ring_{};
     std::array<float, kFrameSize> fft_input_{};
     std::array<float, kFrameSize + 2> fft_output_{};
+    std::array<float, kDetectorWindowSize> detector_window_{};
+    std::array<float, kDetectorFrameSize> detector_input_{};
+    std::array<float, kDetectorFrameSize + 2> detector_output_{};
+    std::array<float, kDetectorNumBins> detector_magnitude_{};
 
-    std::array<float, kNumBins> previous_re_{};
-    std::array<float, kNumBins> previous_im_{};
     std::array<float, kNumBins> previous_analysis_phase_{};
     std::array<float, kNumBins> previous_synthesis_phase_{};
     std::array<float, kNumBins> previous_magnitude_{};
@@ -645,24 +677,24 @@ private:
     std::array<std::size_t, kNumBins> peak_bins_{};
     std::size_t peak_count_ = 0;
 
-    std::array<float, kFluxHistorySize> flux_history_{};
-    std::array<float, kFluxHistorySize> flux_scratch_{};
-    std::size_t flux_history_count_ = 0;
-    std::size_t flux_history_write_ = 0;
-    std::size_t flux_cooldown_ = 0;
     float transient_mean_ = 0.0f;
     float transient_variance_ = 0.0f;
     std::size_t transient_frames_ = 0;
     std::size_t transient_cooldown_ = 0;
     bool transient_has_mean_ = false;
-    std::array<std::size_t, kMaxSuperFluxBands> superflux_band_starts_{};
-    std::array<std::size_t, kMaxSuperFluxBands> superflux_band_sizes_{};
-    std::array<std::size_t, kMaxSuperFluxBands> superflux_band_offsets_{};
-    std::array<float, kMaxSuperFluxWeights> superflux_weights_{};
-    std::array<float, kMaxSuperFluxBands> superflux_current_{};
-    std::array<float, kMaxSuperFluxBands> superflux_previous_max_{};
-    std::size_t superflux_band_count_ = 0;
-    std::size_t superflux_weight_count_ = 0;
+    std::array<std::size_t, kMaxDetectorBands> detector_band_starts_{};
+    std::array<std::size_t, kMaxDetectorBands> detector_band_sizes_{};
+    std::array<std::size_t, kMaxDetectorBands> detector_band_offsets_{};
+    std::array<float, kMaxDetectorWeights> detector_weights_{};
+    std::array<float, kMaxDetectorBands> dsflux_current_{};
+    std::array<float, kMaxDetectorBands> dsflux_previous_max_{};
+    std::array<float, kDsFluxHistorySize> dsflux_history_{};
+    std::array<float, kDsFluxHistorySize> dsflux_scratch_{};
+    std::size_t detector_band_count_ = 0;
+    std::size_t detector_weight_count_ = 0;
+    std::size_t dsflux_history_count_ = 0;
+    std::size_t dsflux_history_write_ = 0;
+    std::size_t dsflux_cooldown_ = 0;
 
     std::size_t input_write_ = 0;
     std::size_t collected_samples_ = 0;

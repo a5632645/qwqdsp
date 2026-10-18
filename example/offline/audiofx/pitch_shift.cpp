@@ -4,6 +4,8 @@
 #include <iostream>
 #include <vector>
 #include <work_dir.hpp>
+#include <qwqdsp/fx/pitch_shifter.hpp>
+#include <qwqdsp/fx/pitch_shifter2.hpp>
 
 #include "pitch_shift/peak_map_pitch_shifter.hpp"
 #include "pitch_shift/phase_gradient_transient.hpp"
@@ -334,6 +336,51 @@ static void ProcessPMS(const char* name, float kp) {
     std::cout << std::format("saved {}\n\n", name) << std::flush;
 }
 
+// ------------------------------------------------------------
+// PitchShifter（库版粒度拼接音高移位）
+// ------------------------------------------------------------
+/**
+ * @brief 粒度拼接音高移位，输入 sine.wav，输出 pitch_shift_grain.wav。
+ */
+static void ProcessGrain() {
+    auto wav_path = qwqdsp_support::InputFile("sine.wav");
+    AudioFile<float> file{wav_path};
+    auto& x_vec = file.samples.front();
+
+    qwqdsp_fx::PitchShifter dsp;
+    dsp.SetPitchShift(12.0f);
+    for (float& x : x_vec) {
+        x = dsp.Tick(x);
+    }
+
+    qwqdsp_support::AudioOps::Normalize(x_vec);
+
+    file.setNumChannels(1);
+    file.save(qwqdsp_support::OutputFile("pitch_shift_grain.wav"));
+}
+
+// ------------------------------------------------------------
+// PhaseVocoder（库版相位声码器）
+// ------------------------------------------------------------
+/**
+ * @brief 库版相位声码器音高移位，输入 sine.wav，输出 pitch_shift_pv.wav。
+ */
+static void ProcessPVFx() {
+    auto wav_path = qwqdsp_support::InputFile("sine.wav");
+    AudioFile<float> file{wav_path};
+    auto& x_vec = file.samples.front();
+    auto x2_vec = x_vec;
+
+    qwqdsp_fx::PhaseVocoder dsp;
+    dsp.pitch_shift = 12.0f;
+    dsp.Process(x_vec.data(), x2_vec.data(), x_vec.size());
+
+    qwqdsp_support::AudioOps::Normalize(x_vec);
+
+    file.setNumChannels(1);
+    file.save(qwqdsp_support::OutputFile("pitch_shift_pv.wav"));
+}
+
 int main() {
     // RunWsolaTest();
 
@@ -370,6 +417,9 @@ int main() {
     ProcessPMS("pms_ps_1.5x.wav", 1.5f);
     ProcessPMS("pms_ps_2.0x.wav", 2.0f);
     ProcessPMS("pms_ps_0.5x.wav", 0.5f);
+
+    ProcessGrain();
+    ProcessPVFx();
 
     std::cout << std::format("all done\n") << std::flush;
 }
