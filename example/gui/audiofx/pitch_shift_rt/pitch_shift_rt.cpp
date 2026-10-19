@@ -19,8 +19,8 @@ static constexpr float kSampleRate = 48000.0f;
 static constexpr int kWindowWidth = 900;
 static constexpr int kWindowHeight = 300;
 static constexpr const char* kWindowTitle = "Pitch Shifter - Real-time";
-static constexpr std::array<const char*, 5> kAlgorithmNames{"PGHI", "PGHI+DSPark", "PhaseLock", "Transient",
-                                                            "PeakMap"};
+static constexpr std::array<const char*, 6> kAlgorithmNames{"PGHI", "PGHI+DSPark", "PGHI+DSPark-opt", "PhaseLock",
+                                                            "Transient", "PeakMap"};
 
 class PitchShiftDemo {
 public:
@@ -52,13 +52,13 @@ public:
     void processAudio(const float* input, float* output, std::size_t frame_count) {
         const int algorithm = algorithm_.load(std::memory_order_relaxed);
         const float semitones = pitch_shift_.load(std::memory_order_relaxed);
-        if (algorithm == 4) {
+        if (algorithm == 5) {
             // PeakMap：峰域映射相位声码器
             peak_map_.setPitchShift(semitones);
             peak_map_.process(input, output, frame_count);
         }
         else {
-            // 频谱类算法（0-3）：先时间拉伸再重采样
+            // 频谱类算法（0-4）：先时间拉伸再重采样
             spectral_.setAlgorithm(static_cast<Algorithm>(algorithm));
             spectral_.setPitchShift(semitones);
             spectral_.process(input, output, frame_count);

@@ -55,6 +55,7 @@ constexpr std::size_t nextPowerOfTwo(std::size_t value) noexcept {
 enum class Algorithm {
     Pghi,
     PghiDSPark,
+    PghiDSParkOpt,
     PhaseLock,
     TransientVocoder,
 };
@@ -73,7 +74,7 @@ static inline float wrapToPi(float phase) noexcept {
  *
  * 处理器采用加窗 STFT 和固定合成 hop 完成时间拉伸，
  * 随后对连续 OLA 信号流式重采样完成移调。
- * 四种模式只切换相位传播和瞬态处理策略。初始化完成后音频处理路径
+ * 五种模式只切换相位传播和瞬态处理策略。初始化完成后音频处理路径
  * 不进行动态内存分配。
  */
 template <WindowType kWindowType = WindowType::Hann, std::size_t kHopSize = 512>
@@ -198,6 +199,12 @@ private:
     static constexpr std::size_t kDsFluxHistorySize = 12;
     static constexpr float kDsFluxDelta = 0.02f;
     static constexpr float kDsFluxCooldownMs = 64.0f;
+    // 优化版：峰值相对门限抑制尾部误触发，峰值播种避免全谱相位跳变。
+    static constexpr float kFluxPeakRatio = 0.20f;
+    static constexpr float kFluxPeakDecay = 0.98f;
+    static constexpr float kPeakRiseFloorRatio = 0.05f;
+    static constexpr float kPeakMagnitudeFloorRatio = 0.01f;
+    static constexpr float kMagnitudeBaselineAlpha = 0.1f;
     // 八倍重叠下周期三项 Blackman-Harris 窗平方和为常数。
     static constexpr float kOlaGain = detail::WindowTraits<kWindowType>::kOlaGain;
 
@@ -223,13 +230,16 @@ private:
         dsflux_history_write_ = 0;
         dsflux_history_count_ = 0;
         dsflux_cooldown_ = 0;
+        flux_peak_ = 0.0f;
+        magnitude_baseline_.fill(0.0f);
         first_frame_ = true;
     }
 
     void processFrame(std::size_t analysis_hop) {
         current_ratio_ += 0.25f * (target_ratio_ - current_ratio_);
 
-        const bool uses_pghi = algorithm_ == Algorithm::Pghi || algorithm_ == Algorithm::PghiDSPark;
+        const bool uses_pghi = algorithm_ == Algorithm::Pghi || algorithm_ == Algorithm::PghiDSPark
+                            || algorithm_ == Algorithm::PghiDSParkOpt;
         fft_input_.fill(0.0f);
         if (uses_pghi) {
             constexpr std::size_t kHalfWindow = kWindowSize / 2;
@@ -255,31 +265,46 @@ private:
             current_analysis_phase_[bin] = std::atan2(current_im_[bin], current_re_[bin]);
         }
 
-        if (algorithm_ == Algorithm::PghiDSPark) {
+        if (algorithm_ == Algorithm::PghiDSParkOpt && first_frame_) {
+            magnitude_baseline_ = current_magnitude_;
+        }
+
+        const bool uses_dspark = algorithm_ == Algorithm::PghiDSPark || algorithm_ == Algorithm::PghiDSParkOpt;
+        if (uses_dspark) {
             processDetectorSpectrum();
         }
 
         bool reset_phase = first_frame_;
         if (!first_frame_) {
             if (algorithm_ == Algorithm::PghiDSPark) {
-                reset_phase = detectDsParkTransient(analysis_hop);
+                reset_phase = detectDsParkTransient(analysis_hop, false);
+            }
+            else if (algorithm_ == Algorithm::PghiDSParkOpt) {
+                reset_phase = detectDsParkTransient(analysis_hop, true);
             }
             else if (algorithm_ == Algorithm::TransientVocoder) {
                 reset_phase = detectVocoderTransient();
             }
         }
 
-        if (reset_phase) {
+        if (first_frame_) {
             current_synthesis_phase_ = current_analysis_phase_;
         }
-        else if (algorithm_ == Algorithm::Pghi || algorithm_ == Algorithm::PghiDSPark) {
+        else if (reset_phase) {
+            if (algorithm_ == Algorithm::PghiDSParkOpt) {
+                // 只把瞬态谱峰的相位设为分析相位，其余 bin 仍由 PGHI 传播。
+                propagatePghi(analysis_hop, true);
+            }
+            else {
+                current_synthesis_phase_ = current_analysis_phase_;
+            }
+        }
+        else if (uses_pghi) {
             propagatePghi(analysis_hop);
         }
         else {
             propagateVocoder(analysis_hop);
-            if (!reset_phase) {
-                lockPhase();
-            }
+            lockPhase();
         }
 
         synthesizeSpectrum();
@@ -299,6 +324,13 @@ private:
         // 新合成帧在 hop 边界处的窗值为零，因此该边界样本已完整可读。
         synthesis_available_ = synthesis_frame_start_ + kHopSize + 1;
         synthesis_frame_start_ += kHopSize;
+
+        if (algorithm_ == Algorithm::PghiDSParkOpt && !reset_phase && !first_frame_) {
+            for (std::size_t bin = 0; bin < kNumBins; ++bin) {
+                magnitude_baseline_[bin] = (1.0f - kMagnitudeBaselineAlpha) * magnitude_baseline_[bin]
+                                         + kMagnitudeBaselineAlpha * current_magnitude_[bin];
+            }
+        }
 
         previous_analysis_phase_ = current_analysis_phase_;
         previous_synthesis_phase_ = current_synthesis_phase_;
@@ -321,9 +353,37 @@ private:
         }
     }
 
-    void propagatePghi(std::size_t analysis_hop) {
+    void propagatePghi(std::size_t analysis_hop, bool seed_transient_peaks = false) {
         processed_bins_.fill(0);
         heap_size_ = 0;
+        std::size_t processed_count = 0;
+        if (seed_transient_peaks) {
+            float max_rise = 0.0f;
+            float max_magnitude = 0.0f;
+            for (std::size_t bin = 0; bin < kNumBins; ++bin) {
+                max_rise = std::max(max_rise, current_magnitude_[bin] - magnitude_baseline_[bin]);
+                max_magnitude = std::max(max_magnitude, current_magnitude_[bin]);
+            }
+            if (max_rise > 0.0f) {
+                const float rise_floor = max_rise * kPeakRiseFloorRatio;
+                const float magnitude_floor = max_magnitude * kPeakMagnitudeFloorRatio;
+                for (std::size_t bin = 1; bin + 1 < kNumBins; ++bin) {
+                    const float rise = current_magnitude_[bin] - magnitude_baseline_[bin];
+                    if (rise < rise_floor || current_magnitude_[bin] < magnitude_floor) {
+                        continue;
+                    }
+                    if (current_magnitude_[bin] < current_magnitude_[bin - 1]
+                        || current_magnitude_[bin] <= current_magnitude_[bin + 1]) {
+                        continue;
+                    }
+                    current_synthesis_phase_[bin] = current_analysis_phase_[bin];
+                    processed_bins_[bin] = 1;
+                    ++processed_count;
+                    heapPush({current_magnitude_[bin], bin, false});
+                }
+            }
+        }
+
         for (std::size_t bin = 0; bin < kNumBins; ++bin) {
             heapPush({previous_magnitude_[bin], bin, true});
         }
@@ -333,7 +393,6 @@ private:
         constexpr float kSynthesisScale =
             2.0f * std::numbers::pi_v<float> * static_cast<float>(kHopSize) / static_cast<float>(kFrameSize);
         const float stretch_ratio = static_cast<float>(kHopSize) / static_cast<float>(analysis_hop);
-        std::size_t processed_count = 0;
         while (processed_count < kNumBins && heap_size_ > 0) {
             const HeapItem item = heapPop();
             const std::size_t bin = item.bin;
@@ -424,8 +483,9 @@ private:
 
     /**
      * @brief 用 Hann 窗独立分析谱的对数频带正向通量是否超过中值基准。
+     * @param[in] optimized 是否启用峰值相对门限抑制尾部误触发
      */
-    bool detectDsParkTransient(std::size_t analysis_hop) {
+    bool detectDsParkTransient(std::size_t analysis_hop, bool optimized) {
         if (detector_band_count_ == 0) {
             return false;
         }
@@ -443,6 +503,11 @@ private:
             flux += std::max(0.0f, dsflux_current_[band] - dsflux_previous_max_[band]);
         }
         flux /= static_cast<float>(detector_band_count_);
+        if (optimized) {
+            const float decay =
+                std::pow(kFluxPeakDecay, static_cast<float>(analysis_hop) / static_cast<float>(kHopSize));
+            flux_peak_ = std::max(flux, flux_peak_ * decay);
+        }
 
         bool rise = false;
         if (dsflux_history_count_ >= kDsFluxHistorySize) {
@@ -476,7 +541,10 @@ private:
             dsflux_previous_max_[band] = maximum;
         }
 
-        const bool transient = dsflux_cooldown_ == 0 && rise;
+        bool transient = dsflux_cooldown_ == 0 && rise;
+        if (optimized && transient && flux < kFluxPeakRatio * flux_peak_) {
+            transient = false;
+        }
         dsflux_cooldown_ = transient ? cooldownFramesForHop(kDsFluxCooldownMs, analysis_hop)
                                      : (dsflux_cooldown_ > 0 ? dsflux_cooldown_ - 1 : 0);
         return transient;
@@ -695,6 +763,8 @@ private:
     std::size_t dsflux_history_count_ = 0;
     std::size_t dsflux_history_write_ = 0;
     std::size_t dsflux_cooldown_ = 0;
+    float flux_peak_ = 0.0f;
+    std::array<float, kNumBins> magnitude_baseline_{};
 
     std::size_t input_write_ = 0;
     std::size_t collected_samples_ = 0;

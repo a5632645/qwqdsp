@@ -22,6 +22,7 @@ add_qwqdsp_lab(dsf synth/dsf.cpp)
 add_qwqdsp_lab(stupid_resynthsis synth/stupid_resynthsis.cpp)
 
 add_qwqdsp_lab(convolution audiofx/convolution.cpp)
+add_qwqdsp_lab(pitch_shift_transient pitch_shift_transient/transient_probe.cpp)
 
 # ----- 参数扫描 / 算法对照 -----
 add_qwqdsp_lab(lp2bp_noise filter/lp2bp/noise.cpp)
