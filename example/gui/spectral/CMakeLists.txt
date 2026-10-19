@@ -18,4 +18,5 @@ target_sources(qwqdsp-example-spectrum2 PUBLIC spectrum2/spectrum_driver.cpp)
 
 add_qwqdsp_gui_example(spectrum3 spectrum3.cpp)
 add_qwqdsp_gui_example(spectrum4 spectrum4.cpp)
+add_qwqdsp_gui_example(portnoff_spectrum portnoff_spectrum.cpp)
 add_qwqdsp_gui_example(reassignment reassignment.cpp)
