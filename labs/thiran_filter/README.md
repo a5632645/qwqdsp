@@ -2,12 +2,18 @@
 
 本目录是滤波器响应扫描的探索目录：
 
-- `README.md`（本文）：Thiran 全通 / 全极点两种形式，公式、性质与实测结论。
+- `README.md`（本文）：Thiran 全通 / 全极点 / 零极点 / 带通扩展，公式、性质与实测结论。
 - `thiran_cutoff_design.md`：数字 Thiran 低通「指定截止频率」的系数方程（文献没有，这里推导）。
 - `bessel_cheby2_scan.md`：数字贝塞尔与数字逆切比雪夫（scipy 设计）的群延迟扫描。
+- `zero_pole_lowpass.md`：零极点低通的直流最大平坦群延迟；线性相位零点 + Thiran 全极点，以及 Zhang 线性方程组。
+- `zero_pole_lowpass.py`：上述两种设计的自检、系数表与扫描图。
+- `allpole_bandpass.md`：全极点带通谐振器在中心频率的最大平坦群延迟（数值极点放置）。
+- `allpole_bandpass.py`：全极点谐振器设计器、自检与扫描图。
+- `zhang_bandpass.md`：Zhang 零极点带通的线性方程组、稳定性与取舍。
+- `zhang_bandpass.py`：Zhang 带通设计器、自检与扫描图。
 - `explore_scan.py` / `bessel_cheby2_scan.py` / `thiran_cutoff_scan.py`：上述三份笔记对应的脚本，图都写在 `output/`。
 - `thiran_cutoff_design.py`：指定截止频率的设计器（解 $\beta$ 的方程 + 闭式解 + 自检），`thiran_cutoff_scan.py` 用它出扫描图。
-- `allpass.cpp` / `allpole.cpp` / `thiran.hpp` / `thiran_check.py`：Thiran 研究里带断言的 C++ 探针与交叉验证脚本。
+- `allpass.cpp` / `allpole.cpp` / `zero_pole.cpp` / `thiran.hpp` / `thiran_check.py`：Thiran 研究里带断言的 C++ 探针与交叉验证脚本。
 
 Thiran 设计法解决的是「用递归滤波器近似分数延迟 D = n + δ 样本」的问题，闭式解只有这一个。
 它有两种用法：把多项式 A(z) 整体看作分母得到**全极点**低通，把 A(z) 的镜像当作分子得到**全通**。
@@ -43,6 +49,29 @@ Thiran 设计法解决的是「用递归滤波器近似分数延迟 D = n + δ �
 - 稳定 ⟺ δ > −0.5（δ = −0.5 处公式奇异）。Thiran 只证明了 δ > 0 的充分条件，实际稳定域更宽：n=6、δ=−0.4 时 |p|max 仍只有 0.855。
 - 幅度完全不受控：它是一个直流增益大于 1 的低通，增益随 δ 与 n 迅速增大（n=6、δ=5 时 |H(0)| = 80.75，|H(π)| = 0.058）。
 - 群延迟在带内变号（ω=π 处为负，如 n=6、δ=0.5 时 ≈ −0.97），所以它不能当作宽带分数延迟使用；这也解释了为什么分数延迟普遍用全通形式。
+
+## 零极点低通
+
+把 Thiran 全极点与 $z=-1$ 处的 $L$ 重线性相位零点级联：
+
+$$H(z)=\frac{(1+z^{-1})^L}{A(z)},\qquad
+a_k=(-1)^k\binom{M}{k}\prod_{i=0}^{M}\frac{2\delta+i}{2\delta+k+i},\qquad
+\delta=\tau_0-\frac{L}{2}.$$
+
+分子群延迟恒为 $L/2$，所以总群延迟为
+$\tau_g(\omega)=\tau_0+O(\omega^{2M})$：加入零点不降低全极点的最大平坦阶数。
+取 $b_k=\binom{L}{k}A(1)/2^L$ 可把直流增益归一。
+含极点且稳定通常取 $\delta>0$（即 $L<2\tau_0$）；$L=0$ 退化为全极点，$L=2\tau_0$ 退化为纯 FIR。
+
+若还要求通带幅度最大平坦，或零点不限制在 $z=-1$，则解 Zhang 线性方程组；两种构造的取舍见 `zero_pole_lowpass.md`。
+
+## 带通
+
+纯极点没有有限零点，所以不能做真正的带通（\(H(\pm1)\ne0\)）；它只能做谐振器。全极点谐振器可以在中心获得最大平坦群延迟，但没有闭式系数，需要解非线性极点方程。
+
+真正的带通必须用零极点：分子在 \(z=\pm1\) 处放置零点，中心处的幅度/相位平坦条件解 Zhang 带通线性方程组。带通设计的局部平坦不代表整个通带只有一个峰，解出后要检查极点和通带形状。
+
+细节、方程和例子见 `allpole_bandpass.md` 与 `zhang_bandpass.md`。
 
 ## 工作点：δ 的符号决定高频偏差的形态
 
@@ -99,10 +128,14 @@ python labs/thiran_filter/explore_scan.py     # 图输出到 labs/thiran_filter/
 ## 运行
 
 ```sh
-cmake --build build --config Debug --target qwqdsp-lab-thiran_allpass qwqdsp-lab-thiran_allpole
+cmake --build build --config Debug --target qwqdsp-lab-thiran_allpass qwqdsp-lab-thiran_allpole qwqdsp-lab-thiran_zero_pole
 build/qwqdsp/labs/Debug/qwqdsp-lab-thiran_allpass.exe > temp/pass.txt
 build/qwqdsp/labs/Debug/qwqdsp-lab-thiran_allpole.exe > temp/pole.txt
-python labs/thiran_filter/thiran_check.py temp/pass.txt temp/pole.txt
+build/qwqdsp/labs/Debug/qwqdsp-lab-thiran_zero_pole.exe
+python qwqdsp/labs/thiran_filter/thiran_check.py temp/pass.txt temp/pole.txt
+python qwqdsp/labs/thiran_filter/zero_pole_lowpass.py
+python qwqdsp/labs/thiran_filter/allpole_bandpass.py
+python qwqdsp/labs/thiran_filter/zhang_bandpass.py
 ```
 
 两个探针各自带自检（性质断言），全通过时退出码 0 并打印 `failures: 0`；

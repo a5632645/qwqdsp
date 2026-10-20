@@ -13,6 +13,7 @@ add_qwqdsp_lab(reverse_iir filter/reverse_iir.cpp)
 
 add_qwqdsp_lab(thiran_allpass thiran_filter/allpass.cpp)
 add_qwqdsp_lab(thiran_allpole thiran_filter/allpole.cpp)
+add_qwqdsp_lab(thiran_zero_pole thiran_filter/zero_pole.cpp)
 
 add_qwqdsp_lab(fft_interpolation spectral/fft_interpolation.cpp)
 add_qwqdsp_lab(ifft_random_phase spectral/ifft_random_phase.cpp)

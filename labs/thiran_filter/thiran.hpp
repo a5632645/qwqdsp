@@ -3,8 +3,10 @@
 #include <cmath>
 #include <complex>
 #include <cstddef>
+#include <numeric>
 #include <numbers>
 #include <span>
+#include <utility>
 #include <vector>
 
 /// @brief Thiran 分数延迟滤波器两种形式的系数公式与频域评估
@@ -70,6 +72,29 @@ inline std::vector<double> AllpoleCoef(std::size_t n, double delta) {
 /// @return 分子系数 b[k] = a[n-k]
 inline std::vector<double> AllpassNumerator(std::span<const double> a) {
     return std::vector<double>(a.rbegin(), a.rend());
+}
+
+/// @brief 计算 z=-1 处零点与 Thiran 全极点组合的低通系数
+/// @param[in] zeros z=-1 处的零点数
+/// @param[in] poles 极点数
+/// @param[in] dc_delay 直流群延迟，单位为样本
+/// @return (分子, 分母)，分子已归一化到 H(1)=1
+/// @note 分母参数为 dc_delay - zeros/2；稳定域大于 -0.5，常规含极点低通取大于 0
+inline std::pair<std::vector<double>, std::vector<double>>
+ZeroPoleLowpassCoef(std::size_t zeros, std::size_t poles, double dc_delay) {
+    auto a = AllpoleCoef(poles, dc_delay - 0.5 * static_cast<double>(zeros));
+    std::vector<double> b(zeros + 1, 0.0);
+    double sum_b = 0.0;
+    for (std::size_t k = 0; k <= zeros; ++k) {
+        b[k] = Binomial(zeros, k);
+        sum_b += b[k];
+    }
+    double const sum_a = std::accumulate(a.begin(), a.end(), 0.0);
+    double const scale = sum_a / sum_b;
+    for (double& v : b) {
+        v *= scale;
+    }
+    return {std::move(b), std::move(a)};
 }
 
 /// @brief 计算 H(e^{jw}) = Σ b_k e^{-jkw} / Σ a_k e^{-jkw}
