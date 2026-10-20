@@ -351,7 +351,6 @@ static void DrawFFTEnvelope(int octaveCnt) {
         float sx = kCanvasX + normX * kCanvasW;
         float dbVal = fft_envelope_dB_[j];
         float normY = (dbVal - kDbFloor) / (-kDbFloor);
-        normY = std::clamp(normY, 0.0f, 1.0f);
         float sy = kCanvasY + kCanvasH - normY * kCanvasH;
         pts.push_back({sx, sy});
     }
@@ -366,7 +365,7 @@ static void DrawOctaveCurve(int /*octaveCnt*/) {
         for (const auto& tap : lanczos_table_[px]) {
             dbSum += tap.weight * (20.0f * log10f(octave_gain_[tap.idx] + 1e-12f));
         }
-        float dbVal = std::max(dbSum, kDbFloor);
+        float dbVal = dbSum;
         float norm = (dbVal - kDbFloor) / (-kDbFloor);
         float y = kCanvasY + kCanvasH - norm * kCanvasH;
         curvePoints[px] = {static_cast<float>(kCanvasX + px), y};
@@ -378,9 +377,8 @@ static void DrawOctaveCurve2(int /*octaveCnt*/) {
     std::vector<Vector2> curvePoints(kCanvasW);
     for (int px = 0; px < kCanvasW; ++px) {
         const auto& tap = para_table_[px];
-        float dbVal = std::max(tap.w_l * octave_gain_dB_[tap.idx_l] + tap.w_m * octave_gain_dB_[tap.idx_m]
-                                   + tap.w_r * octave_gain_dB_[tap.idx_r],
-                               kDbFloor);
+        float dbVal = tap.w_l * octave_gain_dB_[tap.idx_l] + tap.w_m * octave_gain_dB_[tap.idx_m]
+                    + tap.w_r * octave_gain_dB_[tap.idx_r];
         float norm = (dbVal - kDbFloor) / (-kDbFloor);
         float y = kCanvasY + kCanvasH - norm * kCanvasH;
         curvePoints[px] = {static_cast<float>(kCanvasX + px), y};
@@ -393,7 +391,6 @@ static void DrawOctaveScatter(int octaveCnt) {
     const float logMax = octave_log_freq_[octaveCnt - 1];
     for (int i = 0; i < octaveCnt; ++i) {
         float norm = (octave_gain_dB_[i] - kDbFloor) / (-kDbFloor);
-        norm = std::clamp(norm, 0.0f, 1.0f);
         float sx = kCanvasX + (octave_log_freq_[i] - logMin) / (logMax - logMin) * kCanvasW;
         float sy = kCanvasY + kCanvasH - norm * kCanvasH;
         DrawCircleV({sx, sy}, kScatterSize, YELLOW);
@@ -402,7 +399,7 @@ static void DrawOctaveScatter(int octaveCnt) {
 
 int main(void) {
     SetConfigFlags(FLAG_MSAA_4X_HINT);
-    InitWindow(kWindowWidth, kWindowHeight, "Spectrogram - miniaudio + qwqdsp + raylib");
+    InitWindow(kWindowWidth, kWindowHeight, "1/12-Octave Spectrum");
     SetTargetFPS(60);
 
     // ── miniaudio 回环捕获 (loopback) ──
@@ -439,11 +436,13 @@ int main(void) {
 
         const int octaveCnt = static_cast<int>(octave_idx_.size());
         if (octaveCnt > 0) {
-            DrawFFTEnvelope(octaveCnt);
             DrawXAxisGrid(octaveCnt);
+            BeginScissorMode(kCanvasX, kCanvasY, kCanvasW, kCanvasH);
+            DrawFFTEnvelope(octaveCnt);
             // DrawOctaveCurve(octaveCnt);
             DrawOctaveCurve2(octaveCnt);
             // DrawOctaveScatter(octaveCnt);
+            EndScissorMode();
         }
 
         DrawFPS(kWindowWidth - 80, 10);

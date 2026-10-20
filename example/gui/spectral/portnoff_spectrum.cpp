@@ -61,6 +61,11 @@ static constexpr float kMinGain = 1.0e-8f;
 static constexpr float kAttackMs = 1.0f;
 static constexpr float kReleaseMs = 100.0f;
 
+// 低频显示平滑: 半宽(以 bin 计)在 kSmoothFullHz 以下全开, 到 kSmoothZeroHz 关闭
+static constexpr float kSmoothHalfBins = 2.0f;
+static constexpr float kSmoothFullHz = 500.0f;
+static constexpr float kSmoothZeroHz = 2500.0f;
+
 static const Color kBgColor = {16, 18, 22, 255};
 static const Color kCanvasColor = {22, 26, 32, 255};
 static const Color kGridColor = {48, 54, 64, 255};
@@ -103,6 +108,11 @@ static int g_hop_count = 0;
 
 static std::array<int, kCanvasW> g_bin_lo;
 static std::array<int, kCanvasW> g_bin_hi;
+static std::array<float, kCanvasW> g_bin_pos;
+static std::array<float, kCanvasW> g_mix;
+static std::array<float, kSpecBins> g_slope;
+static std::array<float, kSpecBins> g_render_db;
+static std::array<float, kSpecBins + 1> g_db_prefix;
 static std::array<float, kCanvasW> g_curve_min_y;
 static std::array<float, kCanvasW> g_curve_max_y;
 
@@ -159,6 +169,12 @@ static void InitDisplay() {
         }
         g_bin_lo[px] = lo;
         g_bin_hi[px] = hi;
+        float const f_mid = std::exp(log_min + log_span * (static_cast<float>(px) + 0.5f)
+                                     / static_cast<float>(kCanvasW));
+        g_bin_pos[px] = f_mid / kBinHz;
+        // 用连续的小数 bin 跨度做混合权重, 避免整数 bin 计数造成的跳变
+        float const span_bins = (f1 - f0) / kBinHz;
+        g_mix[px] = std::clamp(span_bins - 1.0f, 0.0f, 1.0f);
     }
     g_curve_min_y.fill(DbToY(kDbFloor));
     g_curve_max_y.fill(DbToY(kDbFloor));
@@ -258,16 +274,59 @@ static void FeedTestSignal() {
 // ------------------------------------------------------------
 
 /// 每列覆盖的 bin 范围内取 min/max, 竖线段显示该列的动态范围。
+/// 低频 bin 在像素上很稀疏, 用单调三次 Hermite 在 bin 间插值后再与 min/max 混合。
 static void BuildCurve(std::span<float const> spec_db) {
+    g_db_prefix[0] = 0.0f;
+    for (int bin = 0; bin < kSpecBins; ++bin) {
+        g_db_prefix[bin + 1] = g_db_prefix[bin] + spec_db[bin];
+    }
+    g_render_db[0] = spec_db[0];
+    for (int bin = 1; bin < kSpecBins; ++bin) {
+        float const f = static_cast<float>(bin) * kBinHz;
+        float const fade = std::clamp((kSmoothZeroHz - f) / (kSmoothZeroHz - kSmoothFullHz), 0.0f, 1.0f);
+        if (fade <= 0.0f) {
+            g_render_db[bin] = spec_db[bin];
+            continue;
+        }
+        int const half = std::max(1, static_cast<int>(std::lround(kSmoothHalfBins * fade)));
+        int const lo = std::max(1, bin - half);
+        int const hi = std::min(kSpecBins - 1, bin + half);
+        g_render_db[bin] = (g_db_prefix[hi + 1] - g_db_prefix[lo]) / static_cast<float>(hi - lo + 1);
+    }
+
+    g_slope.fill(0.0f);
+    for (int bin = 1; bin + 1 < kSpecBins; ++bin) {
+        float const d0 = g_render_db[bin] - g_render_db[bin - 1];
+        float const d1 = g_render_db[bin + 1] - g_render_db[bin];
+        g_slope[bin] = (d0 * d1 > 0.0f) ? 2.0f * d0 * d1 / (d0 + d1) : 0.0f;
+    }
+
     for (int px = 0; px < kCanvasW; ++px) {
         int const lo = g_bin_lo[px];
         int const hi = g_bin_hi[px];
-        float min_db = spec_db[lo];
-        float max_db = spec_db[lo];
+        float min_db = g_render_db[lo];
+        float max_db = g_render_db[lo];
         for (int bin = lo + 1; bin <= hi; ++bin) {
-            min_db = std::min(min_db, spec_db[bin]);
-            max_db = std::max(max_db, spec_db[bin]);
+            min_db = std::min(min_db, g_render_db[bin]);
+            max_db = std::max(max_db, g_render_db[bin]);
         }
+
+        float const pos = g_bin_pos[px];
+        int const bin0 = std::clamp(static_cast<int>(pos), 1, kSpecBins - 2);
+        float const t = std::clamp(pos - static_cast<float>(bin0), 0.0f, 1.0f);
+        float const t2 = t * t;
+        float const t3 = t2 * t;
+        float const h00 = 2.0f * t3 - 3.0f * t2 + 1.0f;
+        float const h10 = t3 - 2.0f * t2 + t;
+        float const h01 = -2.0f * t3 + 3.0f * t2;
+        float const h11 = t3 - t2;
+        float const smooth_db = h00 * g_render_db[bin0] + h10 * g_slope[bin0]
+                              + h01 * g_render_db[bin0 + 1] + h11 * g_slope[bin0 + 1];
+
+        float const mix = g_mix[px];
+        min_db = smooth_db + mix * (min_db - smooth_db);
+        max_db = smooth_db + mix * (max_db - smooth_db);
+
         g_curve_min_y[px] = DbToY(min_db);
         g_curve_max_y[px] = DbToY(max_db);
     }
@@ -335,8 +394,8 @@ static void DrawSpectrum() {
         max_points[px] = {x, y_max};
     }
 
-    DrawLineStrip(max_points.data(), kCanvasW, kCurveColor);
     DrawLineStrip(min_points.data(), kCanvasW, kMinColor);
+    DrawLineStrip(max_points.data(), kCanvasW, kCurveColor);
 }
 
 int main(void) {

@@ -192,7 +192,7 @@ void ReferenceView::Draw() const {
             int i1 = std::min(i0 + 1, num_bins - 1);
             float frac = bin_idx - static_cast<float>(i0);
             float db_val = ch.smoothed_dB[i0] + frac * (ch.smoothed_dB[i1] - ch.smoothed_dB[i0]);
-            float normY = std::clamp((db_val - kDbFloor) / (-kDbFloor), 0.0f, 1.0f);
+            float normY = (db_val - kDbFloor) / (-kDbFloor);
             pts[px] = {static_cast<float>(kCanvasX + px),
                        kCanvasY + kCanvasH - normY * kCanvasH};
         }
@@ -396,7 +396,6 @@ static void DrawCurve() {
     for (int px = 0; px < kCanvasW; ++px) {
         float dbVal = curve[px];
         float normY = (dbVal - kDbFloor) / (-kDbFloor);
-        normY = std::clamp(normY, 0.0f, 1.0f);
         float y = kCanvasY + kCanvasH - normY * kCanvasH;
         pts[px] = {static_cast<float>(kCanvasX + px), y};
     }
@@ -410,8 +409,7 @@ static void DrawCurve() {
 
 int main(void) {
     SetConfigFlags(FLAG_MSAA_4X_HINT);
-    InitWindow(kWindowWidth, kWindowHeight,
-               "Multi-Resolution Spectrum - miniaudio + qwqdsp + raylib");
+    InitWindow(kWindowWidth, kWindowHeight, "Multi-Resolution Spectrum");
     SetTargetFPS(60);
 
     // ── miniaudio 回环捕获 (loopback) ──
@@ -441,9 +439,11 @@ int main(void) {
 
         DrawBackground();
         DrawYAxisGrid();
+        DrawXAxisGrid();
+        BeginScissorMode(kCanvasX, kCanvasY, kCanvasW, kCanvasH);
         // g_ref_view.Draw();
         DrawCurve();
-        DrawXAxisGrid();
+        EndScissorMode();
 
         DrawFPS(kWindowWidth - 80, 10);
         EndDrawing();
