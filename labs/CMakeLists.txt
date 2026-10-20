@@ -28,6 +28,7 @@ add_qwqdsp_lab(pitch_shift_transient pitch_shift_transient/transient_probe.cpp)
 add_qwqdsp_lab(lp2bp_noise filter/lp2bp/noise.cpp)
 add_qwqdsp_lab(piwarp5_comb audiofx/piwarp5_comb.cpp)
 add_qwqdsp_lab(pmpm-vs-pyin pitch/pmpm_vs_pyin.cpp)
+add_qwqdsp_lab(autotune autotune/autotune.cpp)
 
 # ----- raylib 实验沙盒 -----
 if(QWQDSP_USE_RAYLIB)
