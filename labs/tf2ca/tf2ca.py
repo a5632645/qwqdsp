@@ -1,65 +1,19 @@
 # -*- coding: utf-8 -*-
-"""
-tf2ca.py
-========
+"""数字 IIR 低通的两路全通分解与频响工具。
 
-把**奇数阶**数字 IIR 低通滤波器 ``H(z) = B(z)/A(z)`` 分解为两条全通链之和：
+奇数阶、实系数、``H(1) = 1`` 的低通可写成
 
-    H(z) = 1/2 * ( A0(z) + A1(z) )
+    H(z)   = 1/2 * (A0(z) + A1(z))
+    H_c(z) = 1/2 * (A0(z) - A1(z))
 
-同时给出功率互补的高通：
+其中 ``A_i = D_i^# / D_i``（``X^# = conj(反序(X))``）。通分得
 
-    H_c(z) = 1/2 * ( A0(z) - A1(z) )
+    A = D0*D1,   B = (N0*D1 + N1*D0)/2
 
-这正是 MATLAB ``tf2ca`` / ``ca2tf`` 所做的事，也是 EMQF（Elliptic Minimal
-Q-Factor）滤波器「一个滤波器加一个加法」实现的理论基础。
+并由互补分子 ``B_c`` 得 ``B_c^2 = B^2 - A*A^#`` 与精确的极点归属判据。
 
-数学背景
---------
-设 A0 = N0/D0、A1 = N1/D1 为全通（N_i 是 D_i 的系数反序，即 N_i = D_i^#），
-代入并通分：
-
-    H = (N0*D1 + N1*D0) / (2*D0*D1)   =>   A = D0*D1,  B = (N0*D1 + N1*D0)/2
-
-因此可分解的必要条件是：
-
-1. 阶数 n = deg A 为**奇数**（D0/D1 阶数一奇一偶，保证 B(-1)=0，即低通）；
-2. 分子 B 为**镜像对称多项式**（palindromic，``b[k] == b[n-k]``）；
-3. 归一化到 H(1)=1。
-   ``butter`` / ``cheby1`` / ``cheby2`` / ``ellip`` 的输出天然满足 2、3。
-
-令 B_c 为互补高通的分子，则
-
-    B + B_c = N0*D1 ,   B - B_c = N1*D0
-
-两者相乘即得
-
-    B_c^2 = B^2 - A*A^#          （A^# = A 的镜像多项式）
-
-B_c 满足**反镜像对称** ``c[k] == -c[n-k]``（奇数阶，故 B_c(1)=0）。
-
-极点分组
---------
-对 A 的极点 p（互异、单根）：
-
-    p 属于 D0  <=>  B_c(p) = +B(p)
-    p 属于 D1  <=>  B_c(p) = -B(p)
-
-等价地 ``D0 = A / gcd(A, B+B_c)``、``D1 = A / gcd(A, B-B_c)``。
-
-工程上对 butter/cheby1/cheby2/ellip 四族，规则可以简化为：
-
-    把 A 的所有极点按模 |p| 升序排列（1 个实极点 + (n-1)/2 个共轭对），
-    逐个（共轭对整体）交替分配到两条链。
-
-实极点所在的链阶数为奇数。**注意不是按幅角交替**（见 README 中 cheby2 的反例）。
-
-本模块提供两种实现：
-
-- :func:`split_by_radius` —— 上面的工程规则，数值稳健，适合四族经典设计，
-  与 MATLAB ``tf2ca`` 发布样例、EMQF ``apellip_du`` 的 beta 排序交替完全一致。
-- :func:`split_by_bc`    —— 精确的代数判据，对任意可分解滤波器成立；但窄带
-  高阶时 ``B^2 - A*A^#`` 会发生消位误差，见 README。
+极点分组有两种实现：按 ``|p|`` 升序交替（四族经典设计）与 ``B_c`` 符号判据
+（任意可分解设计，但窄带高阶时受 ``B^2 - A*A^#`` 消位影响）。
 """
 from __future__ import annotations
 
@@ -97,14 +51,6 @@ def sections(a: np.ndarray) -> list[dict]:
             }
         )
     return out
-
-
-def allpass_from_denoms(denoms: list[np.ndarray]) -> np.ndarray:
-    """把若干全通节点的分母多项式串接（卷积）成整条链的分母 D。"""
-    d = np.array([1.0])
-    for poly in denoms:
-        d = np.convolve(d, poly)
-    return d
 
 
 # ------------------------------------------------------------
@@ -220,9 +166,19 @@ def tf_response(b: np.ndarray, a: np.ndarray, w: np.ndarray) -> np.ndarray:
     return zfreq(b, w) / zfreq(a, w)
 
 
+def conj_rev(poly: np.ndarray) -> np.ndarray:
+    """多项式镜像 ``X^# = conj(反序(X))``；实系数时即系数反序。"""
+    return np.conj(np.asarray(poly)[::-1])
+
+
 def allpass_response(d: np.ndarray, w: np.ndarray) -> np.ndarray:
-    """全通链 ``A(z) = N(z)/D(z)`` 在 ``z = exp(jw)`` 上的复响应（N 为 D 的系数反序）。"""
-    return zfreq(np.asarray(d)[::-1], w) / zfreq(d, w)
+    """实系数全通链 ``A(z) = D^#/D`` 在 ``z = exp(jw)`` 上的复响应。"""
+    return zfreq(conj_rev(d), w) / zfreq(d, w)
+
+
+def complex_allpass_response(d: np.ndarray, w: np.ndarray) -> np.ndarray:
+    """复系数全通链 ``A(z) = D^#/D`` 在 ``z = exp(jw)`` 上的复响应。"""
+    return zfreq(conj_rev(d), w) / zfreq(d, w)
 
 
 def response(d0: np.ndarray, d1: np.ndarray, w: np.ndarray) -> tuple[np.ndarray, np.ndarray]:

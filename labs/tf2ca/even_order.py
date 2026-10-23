@@ -1,48 +1,17 @@
 # -*- coding: utf-8 -*-
-"""
-even_order.py
-=============
+"""偶数阶实系数低通的复系数两路全通分解。
 
-**偶数阶**实系数低通 ``H(z) = B(z)/A(z)`` 能不能写成「两条**复系数**全通链 + 复权重」之和？
+    H(z) = alpha*A1(z) + beta*A2(z),    D2 = conj(D1),    beta = conj(alpha)
 
-    H(z) = alpha * A1(z) + beta * A2(z)          alpha, beta ∈ C
-    A1   = conj(反序(D1)) / D1                   （复全通：|A1(e^jw)| ≡ 1）
-    D2   = conj(D1)（系数逐个取共轭）
+``A_i = D_i^#/D_i``。对极点互异的四族偶数阶设计，穷举共轭对分法并取 ``B`` 还原
+残差最小的解；实系数两路全通因 Nyquist 奇偶性做不到，脚本同时给出对照。
+分母含重极点时两链的存在性取决于 ``B``，见 ``even_order_repeated.py``。
 
-本脚本给出的结论是：
+用法::
 
-1. **可以**。四族（butter / cheby1 / cheby2 / ellip）偶数阶 2..8、多种截止频率，
-   ``B`` 的还原残差、逐极点 ``alpha`` 离散度、频响误差通常都在 1e-12 以下；
-   窄带高阶例外，原因见下（``--check`` 有完整表格）。
-2. ``D2 = conj(D1)`` 时 ``A2`` 是 ``A1`` 的**系数共轭**（不是逐点共轭）：在单位圆上
-   ``A2(e^jw) = conj(A1(e^-jw))``。于是 ``B = alpha*N1*D2 + beta*N2*D1`` 里两项互为系数共轭，
-   实数 ``B`` 强制
-
-       beta = conj(alpha)          =>   对实输入  y = 2 Re{ alpha * (A1 x) }
-
-   （脚本用**不假设共轭**的 4 参数最小二乘独立求解 alpha、beta，再报告
-   ``|beta - conj(alpha)|``；并用 ``2 Re{alpha*A1*x}`` 与直接型冲激响应对比，
-   确认「只算一条复链」这个说法成立。）
-3. 反过来说，**实系数**两路全通做不到偶数阶：``n = dA + dB`` 为偶数 ⇒ ``dA、dB`` 同奇偶，
-   于是 ``H(-1) = ±(gA + gB)/2 = ±1``（由 ``H(1) = 1`` 得 ``gA + gB = 2``），
-   而低通要求 ``|H(-1)| < 1``。放开复系数后复全通在 ``z = -1`` 处可以是模长 1 的任意复数，
-   这个约束才消失。脚本对同一批设计同时跑「实系数最佳残差」作对照。
-
-怎么判断「分对了」：``B(p) = alpha*N1(p)*D2(p)``（``p ∈ D1``）与
-``B(p) = conj(alpha)*N2(p)*D1(p)``（``p ∈ D2``）逐极点代入即可独立解出 ``alpha``，
-正确分组下这些 ``alpha`` 必须相等——这是 :func:`pole_alpha_spread`，只做点值代入、
-不展开多项式，条件数远好于系数空间最小二乘，是本目录判定分组的主要依据。
-窄带 / 高阶（如 ``cheby1`` 8 阶 ``cutoff=0.1``）时系数表示的消位会把残差抬到 1e-3 量级，
-但**同样的**病态在奇数阶「已知精确解」上同样出现（``--check`` 第二张表），属输入数据
-（双精度系数 -> 极点）的条件数限制，不是分组错了。
-
-推导与数据见同目录 ``even_order.md``；奇数阶（实系数、``1/2 (A0 + A1)``）见 ``odd_order.py``。
-
-用法
-----
     python even_order.py                            # 默认 ellip 6 阶, cutoff=0.3
     python even_order.py --kind butter --order 4 --cutoff 0.25
-    python even_order.py --exact                    # 额外用 60 位精度重算同一分组（看残差来自数据还是算术）
+    python even_order.py --exact                    # 60 位精度重算同一分组
     python even_order.py --check                    # 四族 × 偶数阶 2/4/6/8 × 多截止频率
 """
 from __future__ import annotations
@@ -56,7 +25,7 @@ matplotlib.use("Agg")  # 无界面后端
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tf2ca import design, split_by_radius, tf_response, zfreq
+from tf2ca import conj_rev, complex_allpass_response, design, split_by_radius, tf_response
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 
@@ -64,11 +33,6 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 # ------------------------------------------------------------
 # 复全通与极点分组
 # ------------------------------------------------------------
-
-
-def conj_rev(d: np.ndarray) -> np.ndarray:
-    """复全通的分子 ``D^# = conj(反序(D))``，使 ``D^#/D`` 在单位圆上模长恒为 1。"""
-    return np.conj(np.asarray(d)[::-1])
 
 
 def conjugate_splits(a: np.ndarray, tol: float = 1e-7):
@@ -96,11 +60,6 @@ def conjugate_splits(a: np.ndarray, tol: float = 1e-7):
         chosen = [p if (bits >> k) & 1 else p.conjugate() for k, p in enumerate(upper)]
         out.append((np.poly(chosen + fixed), bits))
     return out, len(upper)
-
-
-def complex_allpass_response(d: np.ndarray, w: np.ndarray) -> np.ndarray:
-    """复全通 ``D^#/D`` 在 ``z = exp(jw)`` 上的复响应。"""
-    return zfreq(conj_rev(d), w) / zfreq(d, w)
 
 
 # ------------------------------------------------------------

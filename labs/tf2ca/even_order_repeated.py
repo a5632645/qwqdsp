@@ -1,63 +1,19 @@
 # -*- coding: utf-8 -*-
-"""
-even_order_repeated.py
-======================
+"""偶数阶、分母含重极点的设计（典型 Linkwitz–Riley）的双链判据与三链分解。
 
-**偶数阶 + 重复极点**（典型：Linkwitz–Riley 分频器）能不能写成 tf2ca 的两条全通链？
+    LR_{2n} = (BW_n)^2
 
-    H(z) = alpha * A1(z) + conj(alpha) * A2(z)          A_i = D_i^# / D_i（复全通）
-    A(z) = D1(z) * D2(z)
+穷举 ``A*A^#`` 的全部谱因子 ``U``，用最小二乘检验 ``B`` 是否落在
+``span{U + U^#, j*(U - U^#)}`` 内；LR 不满足该条件，正确结构是三条链
+（权重 ``1/4, 1/2, 1/4``）。重极点下逐极点 ``alpha`` 判据会假阳性，脚本改用
+系数空间残差，并同时展示该失效。
 
-`even_order.py` 对四族（butter / cheby1 / cheby2 / ellip）偶数阶给出的结论是「可以，代价是
-复系数链 + 复权重」。本脚本研究它**没有覆盖**的那一类：分母含**重极点**的设计，也就是
-Linkwitz–Riley
+用法::
 
-    LR_{2n}(z) = (n 阶 Butterworth 低通)^2
-
-（每个极点的重数为 2；A、B 同时是同一个滤波器的平方）。结论：
-
-1. **两条链做不到**（实系数、复系数、带不带 `z^-k` 延迟偏移都不行）。脚本对**全部**
-   谱因子 U（即 A*A^# 的每一个「每个互反共轭根对取一个」的选择）穷举后取最优，
-   残差是系数空间里的相对偏差：LR2 … LR12 的最优值 5.0e-02 … 1.00e+00（O(1)，
-   与浮点精度无关），而同一套代码对四族偶数阶给出 1e-16 … 1e-13（机器精度）。
-2. **实系数的不可分解有解析证明**：n 偶数 ⇒ 两条实全通链的阶数同奇偶 ⇒
-   `|H(-1)| = 1`（由 `H(1) = 1` 定标），而 LR 低通 `|H(-1)| ≈ 1e-18`。加 `z^-k` 也不救。
-3. **可分解的完整判据**（本脚本据此穷举，故「不存在」是穷举结论而非经验）：
-
-       H = B/A 是两条（加权）全通链之和
-         <=> 存在谱因子 U（deg U = n、U * U^# = mu * A * A^#）使得
-             B 落在 2 维实子空间 span{U + U^#, j*(U - U^#)} 里（等价于 B = alpha*U + conj(alpha)*U^#）
-
-   其中 `X^# = conj(反序(X))`；子空间与 U 的单位相位无关。把 U 归一化成 `U*U^# = A*A^#` 后，
-   `|alpha| = 0.5` 就等价于「导出的互补支与低通构成功率互补对」。
-   四族偶数阶的最优解里 `|alpha| = 0.5`（24/24，精确），正是 `U*U^# = A*A^#` 的要求；
-   LR 的 B 不在任何一个这样的子空间里。（LR4 的谱因子 9 个、去重后 5 个；
-   LR12 是 9^3 = 729 个、去重后 365 个。）
-4. **LR 的正确结构是三条链**：
-
-       LR_{4k}   = 1/4*A0 + 1/2*Am + 1/4*A1      A0、A1 为复系数全通（互为系数共轭），Am 实系数
-       LR_{4k+2} = 1/4*A0 + 1/2*Am + 1/4*A1      三条都是实系数全通，阶数 (n-1, n, n+1)
-
-   实测频响/冲激误差 5.6e-16 … 3.8e-07（越高阶越受系数条件数限制）。原因是「平方」：
-   `H = alpha*A1 + conj(alpha)*A2` 平方后是 `alpha^2*A1^2 + 2|alpha|^2*A1*A2
-   + conj(alpha)^2*A2^2`——**两个谱因子变成三个**。
-5. **方法论警告**：`even_order.py` 的主判据（逐极点解 `alpha` 的一致性）在**重极点**下会
-   假阳性。LR4@0.25 的某个分法离散度只有 4.2e-08（看起来「分对了」），但系数空间残差是
-   0.542。机制：重极点只有 n/2 个相异位置，值条件不足以定住次数 n 的恒等式——
-   用该判据解出的 `alpha` 满足 `B - (alpha*N1*D2 + conj(alpha)*N2*D1) = c*A`（c ≠ 0，
-   LR4@0.25 的默认分法 c = 0.5），这个 c 在逐极点代入里看不见。
-   判分法必须用**系数空间残差**（本脚本）或补上导数条件。
-6. LR 的 LP±HP：偶数半阶 `|LP+HP| ≡ 1`、奇数半阶 `|LP-HP| ≡ 1`（经典 LR 极性结论），
-   但另一支不是全通——「和是全通」**不**蕴含耦合全通分解，别被它误导。
-
-推导、数据与未验证边界见同目录 `even_order_repeated.md`。
-
-用法
-----
     python even_order_repeated.py                                  # 默认 LR4（半阶 2）, cutoff=0.25
     python even_order_repeated.py --half-order 4 --cutoff 0.35     # LR8
-    python even_order_repeated.py --delays                         # 额外尝试链上 z^-k 延迟偏移（慢）
-    python even_order_repeated.py --check                          # LR2..LR12 × 多截止 + 四族对照
+    python even_order_repeated.py --delays                         # 额外尝试 z^-k 延迟偏移
+    python even_order_repeated.py --check                          # LR2..LR12 × 多截止 + 对照
 """
 from __future__ import annotations
 
@@ -74,7 +30,7 @@ from scipy import signal
 from scipy.signal import lfilter
 
 from even_order import real_two_path_min_residual
-from tf2ca import design, split_by_radius, zfreq
+from tf2ca import complex_allpass_response, conj_rev, design, split_by_radius, zfreq
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 
@@ -82,16 +38,6 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 # ------------------------------------------------------------
 # 复全通、完全平方与重复极点结构
 # ------------------------------------------------------------
-
-
-def conj_rev(d: np.ndarray) -> np.ndarray:
-    """复全通的分子 ``D^# = conj(反序(D))``，使 ``D^#/D`` 在单位圆上模长恒为 1。"""
-    return np.conj(np.asarray(d)[::-1])
-
-
-def mirror(poly: np.ndarray) -> np.ndarray:
-    """``X^# = conj(反序(X))``（同上，用于谱因子）。"""
-    return np.conj(np.asarray(poly)[::-1])
 
 
 def design_lr(half_order: int, cutoff: float) -> tuple[np.ndarray, np.ndarray]:
@@ -176,7 +122,7 @@ def spectral_factors(a: np.ndarray, tol: float = 1e-7, sqrt_hint: np.ndarray | N
     - 实根（重数 nu）：只有一族根对 ``{r, 1/r}`` 的 nu 份，``nu+1`` 种取法 ``m``（取 ``1/r``
       的份数），U 的根为 ``r^(nu-m) * (1/r)^m``；对应 ``D1 = r^m``、``D2 = r^(nu-m)``。
 
-    注意 `even_order.py` 的枚举只覆盖复类的对角线 ``j = nu - k``（等价于 ``D2 = conj(D1)``），
+    极点互异情形的枚举只覆盖复类的对角线 ``j = nu - k``（等价于 ``D2 = conj(D1)``）；
     重极点下必须放开到全部 ``(nu+1)^2``（以及实根的 nu+1），否则会漏掉合法的谱因子。
 
     :return: ``[(U, D1, D2, 选择元组), ...]``；``U`` 与 ``U^#`` 给出同一个 2 维子空间
@@ -207,7 +153,7 @@ def spectral_factors(a: np.ndarray, tol: float = 1e-7, sqrt_hint: np.ndarray | N
         per_class.append(entries)
 
     out = []
-    aa = np.convolve(np.asarray(a, dtype=float), mirror(a))
+    aa = np.convolve(np.asarray(a, dtype=float), conj_rev(a))
     for combo in itertools.product(*per_class):
         sel = tuple(e[0] for e in combo)
         mate = tuple(e[1] for e in combo)
@@ -222,7 +168,7 @@ def spectral_factors(a: np.ndarray, tol: float = 1e-7, sqrt_hint: np.ndarray | N
             d2 = np.convolve(d2, entry[4])
         # 归一化：U*U^# 本来就是 A*A^# 的正实数倍，缩放到严格相等。
         # 只有这个归一化下「|alpha| = 0.5」才等价于「导出的互补支与低通功率互补」。
-        gamma = np.sqrt(abs(aa[0]) / abs(np.convolve(u, mirror(u))[0]))
+        gamma = np.sqrt(abs(aa[0]) / abs(np.convolve(u, conj_rev(u))[0]))
         u = u * gamma
         d1 = np.real_if_close(d1 * gamma)  # 保持 U = N1*D2（D1 同比缩放）
         out.append((u, d1, np.real_if_close(d2), sel))
@@ -263,7 +209,7 @@ def two_chain_fit(b: np.ndarray, a: np.ndarray, shifts=(0,), tol: float = 1e-7, 
         n = max(u.size, b.size)
         cu = np.zeros(n, complex)
         cu[:u.size] = u
-        m_ = mirror(u)
+        m_ = conj_rev(u)
         cm = np.zeros(n, complex)
         cm[:m_.size] = m_
         col_u = (cu + cm).real                # U + U^#
@@ -283,7 +229,7 @@ def two_chain_fit(b: np.ndarray, a: np.ndarray, shifts=(0,), tol: float = 1e-7, 
             if (j1, j2) == (0, 0):
                 continue
             for (u, d1, d2, counts) in cands:
-                basis = (np.r_[np.zeros(j1, complex), u], np.r_[np.zeros(j2, complex), mirror(u)])
+                basis = (np.r_[np.zeros(j1, complex), u], np.r_[np.zeros(j2, complex), conj_rev(u)])
                 n = max(basis[0].size, basis[1].size, b.size)
                 m = np.zeros((n, 2), complex)
                 for k, vec in enumerate(basis):
@@ -307,7 +253,7 @@ def two_chain_fit(b: np.ndarray, a: np.ndarray, shifts=(0,), tol: float = 1e-7, 
 
 
 def naive_pole_spread(b: np.ndarray, d1: np.ndarray, d2: np.ndarray):
-    """``even_order.py`` 的逐极点判据：在 A 的每个极点独立解 alpha，返回相对离散度。
+    """极点互异情形使用的逐极点判据：在 A 的每个极点独立解 alpha，返回相对离散度。
 
     判据只检查**值**条件，且默认「每个极点只属于一条链」。于是它对重极点有两重失效：
     ① D1 与 D2 共享极点时（``D1 = D2 = (z-p)``）分母为 0，判据直接无定义（返回 nan）；
@@ -375,15 +321,10 @@ def lr_three_chain(half_order: int, cutoff: float):
     return [(d, s, w) for (d, s), w in zip(triples, weights)]
 
 
-def allpass_response(d: np.ndarray, w: np.ndarray) -> np.ndarray:
-    """（复）全通链 ``D^#/D`` 在 ``z = exp(jw)`` 上的复响应。"""
-    return zfreq(conj_rev(d), w) / zfreq(d, w)
-
-
 def three_chain_metrics(b: np.ndarray, a: np.ndarray, chains, num: int = 4000, terms: int = 80):
     """校验三链分解：频响误差、冲激响应误差（含虚部泄漏）、链平坦度、``H(1)``。"""
     w = np.linspace(1e-6, np.pi - 1e-6, num)
-    got = sum(wt * sc * allpass_response(d, w) for d, sc, wt in chains)
+    got = sum(wt * sc * complex_allpass_response(d, w) for d, sc, wt in chains)
     ref = zfreq(b, w) / zfreq(a, w)
     x = np.zeros(terms)
     x[0] = 1.0
@@ -393,8 +334,8 @@ def three_chain_metrics(b: np.ndarray, a: np.ndarray, chains, num: int = 4000, t
         "freq": float(np.max(np.abs(got - ref))),
         "imp": float(np.max(np.abs(y_struct - y_direct))),
         "imag": float(np.max(np.abs(y_struct.imag))),
-        "flat": float(max(np.max(np.abs(np.abs(allpass_response(d, w)) - 1)) for d, _, _ in chains)),
-        "h1": float(abs(sum(wt * sc * allpass_response(d, np.array([1e-9])) for d, sc, wt in chains)[0])),
+        "flat": float(max(np.max(np.abs(np.abs(complex_allpass_response(d, w)) - 1)) for d, _, _ in chains)),
+        "h1": float(abs(sum(wt * sc * complex_allpass_response(d, np.array([1e-9])) for d, sc, wt in chains)[0])),
         "orders": [len(d) - 1 for d, _, _ in chains],
     }
 
@@ -522,7 +463,7 @@ def run_check() -> None:
     hint_lr = lr_half_denominator(2, 0.25)
     seen = set()
     for u, _, _, _ in spectral_factors(a_lr, sqrt_hint=hint_lr):
-        b_alt = np.real(np.real_if_close((u + mirror(u)) / 2.0))
+        b_alt = np.real(np.real_if_close((u + conj_rev(u)) / 2.0))
         key = tuple(np.round(b_alt, 9))
         if key in seen:
             continue
@@ -547,8 +488,8 @@ def plot(b: np.ndarray, a: np.ndarray, fit: dict, chains, cm: dict,
     d1, d2, alpha, res = best["d1"], best["d2"], best["alpha"], best["residual"]
     w = np.linspace(1e-6, np.pi - 1e-6, 4000)
     ref = zfreq(b, w) / zfreq(a, w)
-    got2 = alpha * allpass_response(d1, w) + np.conjugate(alpha) * allpass_response(d2, w)
-    got3 = sum(wt * sc * allpass_response(d, w) for d, sc, wt in chains)
+    got2 = alpha * complex_allpass_response(d1, w) + np.conjugate(alpha) * complex_allpass_response(d2, w)
+    got3 = sum(wt * sc * complex_allpass_response(d, w) for d, sc, wt in chains)
 
     fig, ax = plt.subplots(2, 3, figsize=(16, 8.5))
 
@@ -569,7 +510,7 @@ def plot(b: np.ndarray, a: np.ndarray, fit: dict, chains, cm: dict,
     pa = np.roots(a)
     ax[0, 1].plot(pa.real, pa.imag, "x", color="#1f77b4", ms=9,
                   label="A poles (each with multiplicity 2)")
-    pu = np.roots(mirror(np.convolve(conj_rev(d1), d2)))
+    pu = np.roots(conj_rev(np.convolve(conj_rev(d1), d2)))
     ax[0, 1].plot(pu.real, pu.imag, "o", mfc="none", mec="#d62728", ms=10,
                   label="roots of chosen U (one per pair)")
     mirrors = 1.0 / np.conjugate(pu)

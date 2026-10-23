@@ -1,42 +1,22 @@
 # -*- coding: utf-8 -*-
-"""
-hilbert_even.py
-==============
+"""由偶阶半带椭圆低通构造解析滤波器（``iir_hilbert.hpp`` 的结构）。
 
-`qwqdsp/include/qwqdsp/filter/iir_hilbert.hpp` 是怎么**构造**出来的？——本脚本给出可复现的构造链：
+    半带设计（极点落在虚轴）→ 复系数两路全通 H = alpha*A1 + conj(alpha)*A2
+    → 频率旋转 z -> -jz → A_real(z) + j*z^-1*A_imag(z)
 
-    偶数阶椭圆半带低通（crossover 落在 0.5，极点正好落在 z 平面的虚轴上）
-        -> 复系数全通链分解  H = alpha*A1 + conj(alpha)*A2      （alpha 落在 45 度）
-        -> 对两条链做频率旋转（极点乘 j，等价 z -> -jz），系数变实数
-        -> 解析滤波器：一条实系数多相全通链 + 一条带 1 拍延迟的实系数多相全通链
+半带的自由参数是阶数 ``N``（偶数）与阻带深度 ``rs``；``rp`` 与 ``Wp`` 由半带条件
+唯一确定，``Wp`` 用椭圆次数方程的 nome 形式闭式求解。``--header`` 评估头文件里的
+两组固定系数；奇阶半带见 ``hilbert_odd.py``。
 
-最后一步的结构与 ``iir_hilbert.hpp`` 里的 ``APF`` / ``Tick`` 完全一致：
-``APF`` 有两个状态，传递函数是 ``(z^-2 - a)/(1 - a*z^-2)``（zeta = z^-2 的多相全通），
-``a`` 就是半带滤波器的半速率极点 ``rho^2``；``imag`` 支路多走一拍（``latch_``）。
+用法::
 
-为什么要这样：
-1. **要让数字极点落在虚轴上，椭圆滤波器必须同时满足三条**（推导与验证见 ``hilbert_even.md``）：
-   阶数偶数、波纹互补 ``eps_p*eps_s = 1``（于是 ``rs`` 由 ``rp`` 定死）、边沿对称
-   ``Wp + Ws = 1``（即 prewarp 后 ``tan(pi*Wp/2)*tan(pi*Ws/2) = 1``，crossover 落在 0.5）。
-   第三条有**闭式解**（椭圆次数方程的 nome 形式 ``q = q1^(1/N)`` + theta 级数，
-   见 :func:`halfband_Wp`），所以可以像要求的那样——用 scipy 的数字 ``ellip`` 直接出滤波器。
-   三条不满足时（例如只把 ``Wn`` 设成 0.5、波纹随意），极点会明显偏离虚轴。
-2. 这种极点分布下，**实数**两路全通做不到（奇数阶那套 ``1/2(A0+A1)`` 在这里退化），
-   但**复系数**两路全通可以，且权重必为 ``alpha``、``conj(alpha)``，实测 ``alpha`` 恰为 45 度
-   （`(1+j)/(2*sqrt(2))`），这正是两条链相差 90 度、从而能拼成解析滤波器的原因。
-3. 频率旋转把虚轴极点 ``±j*rho`` 变成实轴极点 ``∓rho``，系数变实；每组 ``±rho`` 合成一个
-   ``zeta`` 多相节（``a = rho^2``），两支路交替分配 —— 就是头文件里那两组 alpha。
-
-用法
-----
-    python hilbert_even.py                          # 半带 rs=30dB（默认），出图
-    python hilbert_even.py --order 16 --rs 40
-    python hilbert_even.py --header                 # 直接分析 iir_hilbert.hpp 里的固定系数
+    python hilbert_even.py                          # 半带 N=8, rs=30dB，出图
+    python hilbert_even.py --order 16 --rs 60
+    python hilbert_even.py --header                 # 分析 iir_hilbert.hpp 的固定系数
 """
 from __future__ import annotations
 
 import argparse
-import itertools
 from pathlib import Path
 
 import matplotlib
@@ -46,6 +26,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy import signal as sg
 from scipy.special import ellipk, ellipkm1
+
+from tf2ca import conj_rev
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 
@@ -156,11 +138,6 @@ def halfband_report(d: dict) -> dict:
 # ------------------------------------------------------------
 
 
-def conj_rev(d: np.ndarray) -> np.ndarray:
-    """复全通分子：``D^# = conj(降幂系数反序)``。"""
-    return np.conj(np.asarray(d)[::-1])
-
-
 def complex_split(b: np.ndarray, a: np.ndarray, poles=None):
     """穷举共轭对取法，求 ``H = alpha*A1 + conj(alpha)*A2`` 的最佳解（**偶阶**专用）。
 
@@ -172,6 +149,8 @@ def complex_split(b: np.ndarray, a: np.ndarray, poles=None):
     tol = 1e-9
     poles = np.asarray(poles) if poles is not None else np.roots(a)
     upper = sorted((pp for pp in poles if pp.imag > tol), key=abs)
+    if len(upper) > 16:
+        raise ValueError(f"共轭对 {len(upper)} 个：穷举 {1 << len(upper)} 种分法不可行（上限 16 对）")
     scale = float(np.max(np.abs(b)))
     best = None
     for bits in range(1 << len(upper)):
@@ -216,11 +195,6 @@ def analytic_response(real_alphas, imag_alphas, w):
     for aa in imag_alphas:
         imag *= (z2 - aa) / (1 - aa * z2)
     return (real + 1j * np.exp(-1j * np.asarray(w, dtype=float)) * imag) / 2.0
-
-
-def _zfreq(poly, w):
-    """``Sum_k poly[k] * z^-k`` 在 ``z = exp(jw)`` 上取值（poly 为降幂系数）。"""
-    return np.polyval(np.asarray(poly)[::-1], np.exp(-1j * np.asarray(w, dtype=float)))
 
 
 def chain_response_poles(poles, w):
@@ -442,6 +416,9 @@ def main(argv: list[str] | None = None) -> None:
           f" / {info['pole_re']:.2e}（多项式求根，高阶不可信）")
     print(f"  |H(0.5)|               = {info['h_half']:.9f}（1/sqrt(2) = {1/np.sqrt(2):.9f}）")
     print(f"  功率互补误差           = {info['power_comp']:.2e}")
+    if info["power_comp"] > 1e-6:
+        print("  -> 半带不变量未满足：过渡带过窄时 scipy ellip 失去 crossover；"
+              "旋转结构与目标 H(-jz) 的偏差会变大（见 hilbert_even.md 的数值包线）。")
     print(f"  半速率极点 rho^2        = {np.round(d['rho2'], 6)}"
           f"（zpk 与多项式求根之差 {info['rho2_zpk_vs_roots']:.1e}）")
     print()
@@ -458,7 +435,7 @@ def main(argv: list[str] | None = None) -> None:
     print(f"  共轭形式是否适用 = {conj_ok}（要求 arg alpha = 45 度、|alpha| = 0.5、残差 ~1e-14）")
     if not conj_ok:
         print("  -> 不适用：原点极点是自共轭的，无法按「每个共轭对取一个」拆分。"
-              "奇阶半带对应的是\"实数两路 + 延迟\"那种结构（其精确性本目录尚未建立，见 README）。")
+              "奇阶半带走「两组 zeta 全通链 + 延迟」结构，见 hilbert_odd.py。")
     print(f"  => 权重相差 {2 * np.angle(alpha) * 180 / np.pi:.2f} 度（解析滤波器要求 90 度）")
 
     d1r, d2r = rotate_branch(d1), rotate_branch(d2)
