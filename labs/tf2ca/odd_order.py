@@ -1,14 +1,29 @@
 # -*- coding: utf-8 -*-
-"""奇数阶实系数低通的两路全通分解演示。
+"""
+odd_order.py
+============
 
-设计低通（butter / cheby1 / cheby2 / ellip）→ 按 ``|p|`` 分组 → 打印一/二阶节点
-→ 校验频响与全通平坦度 → 对照 MATLAB ``tf2ca`` 样例 → 出图。
+**奇数阶**数字 IIR 低通滤波器 H(z)=B(z)/A(z) 分解为「两条全通链之和」的验证脚本：
 
-用法::
+    H = (A0 + A1)/2        （低通）
+    Hc= (A0 - A1)/2        （功率互补高通，|H|^2 + |Hc|^2 = 1）
 
+它会
+
+1. 用 scipy 设计一个奇数阶低通（butter / cheby1 / cheby2 / ellip）；
+2. 用 :mod:`tf2ca` 求出两条全通链的分母 (D0, D1)，打印每个一阶/二阶全通节点；
+3. 数值校验：频响最大偏差、全通链平坦度；
+4. 对照 MATLAB ``tf2ca`` 的发布样例（EMQF 文档中 ellip(7,2,40,0.3)）；
+5. 画 6 张图：幅频对比、z 平面极点分配、两链相位、极点模长交替规则、
+   冲激响应对比、LP/HP 互补幅频。
+
+本脚本只处理**奇数阶**；偶数阶的分解研究见同目录 `even_order.py`。
+
+用法
+----
     python odd_order.py                 # 默认 ellip 7 阶, cutoff=0.3, rp=2, rs=40
     python odd_order.py --kind butter --order 7 --cutoff 0.3
-    python odd_order.py --check         # 四族 × 奇数阶 × 多截止频率的批量校验表
+    python odd_order.py --check         # 跑一遍四族 × 多阶数的批量校验表
 """
 from __future__ import annotations
 
@@ -98,8 +113,8 @@ def validate_reference() -> None:
 def run_check() -> None:
     """批量校验：四族 × 多阶数 × 多截止频率的频响偏差。"""
     print("== 批量校验（split_by_radius）==")
-    print(f"{'family':8s} {'order':>5s} {'cutoff':>7s} {'maxErr(freq)':>14s} {'allpassFlat':>13s}")
-    worst_err, worst_case = 0.0, None
+    print(f"{'family':8s} {'order':>5s} {'maxErr(freq)':>14s} {'allpassFlat':>13s}")
+    worst = 0.0
     for kind in ("butter", "cheby1", "cheby2", "ellip"):
         for order in (3, 5, 7, 9, 11):
             for cutoff in (0.1, 0.2, 0.35, 0.5, 0.7):
@@ -107,13 +122,10 @@ def run_check() -> None:
                 d0, d1 = split_by_radius(a)
                 err = max_response_error(b, a, d0, d1)
                 flat = allpass_flatness(d0, d1)
-                if err > worst_err:
-                    worst_err, worst_case = err, (kind, order, cutoff)
+                worst = max(worst, err)
                 flag = "" if err < 1e-4 else "   <- 注意"
-                print(f"{kind:8s} {order:5d} {cutoff:7.3f} {err:14.3e} {flat:13.3e}{flag}")
-    kind, order, cutoff = worst_case
-    print(f"  最差频响偏差 = {worst_err:.3e}（{kind} order={order} cutoff={cutoff:g}；"
-          f"窄带高阶受极点提取的条件数限制）")
+                print(f"{kind:8s} {order:5d} {err:14.3e} {flat:13.3e}{flag}")
+    print(f"  最差频响偏差 = {worst:.3e}（窄带高阶受极点提取的条件数限制）")
 
 
 # ------------------------------------------------------------
