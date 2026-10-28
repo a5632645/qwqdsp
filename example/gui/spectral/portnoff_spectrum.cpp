@@ -1,4 +1,4 @@
-/// @brief 用时间折叠把长窗频谱搬进固定大小的 FFT, 并按对数频率绘制 min/max 频谱带
+/// @brief 用时间折叠把长窗频谱搬进固定大小的 FFT, 并按对数频率绘制频谱包络
 
 #include <algorithm>
 #include <array>
@@ -71,8 +71,6 @@ static const Color kCanvasColor = {22, 26, 32, 255};
 static const Color kGridColor = {48, 54, 64, 255};
 static const Color kTextColor = {170, 178, 190, 255};
 static const Color kCurveColor = {110, 210, 255, 255};
-static const Color kMinColor = {60, 120, 160, 220};
-static const Color kBandColor = {40, 110, 160, 120};
 static const Color kCenterGridColor = {80, 92, 108, 255};
 
 // ------------------------------------------------------------
@@ -113,7 +111,6 @@ static std::array<float, kCanvasW> g_mix;
 static std::array<float, kSpecBins> g_slope;
 static std::array<float, kSpecBins> g_render_db;
 static std::array<float, kSpecBins + 1> g_db_prefix;
-static std::array<float, kCanvasW> g_curve_min_y;
 static std::array<float, kCanvasW> g_curve_max_y;
 
 static float DbToY(float db) {
@@ -154,7 +151,7 @@ static void Dsp_Init() {
 static void InitDisplay() {
     float const log_min = std::log(kFreqMin);
     float const log_span = std::log(kFreqMax) - log_min;
-    // 预计算每列覆盖的 bin 范围, 供 min/max 采样
+    // 预计算每列覆盖的 bin 范围, 供列最大值采样
     for (int px = 0; px < kCanvasW; ++px) {
         float const f0 = std::exp(log_min + log_span * static_cast<float>(px) / static_cast<float>(kCanvasW));
         float const f1 = std::exp(log_min + log_span * static_cast<float>(px + 1) / static_cast<float>(kCanvasW));
@@ -176,7 +173,6 @@ static void InitDisplay() {
         float const span_bins = (f1 - f0) / kBinHz;
         g_mix[px] = std::clamp(span_bins - 1.0f, 0.0f, 1.0f);
     }
-    g_curve_min_y.fill(DbToY(kDbFloor));
     g_curve_max_y.fill(DbToY(kDbFloor));
 }
 
@@ -273,8 +269,8 @@ static void FeedTestSignal() {
 // 曲线
 // ------------------------------------------------------------
 
-/// 每列覆盖的 bin 范围内取 min/max, 竖线段显示该列的动态范围。
-/// 低频 bin 在像素上很稀疏, 用单调三次 Hermite 在 bin 间插值后再与 min/max 混合。
+/// 每列覆盖的 bin 范围内取最大值。
+/// 低频 bin 在像素上很稀疏, 用单调三次 Hermite 在 bin 间插值后再与列最大值混合。
 static void BuildCurve(std::span<float const> spec_db) {
     g_db_prefix[0] = 0.0f;
     for (int bin = 0; bin < kSpecBins; ++bin) {
@@ -304,10 +300,8 @@ static void BuildCurve(std::span<float const> spec_db) {
     for (int px = 0; px < kCanvasW; ++px) {
         int const lo = g_bin_lo[px];
         int const hi = g_bin_hi[px];
-        float min_db = g_render_db[lo];
         float max_db = g_render_db[lo];
         for (int bin = lo + 1; bin <= hi; ++bin) {
-            min_db = std::min(min_db, g_render_db[bin]);
             max_db = std::max(max_db, g_render_db[bin]);
         }
 
@@ -324,10 +318,8 @@ static void BuildCurve(std::span<float const> spec_db) {
                               + h01 * g_render_db[bin0 + 1] + h11 * g_slope[bin0 + 1];
 
         float const mix = g_mix[px];
-        min_db = smooth_db + mix * (min_db - smooth_db);
         max_db = smooth_db + mix * (max_db - smooth_db);
 
-        g_curve_min_y[px] = DbToY(min_db);
         g_curve_max_y[px] = DbToY(max_db);
     }
 }
@@ -344,10 +336,12 @@ static float FreqToX(float freq) {
 static void DrawGrid() {
     DrawRectangle(kCanvasX, kCanvasY, kCanvasW, kCanvasH, kCanvasColor);
 
-    static constexpr float kYTicks[] = {60.0f, 40.0f, 20.0f, 0.0f, -20.0f, -40.0f, -60.0f};
-    for (float db : kYTicks) {
+    // 刻度必须落在画布的 dB 范围内, 否则会越出裁剪区
+    static constexpr float kYTickStep = 20.0f;
+    float const first_tick = std::floor(kDbTop / kYTickStep) * kYTickStep;
+    for (float db = first_tick; db >= kDbFloor - 0.5f; db -= kYTickStep) {
         float y = DbToY(db);
-        Color const color = (db == 0.0f) ? kCenterGridColor : kGridColor;
+        Color const color = (std::abs(db) < 0.5f) ? kCenterGridColor : kGridColor;
         DrawLineV({static_cast<float>(kCanvasX), y},
                   {static_cast<float>(kCanvasX + kCanvasW), y}, color);
         auto label = std::format("{:.0f}", db);
@@ -381,20 +375,12 @@ static void DrawGrid() {
 }
 
 static void DrawSpectrum() {
-    // 竖线段显示每列的 min/max 动态范围, 再叠 min/max 包络
     static std::array<Vector2, kCanvasW> max_points;
-    static std::array<Vector2, kCanvasW> min_points;
     float const x0 = static_cast<float>(kCanvasX);
     for (int px = 0; px < kCanvasW; ++px) {
-        float const x = x0 + static_cast<float>(px);
-        float const y_min = g_curve_min_y[px];
-        float const y_max = g_curve_max_y[px];
-        DrawLineV({x, y_min}, {x, y_max}, kBandColor);
-        min_points[px] = {x, y_min};
-        max_points[px] = {x, y_max};
+        max_points[px] = {x0 + static_cast<float>(px), g_curve_max_y[px]};
     }
 
-    DrawLineStrip(min_points.data(), kCanvasW, kMinColor);
     DrawLineStrip(max_points.data(), kCanvasW, kCurveColor);
 }
 
@@ -446,7 +432,7 @@ int main(void) {
         BeginDrawing();
         ClearBackground(kBgColor);
         DrawText("Portnoff fold spectrum", kCanvasX, 12, 18, kTextColor);
-        auto info = std::format("FFT {} x{} -> {}  |  {:.1f} Hz/bin  |  min-max",
+        auto info = std::format("FFT {} x{} -> {}  |  {:.1f} Hz/bin",
                                 kFftSize, kFoldFactor, kWindowSize, kBinHz);
         DrawText(info.c_str(), kCanvasX + 210, 16, 12, kTextColor);
 
