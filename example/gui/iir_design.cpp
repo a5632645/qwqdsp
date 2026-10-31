@@ -1,12 +1,12 @@
 // ------------------------------------------------------------
 // IIR 设计曲线查看器
 //
-// 用 qwqdsp_filter::IIRDesign / IIRDesignExtra / IIRDesignShelf 设计 IIR 滤波器,
-// 画出幅度曲线与相位曲线, 并用竖线标出设计频率、横线标出设计电平
-// (-3.01dB / 通带纹波 / 阻带电平 / shelf 的三个电平)。
-//
-// 所有曲线与标记都来自库的真实输出: 原型 -> 频率映射 -> 双线性变换 ->
-// 双二阶系数 -> BiquadCoeff::DigitalResonpoce 连乘。
+// 用 qwqdsp_filter::IIRDesign / IIRDesignExtra / IIRDesignShelf 设计滤波器,
+// 同时画两套幅度/相位曲线:
+//   - 连续模拟原型: 频率映射后的 ZPK 直接求 H(j*2*pi*f)（直接轴）;
+//   - Ivantsov 数字滤波器: IIRDesign::Ivantsov 离散化后按 BiquadCoeff 连乘.
+// 竖线标出设计频率, 横线标出设计电平 (-3.01dB / 通带纹波 / 阻带电平 /
+// shelf 的三个电平)。
 //
 // 两个数字参数在不同原型下的含义(与库里的语义一致):
 //
@@ -53,8 +53,10 @@
 static constexpr int kWidth = 960;
 static constexpr int kHeight = 620;
 
-/// 采样率, 决定频率轴上限与双线性变换
+/// 采样率, 决定数字频率轴上限
 static constexpr double kFs = 48000.0;
+/// 一般 Ivantsov 变换的形状参数, 取论文幅度最优区间 [2, pi*sqrt(2/3)] 的上端点
+static constexpr double kIvantsovSigma = 2.565099660323728;
 static constexpr double kFreqMin = 20.0;
 static constexpr double kFreqMax = 20000.0;
 
@@ -132,8 +134,12 @@ struct MarkerLines {
 };
 
 struct FilterDesign {
+    /// Ivantsov 离散化后的双二阶系数
     std::array<qwqdsp_filter::BiquadCoeff, kMaxSections> biquad{};
     size_t num_sections = 0;
+    /// 离散化之前的连续模拟原型节（直接轴求值用）
+    std::array<qwqdsp_filter::IIRDesign::ZPK, kMaxSections> analog{};
+    size_t num_analog_sections = 0;
     MarkerLines markers{};
     bool valid = false;
     double mag_floor_db = kMagMinFloorDb;
@@ -142,9 +148,14 @@ struct FilterDesign {
 
 /// 缓存下来的曲线: 每列一条竖直幅度范围 + 一个相位值
 struct CurveCache {
+    /// Ivantsov 数字曲线
     std::array<float, kPlotColumns> db_low{};
     std::array<float, kPlotColumns> db_high{};
     std::array<float, kPlotColumns> phase_deg{};
+    /// 连续模拟原型曲线（直接轴）
+    std::array<float, kPlotColumns> analog_db_low{};
+    std::array<float, kPlotColumns> analog_db_high{};
+    std::array<float, kPlotColumns> analog_phase_deg{};
 };
 
 static DesignParams g_params{};
@@ -367,9 +378,9 @@ static std::optional<double> extraLevelDb(DesignParams const& params) noexcept {
 }
 
 /**
- * @brief 按参数设计滤波器, 并算好标记线
+ * @brief 按参数设计模拟原型与 Ivantsov 数字滤波器, 并算好标记线
  * @param params 设计参数
- * @return 双二阶系数与标记信息, valid 为 false 表示参数无解
+ * @return 模拟原型 / 双二阶系数 / 标记信息, valid 为 false 表示参数无解
  */
 static FilterDesign makeDesign(DesignParams const& params) {
     using qwqdsp_filter::BiquadCoeff;
@@ -463,7 +474,8 @@ static FilterDesign makeDesign(DesignParams const& params) {
         out.valid = false;
         return out;
     }
-    double const wo = IIRDesign::Digital2AnalogW(params.fc, kFs);
+    // 直接轴: 把原型的 (1)rad/s 边沿搬到 2*pi*fc, 不做双线性预畸变
+    double const wo = 2.0 * std::numbers::pi * params.fc;
     if (is_shelf) {
         // shelf 原型的"中点"就是 (1)rad/sec, 搬到 fc 即可
         IIRDesign::ProtyleToLowpass(proto, num_pairs, wo);
@@ -488,13 +500,16 @@ static FilterDesign makeDesign(DesignParams const& params) {
     }
 
     // ----- 离散化 -----
-    IIRDesign::Bilinear(proto, kFs);
+    // 先保存频率映射后的连续原型, 供直接轴曲线使用
+    out.num_analog_sections = num_sections;
+    std::copy_n(proto.begin(), num_sections, out.analog.begin());
+    IIRDesign::Ivantsov(proto, kFs, kIvantsovSigma);
 
     std::span<BiquadCoeff> biquad{out.biquad.data(), num_sections};
     IIRDesign::TfToBiquad(proto, biquad);
 
     out.valid = true;
-    for (size_t i = 0; i < num_pairs; ++i) {
+    for (size_t i = 0; i < num_sections; ++i) {
         if (!std::isfinite(zpk[i].p.real()) || !std::isfinite(zpk[i].p.imag())) {
             out.valid = false;
         }
@@ -514,9 +529,9 @@ static FilterDesign makeDesign(DesignParams const& params) {
         double const root = std::sqrt(bw * bw + 4.0 * wo * wo);
         double const w1 = (root - bw) * 0.5;
         double const w2 = (root + bw) * 0.5;
-        // 逆双线性: omega = 2fs*tan(pi*f/fs) -> f = fs/pi*atan(omega/(2fs))
-        out.markers.vertical_hz[0] = kFs / std::numbers::pi * std::atan(w1 / (2.0 * kFs));
-        out.markers.vertical_hz[1] = kFs / std::numbers::pi * std::atan(w2 / (2.0 * kFs));
+        // 直接轴: 模拟角频率 w -> f = w/(2*pi)
+        out.markers.vertical_hz[0] = w1 / (2.0 * std::numbers::pi);
+        out.markers.vertical_hz[1] = w2 / (2.0 * std::numbers::pi);
         out.markers.num_vertical = 2;
     }
     else {
@@ -584,22 +599,47 @@ static std::complex<double> frequencyResponse(std::span<qwqdsp_filter::BiquadCoe
 }
 
 /**
- * @brief 逐像素列采样频响, 填入曲线缓存
+ * @brief 计算连续模拟原型 ZPK 串联在模拟角频率 wa 处的复频响
+ * @param sections 模拟域零极点节
+ * @param wa 模拟角频率 (rad/sec)
+ * @return 复频响 H(j*wa)
+ */
+static std::complex<double> frequencyResponseAnalog(
+    std::span<qwqdsp_filter::IIRDesign::ZPK const> sections, double wa) {
+    std::complex<double> const s{0.0, wa};
+    std::complex<double> h{1.0, 0.0};
+    for (auto const& sec : sections) {
+        std::complex<double> numerator{1.0, 0.0};
+        if (sec.z) {
+            numerator = (s - *sec.z) * (s - std::conj(*sec.z));
+        }
+        h *= sec.k * numerator / ((s - sec.p) * (s - std::conj(sec.p)));
+    }
+    return h;
+}
+
+/**
+ * @brief 逐像素列采样两条频响, 填入曲线缓存
  * @param design 设计结果
  * @param curve 输出的曲线缓存
  * @note 每列取多个子采样, 幅度用最小/最大值画成竖线, 相位取最后一个子采样
  */
 static void sampleCurve(FilterDesign const& design, CurveCache& curve) {
     std::span<qwqdsp_filter::BiquadCoeff const> const biquad{design.biquad.data(), design.num_sections};
+    std::span<qwqdsp_filter::IIRDesign::ZPK const> const analog{design.analog.data(), design.num_analog_sections};
     constexpr double kVeryLowDb = -300.0;
 
     for (int column = 0; column < kPlotColumns; ++column) {
         double db_low = 1.0e30;
         double db_high = -1.0e30;
         double phase_deg = 0.0;
+        double analog_db_low = 1.0e30;
+        double analog_db_high = -1.0e30;
+        double analog_phase_deg = 0.0;
         for (int sub = 0; sub < kSubSamples; ++sub) {
             double const x = kPlotLeft + static_cast<double>(column) + (static_cast<double>(sub) + 0.5) / kSubSamples;
             double const freq = xToFreq(x);
+
             double const w = 2.0 * std::numbers::pi * freq / kFs;
             auto const h = frequencyResponse(biquad, w);
             double const magnitude = std::abs(h);
@@ -608,10 +648,22 @@ static void sampleCurve(FilterDesign const& design, CurveCache& curve) {
             db_low = std::min(db_low, db);
             db_high = std::max(db_high, db);
             phase_deg = std::arg(h) * 180.0 / std::numbers::pi;
+
+            double const wa = 2.0 * std::numbers::pi * freq;
+            auto const ha = frequencyResponseAnalog(analog, wa);
+            double const analog_magnitude = std::abs(ha);
+            double analog_db = analog_magnitude > 0.0 ? 20.0 * std::log10(analog_magnitude) : kVeryLowDb;
+            analog_db = std::max(analog_db, kVeryLowDb);
+            analog_db_low = std::min(analog_db_low, analog_db);
+            analog_db_high = std::max(analog_db_high, analog_db);
+            analog_phase_deg = std::arg(ha) * 180.0 / std::numbers::pi;
         }
         curve.db_low[column] = static_cast<float>(db_low);
         curve.db_high[column] = static_cast<float>(db_high);
         curve.phase_deg[column] = static_cast<float>(phase_deg);
+        curve.analog_db_low[column] = static_cast<float>(analog_db_low);
+        curve.analog_db_high[column] = static_cast<float>(analog_db_high);
+        curve.analog_phase_deg[column] = static_cast<float>(analog_phase_deg);
     }
 }
 
@@ -702,7 +754,27 @@ static void drawFrequencyGrid() {
 }
 
 /**
- * @brief 画幅度面板: 坐标标签、曲线、横线标记
+ * @brief 画一行曲线图例（两条色线 + 名称）
+ * @param x 左端 x
+ * @param y 文本顶部 y
+ * @param analog_color 连续模拟原型颜色
+ * @param digital_color Ivantsov 数字曲线颜色
+ */
+static void drawCurveLegendLine(float x, float y, Color analog_color, Color digital_color) {
+    float const line_y = y + 6.0f;
+    for (float dash = 0.0f; dash < 18.0f; dash += 4.0f) {
+        float const x0 = x + dash;
+        float const x1 = x + std::min(dash + 2.0f, 18.0f);
+        DrawLineV({x0, line_y}, {x1, line_y}, analog_color);
+    }
+    DrawText("analog", static_cast<int>(x + 24.0f), static_cast<int>(y), kLabelFontSize, LIGHTGRAY);
+    float const x2 = x + 88.0f;
+    DrawLineV({x2, line_y}, {x2 + 18.0f, line_y}, digital_color);
+    DrawText("Ivantsov", static_cast<int>(x2 + 24.0f), static_cast<int>(y), kLabelFontSize, LIGHTGRAY);
+}
+
+/**
+ * @brief 画幅度面板: 坐标标签、两条曲线、横线标记
  * @param design 设计结果
  * @param curve 曲线缓存
  */
@@ -720,17 +792,49 @@ static void drawMagnitudePanel(FilterDesign const& design, CurveCache const& cur
         DrawText(label.c_str(), static_cast<int>(kMagPanel.x) - 42, static_cast<int>(y) - 7, kLabelFontSize, LIGHTGRAY);
     }
 
-    // 曲线: 每列一条竖直线段, 相邻列自然连成曲线
+    // Ivantsov 数字曲线（绿，实线）与连续模拟原型（蓝，虚线，后画可见）
     for (int column = 0; column < kPlotColumns; ++column) {
         float const x = kPlotLeft + static_cast<float>(column);
         float const y_high = dbToY(curve.db_high[column], floor_db, top_db) - 0.5f;
         float const y_low = dbToY(curve.db_low[column], floor_db, top_db) + 0.5f;
         DrawLineV({x, y_high}, {x, y_low}, GREEN);
     }
+    for (int column = 0; column < kPlotColumns; ++column) {
+        if (((column / 4) % 2) != 0) {
+            continue;
+        }
+        float const x = kPlotLeft + static_cast<float>(column);
+        float const y_high = dbToY(curve.analog_db_high[column], floor_db, top_db) - 0.5f;
+        float const y_low = dbToY(curve.analog_db_low[column], floor_db, top_db) + 0.5f;
+        DrawLineV({x, y_high}, {x, y_low}, BLUE);
+    }
+    drawCurveLegendLine(kPlotLeft, kMagPanel.y + kMagPanel.height + 2.0f, BLUE, GREEN);
 }
 
 /**
- * @brief 画相位面板: 坐标标签与曲线
+ * @brief 画一条相位曲线: 相邻列一律连线, 保留卷绕处的竖线
+ * @param phase 每列的相位 (度)
+ * @param color 曲线颜色
+ */
+static void drawPhaseCurve(std::span<float const> phase, Color color, bool dashed = false) {
+    float prev_x = kPlotLeft;
+    float prev_y = phaseToY(phase[0]);
+    if (!dashed) {
+        DrawLineV({prev_x, prev_y - 0.5f}, {prev_x, prev_y + 0.5f}, color);
+    }
+    for (int column = 1; column < kPlotColumns; ++column) {
+        float const x = kPlotLeft + static_cast<float>(column);
+        float const y = phaseToY(phase[column]);
+        if (!dashed || ((column / 4) % 2) == 0) {
+            DrawLineV({prev_x, prev_y}, {x, y}, color);
+        }
+        prev_x = x;
+        prev_y = y;
+    }
+}
+
+/**
+ * @brief 画相位面板: 坐标标签与两条曲线
  * @param curve 曲线缓存
  */
 static void drawPhasePanel(CurveCache const& curve) {
@@ -744,19 +848,11 @@ static void drawPhasePanel(CurveCache const& curve) {
                  LIGHTGRAY);
     }
 
-    // 相位曲线: 相邻列一律连线, 不做断线处理。
-    // 陷波附近的相位一列内就能变化上百度和卷绕, 断开会让曲线出现大片空白;
-    // 连起来以后卷绕处自然画成一条竖线, 与常见工具的相位图一致。
-    float prev_x = kPlotLeft;
-    float prev_y = phaseToY(curve.phase_deg[0]);
-    DrawLineV({prev_x, prev_y - 0.5f}, {prev_x, prev_y + 0.5f}, ORANGE);
-    for (int column = 1; column < kPlotColumns; ++column) {
-        float const x = kPlotLeft + static_cast<float>(column);
-        float const y = phaseToY(curve.phase_deg[column]);
-        DrawLineV({prev_x, prev_y}, {x, y}, ORANGE);
-        prev_x = x;
-        prev_y = y;
-    }
+    // 连续模拟原型（浅蓝）与 Ivantsov 数字曲线（橙）。
+    // 陷波附近的相位一列内就能变化上百度和卷绕, 连起来后卷绕处自然画成竖线。
+    drawPhaseCurve(std::span{curve.phase_deg}, ORANGE, false);
+    drawPhaseCurve(std::span{curve.analog_phase_deg}, SKYBLUE, true);
+    drawCurveLegendLine(kPlotLeft, kPhasePanel.y - 14.0f, SKYBLUE, ORANGE);
 }
 
 /**
@@ -1079,7 +1175,8 @@ int main() {
             size_t const kind_index = drawSelector(kind_bound, kKindNames, static_cast<size_t>(g_params.kind));
             if (kind_index != static_cast<size_t>(g_params.kind)) {
                 g_params.kind = static_cast<ResponseKind>(kind_index);
-                // 进入/离开 shelf 时 boost 旋钮的可用性会变
+                // 进入/离开 shelf 时 ripple / level 与 boost 的角色都会变
+                bindParamKnobs(g_params, ripple_knob, level_knob);
                 bindBoostKnob(g_params, boost_knob);
                 g_dirty = true;
             }
@@ -1098,8 +1195,12 @@ int main() {
             q_knob.SetEnable(is_band);
             pairs_knob.display();
             fc_knob.display();
-            ripple_knob.display();
-            level_knob.display();
+            if (ripple_knob.IsEnabled()) {
+                ripple_knob.display();
+            }
+            if (level_knob.IsEnabled()) {
+                level_knob.display();
+            }
             q_knob.display();
             boost_knob.display();
 

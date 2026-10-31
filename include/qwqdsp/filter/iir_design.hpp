@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cassert>
+#include <cmath>
 #include <complex>
 #include <limits>
 #include <numbers>
@@ -13,6 +14,8 @@
 namespace qwqdsp_filter {
 struct IIRDesign {
     static constexpr auto pi = std::numbers::pi;
+    /// Ivantsov 变换的默认形状参数, 与 ivantsov.hpp 的 Ivantsov::kDefaultSigma 一致
+    static constexpr double kDefaultIvantsovSigma = 2.0;
 
     struct ZPK {
         std::optional<std::complex<double>> z; // 如果Null则在无穷远处
@@ -35,7 +38,7 @@ struct IIRDesign {
     //
     // 所有原型都是模拟低通原型, 每个 ZPK 对应一个二阶节(一对共轭极点),
     // 因此阶数 = 2 * num_filter(总是偶数)。原型的 "1rad/sec" 是模拟角频率,
-    // 要得到数字滤波器还需要经过 ProtyleTo* 映射与 Bilinear 离散化。
+    // 要得到数字滤波器还需要经过 ProtyleTo* 映射与 Bilinear / Ivantsov 离散化。
     // --------------------------------------------------------------------------------
 
     /**
@@ -1059,6 +1062,84 @@ struct IIRDesign {
     }
 
     /**
+     * @brief Ivantsov 理想双线性变换的一般形式(论文 §4), 模拟 ZPK -> 数字 ZPK
+     *
+     * 逐节把极点 / 零点当作常数项为 1 的二次因子映射(每个 ZPK 仍是一个共轭对):
+     * - 复共轭对: 论文 (3.7) 的 phi1/phi2, 数字根取上半平面的一支;
+     * - 实重根: 论文 (4.2) 的一次因子映射两次;
+     * - 原点零点(z = 0): 映射为 z = 1 的二重零点, 常数 fs^2;
+     * - 无穷远零点(z = nullopt): 映射为 z = -phi(0) 的二重零点;
+     * - 每节的 k 按这些因子的常数项归一化, 保持该节的模拟增益.
+     *
+     * @param analog 被就地修改的模拟域零极点节
+     * @param fs 采样率(Hz)
+     * @param sigma 形状参数; 论文的幅度最优区间是 [2, pi*sqrt(2/3)]
+     * @note 不做预畸变: 直接使用给定的模拟根. 要精确匹配某数字参考频率, 请先用
+     *       PrewarpIvantsov() 得到模拟角频率, 再按它缩放根/截止频率后调用
+     * @note 变换后每节都有有限零点, 可以直接交给 TfToBiquad
+     * @note 每个 ZPK 节仍表示一个共轭对(或实重根), 不改变节数; 不处理原点极点
+     */
+    static void Ivantsov(std::span<ZPK> analog, double fs, double sigma) {
+        for (auto& section : analog) {
+            std::complex<double> const p = section.p;
+            double const p_abs = std::abs(p);
+            assert(p_abs > 0.0);
+
+            double den_norm;
+            std::complex<double> digital_p;
+            if (std::abs(p.imag()) <= kIvantsovRealTolerance * std::max(1.0, p_abs)) {
+                double const c = IvantsovMapReal(p, fs, sigma);
+                den_norm = (1.0 + c) * (1.0 + c);
+                digital_p = {-c, 0.0};
+            }
+            else {
+                auto const mapped = IvantsovMapPair(p, fs, sigma);
+                den_norm = mapped.norm;
+                digital_p = mapped.root;
+            }
+
+            double num_norm;
+            double num_const;
+            std::complex<double> digital_z;
+            if (!section.z) {
+                double const phi0 = IvantsovPhi(0.0, sigma);
+                num_norm = (1.0 + phi0) * (1.0 + phi0);
+                num_const = 1.0;
+                digital_z = {-phi0, 0.0};
+            }
+            else if (section.z->real() == 0.0 && section.z->imag() == 0.0) {
+                num_norm = 1.0;
+                num_const = fs * fs;
+                digital_z = {1.0, 0.0};
+            }
+            else {
+                std::complex<double> const z = *section.z;
+                double const z_abs = std::abs(z);
+                if (std::abs(z.imag()) <= kIvantsovRealTolerance * std::max(1.0, z_abs)) {
+                    double const c = IvantsovMapReal(z, fs, sigma);
+                    num_norm = (1.0 + c) * (1.0 + c);
+                    digital_z = {-c, 0.0};
+                }
+                else {
+                    auto const mapped = IvantsovMapPair(z, fs, sigma);
+                    num_norm = mapped.norm;
+                    digital_z = mapped.root;
+                }
+                num_const = std::norm(z);
+            }
+
+            section.p = digital_p;
+            section.z = digital_z;
+            section.k *= (num_const / std::norm(p)) * (den_norm / num_norm);
+        }
+    }
+
+    /// 两参数重载: sigma 取 kDefaultIvantsovSigma, 与 Bilinear(analog, fs) 同形
+    static void Ivantsov(std::span<ZPK> analog, double fs) {
+        Ivantsov(analog, fs, kDefaultIvantsovSigma);
+    }
+
+    /**
      * @brief 数字域 ZPK 转成双二阶系数
      *
      * 每节映射为 b0 = k, b1 = -2*k*Re(z), b2 = k*|z|^2, a1 = -2*Re(p), a2 = |p|^2,
@@ -1166,14 +1247,123 @@ struct IIRDesign {
     }
 
     /**
-     * @brief 数字频率的预畸变, 得到双线性变换前应使用的模拟角频率
+     * @brief 双线性变换的预畸变: 数字频率 -> 模拟角频率
      * @param freq 数字频率(Hz)
      * @param fs 采样率(Hz)
      * @return 模拟角频率(rad/sec), 即 2*fs*tan(pi*freq/fs)
      * @note 逆变换为 freq = fs/pi * atan(omega/(2*fs))
      */
-    static double Digital2AnalogW(double freq, double fs) {
+    static double PrewarpBilinear(double freq, double fs) {
         return 2 * fs * std::tan(freq * pi / fs);
+    }
+
+    /**
+     * @brief Ivantsov 变换的预畸变: 数字参考频率 -> 模拟角频率
+     *
+     * 由论文 (2.9) 的 F(omega) = freq 解出
+     *
+     *     omega = sqrt(sigma^2 + pi^2 cot^2(pi*freq/fs)),
+     *
+     * 再换成模拟角频率 2*pi*fs/omega。sigma = 0 时与 PrewarpBilinear 完全一致。
+     *
+     * @param freq 数字参考频率(Hz)
+     * @param fs 采样率(Hz)
+     * @param sigma 形状参数; 论文的幅度最优区间是 [2, pi*sqrt(2/3)]
+     * @return 模拟角频率(rad/sec), 可直接用来缩放原型
+     * @note freq > fs/2 时按 Ivantsov 的 omega = 2*pi/wc 近似, 返回 2*pi*freq
+     */
+    static double PrewarpIvantsov(double freq, double fs,
+                                  double sigma = kDefaultIvantsovSigma) {
+        double const wc = 2.0 * pi * freq / fs;
+        double omega;
+        if (wc > pi) {
+            omega = 2.0 * pi / wc;
+        }
+        else {
+            double const cot = pi / std::tan(0.5 * wc);
+            omega = std::sqrt(sigma * sigma + cot * cot);
+        }
+        return 2.0 * pi * fs / omega;
+    }
+
+private:
+    /// 判定"实重根"的相对阈值(实部/虚部比较用)
+    static constexpr double kIvantsovRealTolerance = 1e-12;
+
+    /// 二次因子的数字映射结果
+    struct IvantsovQuad {
+        double c1;   ///< z^-1 系数
+        double c2;   ///< z^-2 系数
+        double norm; ///< z = 1 处的值 1 + c1 + c2
+        std::complex<double> root; ///< 上半平面的代表根
+    };
+
+    /// 论文 (2.6): (pi - sqrt(x^2 + sigma^2)) / (pi + sqrt(x^2 + sigma^2))
+    static double IvantsovPhi(double x, double sigma) noexcept {
+        double const value = std::sqrt(x * x + sigma * sigma);
+        return (pi - value) / (pi + value);
+    }
+
+    /// 论文 (3.7) 的 phi1 / phi2; nu + kappa 在浮点舍入下可能微负, 截断到 0
+    static void IvantsovPhi12(double x, double y, double sigma,
+                              double& p1, double& p2) noexcept {
+        double const x2 = x * x;
+        double const y2 = y * y;
+        double const s2 = sigma * sigma;
+        double const nu = std::sqrt(x2 * x2 + 2.0 * x2 * s2 * (2.0 * y2 - 1.0) + s2 * s2);
+        double const kappa = x2 * (2.0 * y2 - 1.0) + s2;
+        double const root = std::sqrt(std::max(nu + kappa, 0.0));
+        double const den = pi * pi + pi * std::numbers::sqrt2_v<double> * root + nu;
+        p1 = (2.0 * pi * pi - 2.0 * nu) / den;
+        p2 = (pi * pi - pi * std::numbers::sqrt2_v<double> * root + nu) / den;
+    }
+
+    /// 1 + c1*z^-1 + c2*z^-2 的上半平面代表根
+    static std::complex<double> IvantsovRootOfQuad(double c1, double c2) noexcept {
+        std::complex<double> const disc = std::sqrt(std::complex<double>{c1 * c1 - 4.0 * c2, 0.0});
+        std::complex<double> const r1 = 0.5 * (-c1 + disc);
+        std::complex<double> const r2 = 0.5 * (-c1 - disc);
+        if (r1.imag() < 0.0) {
+            return r2;
+        }
+        if (r2.imag() > r1.imag()) {
+            return r2;
+        }
+        return r1;
+    }
+
+    /// 复共轭对 -> 数字二次因子; x = 2*pi*fs/|r|, y = -Re(r)/|r|
+    static IvantsovQuad IvantsovMapPair(std::complex<double> r, double fs, double sigma) noexcept {
+        double const abs_r = std::abs(r);
+        assert(abs_r > 0.0);
+        double const x = 2.0 * pi * fs / abs_r;
+        double const y = -r.real() / abs_r;
+        double p1;
+        double p2;
+        IvantsovPhi12(x, y, sigma, p1, p2);
+        double c1;
+        double c2;
+        if (r.real() <= 0.0) {
+            c1 = p1;
+            c2 = p2;
+        }
+        else {
+            assert(p2 != 0.0);
+            c1 = p1 / p2;
+            c2 = 1.0 / p2;
+        }
+        return {c1, c2, 1.0 + c1 + c2, IvantsovRootOfQuad(c1, c2)};
+    }
+
+    /// 实重根 -> 一次原子映射的 c(数字因子 (1 + c*z^-1)/(1 + c))
+    static double IvantsovMapReal(std::complex<double> r, double fs, double sigma) noexcept {
+        double const abs_r = std::abs(r);
+        assert(abs_r > 0.0);
+        double const x = 2.0 * pi * fs / abs_r;
+        if (r.real() <= 0.0) {
+            return IvantsovPhi(x, sigma);
+        }
+        return 1.0 / IvantsovPhi(x, sigma);
     }
 };
 } // namespace qwqdsp_filter

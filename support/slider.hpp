@@ -25,6 +25,10 @@ public:
 
     void SetEnable(bool enable);
 
+    bool IsEnabled() const {
+        return enable_;
+    }
+
     std::function<std::string(float)> value_to_text_function = EmptyV2Tcaller;
     std::function<void(float)> on_value_change = [](float) {};
 protected:

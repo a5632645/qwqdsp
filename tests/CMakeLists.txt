@@ -8,6 +8,7 @@ add_qwqdsp_test(cephes cephes/cephes.cpp)
 
 add_qwqdsp_test(parallel_allpass filter/parallel_allpass.cpp)
 add_qwqdsp_test(iir_design filter/iir_design.cpp)
+add_qwqdsp_test(iir_design_ivantsov filter/iir_design_ivantsov.cpp)
 add_qwqdsp_test(iir_design_shelf filter/iir_design_shelf.cpp)
 add_qwqdsp_test(halfband_allpass_ovs filter/halfband_allpass_ovs.cpp)
 add_qwqdsp_test(tpt_filters filter/tpt_filters.cpp)
