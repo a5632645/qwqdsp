@@ -14,9 +14,11 @@
  * @brief 论文滑动无窗 DFT 的 NC 方法谱帧
  *
  * 与 nc_reassignment_frame.hpp (线性 FFT bin 对) 不同：本方法以频率网格为基准，
- * y 轴每个像素对应一个 NC bin，bin 中心频率与相应 y 坐标的显示频率相同，
- * 一一映射。每个 bin 采用独立窗长 N_k，并用递归滑动 DFT 逐样本演进，
- * 输出无需窗函数与相位校正。
+ * 每个 NC bin 对应一行输出，bin 中心频率与输出行一一映射。默认网格是每像素一个
+ * bin 的对数等距网格（Init）；也可用 InitBands 直接给出中心频率表（如 1/12 倍频程
+ * 滤波器组）。每个 bin 采用独立窗长 N_k，并用递归滑动 DFT 逐样本演进，
+ * 输出无需窗函数与相位校正。逐 bin 电平由 GetColumnDb() 给出（dB），
+ * 颜色列 GetColumn() 是同一列的上色结果。
  *
  * 关键公式（论文 arXiv:2410.07982v3）：
  *   (1)  bin 中心频率:  f(n) = 440·2^((n-69)/12)
@@ -81,16 +83,33 @@ struct WindowlessNcFrame {
      */
     void Init(int sampleRate, int fftSize, int hopSize, int zeroPad, int outputHeight, float freqMin, float freqMax,
               float dbFloor, float bandwidthScale = 1.0f) noexcept {
+        const float log_min = std::log10(freqMin);
+        const float log_max = std::log10(freqMax);
+        const float log_step = (log_max - log_min) / static_cast<float>(outputHeight);
+        std::vector<float> centers(static_cast<size_t>(outputHeight));
+        for (int y = 0; y < outputHeight; ++y)
+            centers[static_cast<size_t>(y)] = std::pow(10.0f, log_max - (y + 0.5f) * log_step);
+        InitBands(sampleRate, fftSize, hopSize, centers, dbFloor, bandwidthScale);
+        zeroPad_ = zeroPad; // 占位，无零填充
+    }
+
+    /**
+     * @brief 以显式 bin 中心频率初始化（用于 1/12 倍频程等自定义网格）
+     *
+     * 与 Init 的唯一区别是中心频率的来源：第 y 个 bin 对应 centerFreqs[y]，
+     * 升序（低频在 y=0）或降序（高频在 y=0）都可以；带宽仍取相邻中心频率之差。
+     *
+     * @param centerFreqs bin 中心频率(Hz)，按输出行顺序排列，不能为空
+     */
+    void InitBands(int sampleRate, int fftSize, int hopSize, std::span<const float> centerFreqs, float dbFloor,
+                   float bandwidthScale = 1.0f) noexcept {
         sampleRate_ = sampleRate;
         fftSize_ = fftSize;
         hopSize_ = hopSize;
-        zeroPad_ = zeroPad; // 占位，无零填充
-        outputHeight_ = outputHeight;
-        freqMin_ = freqMin;
-        freqMax_ = freqMax;
+        zeroPad_ = 1;
+        outputHeight_ = static_cast<int>(centerFreqs.size());
         dbFloor_ = dbFloor;
-        logMin_ = std::log10(freqMin);
-        logMax_ = std::log10(freqMax);
+        center_freqs_.assign(centerFreqs.begin(), centerFreqs.end());
 
         // 幅度归一化：NC 前向公式 gain = sqrt(ncSum)/N 对幅度 A 的纯音，
         // 稳态增益 ≈ A/π（推导：ncSum ≈ (A/2)²·cos(π/N)·N²/2，gain ≈ A/π）。
@@ -100,19 +119,14 @@ struct WindowlessNcFrame {
         // 低音窗长上限(论文 IV-A 节)
         const int maxWindowSamples = std::max(8, static_cast<int>(kMaxWindowS * sampleRate));
 
-        // ── 以频率网格为基准：y 轴每个像素对应一个 NC bin，bin 中心频率 = 该像素频率 ──
-        // y=0 在顶部(高频)，y 增大频率递减；bin 数与输出高度一致，一一映射。
+        // ── 频率网格由调用方给出：每个 bin 对应一个中心频率，bin 数与输出行数一致 ──
         const int n_bins = outputHeight_;
+        const std::span<const float> centers = center_freqs_;
         bins_ema_.clear();
         bins_bypass_.clear();
         // 所有 bin 的窗长范围：上限同时是整幅画面的滞后(环回缓冲长度)
         int maxN = 8;
         int minN = maxWindowSamples;
-
-        const float logStep = (logMax_ - logMin_) / static_cast<float>(outputHeight_);
-        std::vector<float> centers(n_bins);
-        for (int y = 0; y < n_bins; ++y)
-            centers[y] = std::pow(10.0f, logMax_ - (y + 0.5f) * logStep);
 
         for (int y = 0; y < n_bins; ++y) {
             Bin b{};
@@ -120,13 +134,13 @@ struct WindowlessNcFrame {
             b.row = y;
 
             // 带宽 = 相邻两 bin 中心频率之差 × 缩放系数 (论文: W_NC = f(i+1) - f(i-1))
-            // 频率随 y 递减，边界用单侧邻居；取绝对值保证正带宽。
-            float f_hi = centers[y]; // 更高频侧
-            float f_lo = centers[y]; // 更低频侧
+            // 取两侧邻居，边界用单侧邻居；顺序（升序/降序）不影响，绝对值保证正带宽。
+            float f_hi = centers[y]; // 一侧邻居
+            float f_lo = centers[y]; // 另一侧邻居
             if (y > 0)
-                f_hi = centers[y - 1]; // y-1 在更上方 = 更高频
+                f_hi = centers[y - 1];
             if (y + 1 < n_bins)
-                f_lo = centers[y + 1]; // y+1 在更下方 = 更低频
+                f_lo = centers[y + 1];
             float w_nc = std::abs(f_hi - f_lo) * bandwidthScale;
             w_nc = std::max(w_nc, 1e-3f);
 
@@ -194,6 +208,7 @@ struct WindowlessNcFrame {
         colBuf_.assign(static_cast<size_t>(ringCols_) * static_cast<size_t>(outputHeight_), 0.0f);
 
         column_.resize(outputHeight_);
+        column_db_.assign(static_cast<size_t>(outputHeight_), dbFloor_);
     }
 
     /**
@@ -253,6 +268,21 @@ struct WindowlessNcFrame {
 
     std::span<const Color> GetColumn() const noexcept {
         return {column_.data(), static_cast<size_t>(outputHeight_)};
+    }
+
+    /**
+     * @brief 最近一次发射列的逐 bin 电平(dB，未夹取)
+     *
+     * 与 GetColumn 同一时刻、同一列；柱状显示直接取这里，避免从颜色反查 dB。
+     * 无信号行给 dbFloor_。
+     */
+    std::span<const float> GetColumnDb() const noexcept {
+        return {column_db_.data(), column_db_.size()};
+    }
+
+    /// @brief 各 bin 的中心频率(Hz)，顺序与输出行一致
+    std::span<const float> CenterFreqs() const noexcept {
+        return {center_freqs_.data(), center_freqs_.size()};
     }
 
     int ColumnHeight() const noexcept {
@@ -322,6 +352,7 @@ private:
         for (int y = 0; y < outputHeight_; ++y) {
             const float gain = colBuf_[oldest + static_cast<size_t>(y)];
             const float db = (gain > 0.0f) ? 20.0f * std::log10(gain) : dbFloor_;
+            column_db_[static_cast<size_t>(y)] = db;
             int idx = static_cast<int>((std::clamp(db, dbFloor_, 0.0f) - dbFloor_) / (-dbFloor_) * 255.0f);
             column_[y] = Colormap::kTable[std::clamp(idx, 0, 255)];
         }
@@ -339,12 +370,14 @@ private:
     int min_n_{}, max_n_{};                // 所有 bin 的窗长下限/上限(样本)
     int n_{};                              // 已处理的样本计数
     int ringSpan_{}, ringCols_{}, head_{}; // 时间轴子列环：跨窗样本数 / 子列数 / 发射指针
-    float freqMin_{}, freqMax_{}, logMin_{}, logMax_{}, dbFloor_{};
+    float dbFloor_{};
     float gainNorm_{}; // 幅度归一化系数(乘 π，使纯音峰值 ≈0 dB)
 
-    std::vector<Bin> bins_ema_;    // N<hop 箱：每样本 EMA 抗混叠
-    std::vector<Bin> bins_bypass_; // N>=hop 箱：旁路(窗长自身带限)
-    std::vector<double> ring_;     // 共享样本环回缓冲(double)
-    std::vector<float> colBuf_;    // [ringCols_ · outputHeight_] 子列环形缓冲(线性幅度)
-    std::vector<Color> column_;
+    std::vector<float> center_freqs_; // bin 中心频率(Hz)，顺序与输出行一致
+    std::vector<Bin> bins_ema_;       // N<hop 箱：每样本 EMA 抗混叠
+    std::vector<Bin> bins_bypass_;    // N>=hop 箱：旁路(窗长自身带限)
+    std::vector<double> ring_;        // 共享样本环回缓冲(double)
+    std::vector<float> colBuf_;       // [ringCols_ · outputHeight_] 子列环形缓冲(线性幅度)
+    std::vector<Color> column_;       // 最近发射列(颜色)
+    std::vector<float> column_db_;    // 最近发射列(dB)
 };

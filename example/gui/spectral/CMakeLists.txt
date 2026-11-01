@@ -11,6 +11,7 @@ add_qwqdsp_gui_example(resonate_bank resonate_bank.cpp)
 target_compile_options(qwqdsp-example-resonate_bank PUBLIC -mavx2 -mfma)
 
 add_qwqdsp_gui_example(octave_spectrum octave_spectrum.cpp)
+add_qwqdsp_gui_example(nc_octave_bar nc_octave_bar.cpp)
 add_qwqdsp_gui_example(multi_resolution_spectrum multi_resolution_spectrum.cpp)
 add_qwqdsp_gui_example(portnoff_spectrum portnoff_spectrum.cpp)
 add_qwqdsp_gui_example(reassignment reassignment.cpp)
