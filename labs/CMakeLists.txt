@@ -34,4 +34,5 @@ add_qwqdsp_lab(autotune autotune/autotune.cpp)
 # ----- raylib 实验沙盒 -----
 if(QWQDSP_USE_RAYLIB)
     add_subdirectory(playing)
+    add_subdirectory(vibrate)
 endif()
