@@ -1,6 +1,6 @@
 """High-shelf 原型与 §4 离散化的正确性自检。
 
-用法: python qwqdsp/labs/ivantsovy/check_shelf.py
+用法: python qwqdsp/labs/match_filter/ivantsovy/check_shelf.py
 退出码 0 表示全部通过。
 """
 from __future__ import annotations

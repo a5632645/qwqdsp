@@ -1,6 +1,6 @@
 """一键运行本 lab：正确性自检 + 两张幅度对照图。
 
-用法: python qwqdsp/labs/ivantsovy/run_all.py
+用法: python qwqdsp/labs/match_filter/ivantsovy/run_all.py
 """
 from __future__ import annotations
 
@@ -9,8 +9,9 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).parent
-SCRIPTS = ("check_impl.py", "check_shelf.py", "exp_magnitude.py",
-           "exp_four_types.py", "exp_high_shelf.py")
+SCRIPTS = ("check_impl.py", "check_shelf.py", "check_two_point.py",
+           "exp_magnitude.py", "exp_four_types.py", "exp_high_shelf.py",
+           "exp_two_point.py", "exp_mapping.py")
 
 
 def main() -> int:

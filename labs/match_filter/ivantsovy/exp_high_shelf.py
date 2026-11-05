@@ -7,7 +7,7 @@ Chebyshev II 使用 ``even_modify=False``（scipy 没有偶数阶修正原型）
 高频端在 ``boost - sign(boost)*ripple`` dB（面板里约 ±11 dB），棚带内的极值
 仍在有限频率处到达 ±12 dB。
 
-用法: python qwqdsp/labs/ivantsovy/exp_high_shelf.py
+用法: python qwqdsp/labs/match_filter/ivantsovy/exp_high_shelf.py
 产物: output/high_shelf.png
 """
 from __future__ import annotations

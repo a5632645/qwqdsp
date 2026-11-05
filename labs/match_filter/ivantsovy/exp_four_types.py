@@ -12,7 +12,7 @@ fs = 48 kHz、f_ref = 5 kHz、sigma = pi*sqrt(2/3) + 预畸变。每个家族一
 常数项 1 因子”形式的增益；Chebyshev II 低通的 zpk 增益是 1e-4，直接使用会
 整体偏移 80 dB。
 
-用法: python qwqdsp/labs/ivantsovy/exp_four_types.py
+用法: python qwqdsp/labs/match_filter/ivantsovy/exp_four_types.py
 产物: output/four_types.png、output/four_types_cheby2.png
 """
 from __future__ import annotations

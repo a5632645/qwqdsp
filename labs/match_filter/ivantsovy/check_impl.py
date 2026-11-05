@@ -1,6 +1,6 @@
 """正确性自检：论文公式、四种经典类型、预畸变、稳定性与零点位置。
 
-用法: python qwqdsp/labs/ivantsovy/check_impl.py
+用法: python qwqdsp/labs/match_filter/ivantsovy/check_impl.py
 退出码 0 表示全部通过。
 """
 from __future__ import annotations

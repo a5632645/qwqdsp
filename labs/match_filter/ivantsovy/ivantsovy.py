@@ -82,18 +82,30 @@ def phi12(x: float, y: float, sigma: float) -> tuple[float, float]:
     """论文 (3.7) 的 ``phi1(x, y)`` 与 ``phi2(x, y)``。
 
     两者共用分母 ``d``；``1 + phi1 + phi2 = 4 pi^2 / d``（论文结论部分）。
-    ``nu + kappa`` 在解析上非负；x > sigma、b = 0 时它恰好为 0，这里对浮点
-    舍入造成的微小负值做截断。
+
+    ``|y| <= 1`` 时 ``nu + kappa`` 在解析上非负，且等于
+    ``4 x^2 y^2 (1-y^2) / (nu - kappa)``。``b = 0``（纯虚轴零点，例如带阻）
+    且 ``x > sigma`` 时它恰好为 0，而直接算法是 ``nu`` 量级的相减：浮点舍入
+    会给出约 ``1e-16 * nu`` 的负值，此时只能截断。``|y| > 1`` 不在本映射的
+    适用范围（实根应按 (4.7) 拆成一次因子），仍按原样报错。
     """
     x2 = x * x
     y2 = y * y
     s2 = sigma * sigma
-    nu = np.sqrt(x2 * x2 + 2.0 * x2 * s2 * (2.0 * y2 - 1.0) + s2 * s2)
-    kappa = x2 * (2.0 * y2 - 1.0) + s2
-    radicand = nu + kappa
-    if radicand < -1e-12:
-        raise ValueError("nu + kappa < 0：需要 |y| <= 1 的二次因子")
-    root = np.sqrt(max(radicand, 0.0))
+    t = 2.0 * y2 - 1.0
+    nu = np.sqrt(x2 * x2 + 2.0 * x2 * s2 * t + s2 * s2)
+    kappa = x2 * t + s2
+    if kappa >= 0.0:
+        radicand = nu + kappa
+    else:
+        # nu + kappa = (nu^2 - kappa^2) / (nu - kappa)，分母是两个正数之和。
+        tail = x2 * x2 * (1.0 - t * t)
+        radicand = tail / (nu - kappa) if tail > 0.0 else 0.0
+    if radicand < 0.0:
+        if abs(y) > 1.0:
+            raise ValueError("nu + kappa < 0：需要 |y| <= 1 的二次因子")
+        radicand = 0.0
+    root = np.sqrt(radicand)
     d = np.pi * np.pi + np.pi * np.sqrt(2.0) * root + nu
     p1 = (2.0 * np.pi * np.pi - 2.0 * nu) / d
     p2 = (np.pi * np.pi - np.pi * np.sqrt(2.0) * root + nu) / d
@@ -222,15 +234,23 @@ def normalized_gain(zeros, poles, gain: float = 1.0) -> float:
 
 
 def design(zeros, poles, fs: float, f_ref: float, sigma: float,
-           prewarp: bool = False, gain: float = 1.0) -> Design:
+           prewarp: bool = False, gain: float = 1.0,
+           omega: float | None = None) -> Design:
     """把 ``H(S) = gain * prod(1 - S/z)/prod(1 - S/p)`` 映射为 z 域因子。
 
     ``zeros`` / ``poles`` 是归一化变量 ``S = s/(2 pi f_ref)`` 下的根。
     原点零点单独计数并按 ``S -> (1-z^-1) omega/(2 pi)`` 映射；分子的阶数亏欠
     按退化因子补齐。``prewarp=True`` 时用 :func:`prewarped_omega` 代替
     ``fs/f_ref``，使数字参考频率精确落在 ``f_ref``。
+
+    ``omega`` 给定时直接采用该设计比值（此时 ``f_ref`` 只用于标注原型，
+    ``prewarp`` 不可再用）。需要自行解出 ``omega`` 的双点匹配见
+    :mod:`two_point`。
     """
-    omega = prewarped_omega(f_ref, fs, sigma) if prewarp else fs / f_ref
+    if omega is None:
+        omega = prewarped_omega(f_ref, fs, sigma) if prewarp else fs / f_ref
+    elif prewarp:
+        raise ValueError("omega 与 prewarp 不能同时给出：预畸变本身就是在求 omega")
     n_zero_origin, finite_zeros = split_origin(zeros)
     n_pole_origin, finite_poles = split_origin(poles)
     if n_pole_origin:

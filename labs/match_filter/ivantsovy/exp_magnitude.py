@@ -10,7 +10,7 @@
 
 每个案例、每种配置导出一张图，同一坐标系画模拟原型与离散滤波器。
 
-用法: python qwqdsp/labs/ivantsovy/exp_magnitude.py
+用法: python qwqdsp/labs/match_filter/ivantsovy/exp_magnitude.py
 产物: output/*.png
 """
 from __future__ import annotations
