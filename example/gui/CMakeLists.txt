@@ -10,6 +10,7 @@ if(QWQDSP_USE_RAYLIB)
     add_qwqdsp_gui_example(filter_designers filter_designers.cpp NO_MINIAUDIO)
 
     add_subdirectory(audiofx)
+    add_subdirectory(basicfx)
     add_subdirectory(spectral)
     add_subdirectory(synth)
     add_subdirectory(voicing)
