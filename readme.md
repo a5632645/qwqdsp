@@ -1,4 +1,3 @@
-
 # qwqdsp
 
 存储我曾经使用过的东西（重复造轮子！），为了防止每次都要去仓库找代码复制，将它们全部打包到一起
@@ -8,8 +7,6 @@
 
 > 贡献  
 > 很乐意有人提交pull request（如果有的话就好）  
-
----
 
 ## 📦 依赖 (Dependencies)
 
@@ -24,4 +21,15 @@
 | **raylib** | `QWQDSP_USE_RAYLIB=ON` | 构建 raylib 依赖的 GUI example（`example/gui`）与 `labs/playing` 实验；raylib 由外部提供 |
 | **matplot++** | `QWQDSP_USE_MATPLOT=ON` | 无头 example 直接出图（如 `example/offline/adaptive`） |
 
----
+## files
+
+- cmake
+- example: 可运行的示例程序，不一定包含qwqdsp的头文件，分为gui和非gui(offline)
+- include: 库里所有实现算法的类，纯头文件
+- labs: 用于探索各种各样的dsp算法
+- license: 引用仓库的许可证
+- notebooks: 用于探索各种各样dsp算法，ipynb版本
+- support
+- tests: 关于各种库实现的测试项目
+- tools: 用于生成算法依赖的系数
+- work_dir: 音频资源的存储地点

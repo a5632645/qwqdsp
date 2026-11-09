@@ -29,6 +29,8 @@ static std::atomic<int> g_order{kDefaultOrder};
 static std::atomic<float> g_mix{1.0f};
 static std::atomic<float> g_noise_mix{0.1f};
 static std::atomic<float> g_voicing_threshold{0.6f};
+static std::atomic<float> g_pitch_offset_semitones{0.0f};
+static std::atomic<float> g_effort{1.0f};
 static std::atomic<float> g_f0_hz{0.0f};
 static std::atomic<float> g_voicing{0.0f};
 static std::atomic<float> g_input_peak{0.0f};
@@ -65,7 +67,8 @@ extern "C" void MaCallback(ma_device* device, void* output_buffer, const void* i
     const auto stats = g_vocoder.Process(
         input, output, frame_count, g_order.load(std::memory_order_relaxed),
         g_mix.load(std::memory_order_relaxed), g_noise_mix.load(std::memory_order_relaxed),
-        g_voicing_threshold.load(std::memory_order_relaxed));
+        g_voicing_threshold.load(std::memory_order_relaxed),
+        g_pitch_offset_semitones.load(std::memory_order_relaxed), g_effort.load(std::memory_order_relaxed));
 
     g_f0_hz.store(stats.f0_hz, std::memory_order_relaxed);
     g_voicing.store(stats.voicing, std::memory_order_relaxed);
@@ -138,27 +141,16 @@ static void DrawMeter(int x, int y, int width, float value, const char* label, C
  * @brief 绘制波形面板与清浊音、基频状态
  * @param[in] input_view 最近的输入波形
  * @param[in] output_view 最近的输出波形
- * @param[in] audio_running 音频设备是否成功启动
  */
 static void DrawPanel(const std::array<float, kDisplaySamples>& input_view,
-                      const std::array<float, kDisplaySamples>& output_view, bool audio_running) {
+                      const std::array<float, kDisplaySamples>& output_view) {
     static constexpr Color kBackground{18, 20, 23, 255};
-    static constexpr Color kPanel{24, 26, 29, 255};
     static constexpr Color kText{232, 233, 235, 255};
     static constexpr Color kMuted{126, 132, 139, 255};
     static constexpr Color kAccent{76, 201, 151, 255};
-    static constexpr Color kWarning{225, 172, 74, 255};
     static constexpr Color kInputWave{92, 132, 178, 255};
 
     ClearBackground(kBackground);
-    DrawRectangle(0, 0, kWindowWidth, 72, kPanel);
-    DrawRectangle(0, 71, kWindowWidth, 1, Color{48, 52, 57, 255});
-    DrawText("LPC VOCODER", 24, 18, 25, kText);
-    DrawText("BURG ANALYSIS / ROSENBERG + MIXED EXCITATION", 25, 48, 10, kMuted);
-
-    const Color status_color = audio_running ? kAccent : kWarning;
-    DrawCircle(500, 30, 5.0f, status_color);
-    DrawText(audio_running ? "AUDIO ONLINE" : "AUDIO OFFLINE", 513, 24, 12, status_color);
 
     const float f0 = g_f0_hz.load(std::memory_order_relaxed);
     const float voicing = g_voicing.load(std::memory_order_relaxed);
@@ -210,12 +202,12 @@ int main() {
     g_vocoder.Init(kSampleRate);
 
     Knob order_knob;
-    order_knob.set_bound(20, 90, 136, 132)
+    order_knob.set_bound(24, 90, 92, 132)
         .set_title("LPC Order")
         .set_range(8.0f, 80.0f, 1.0f, static_cast<float>(kDefaultOrder))
         .set_value(static_cast<float>(kDefaultOrder))
         .set_sensitivity(2)
-        .set_name_font_size(17)
+        .set_name_font_size(12)
         .set_number_font_size(13)
         .set_fore_color(Color{235, 235, 238, 255})
         .set_bg_color(Color{24, 26, 29, 255});
@@ -226,12 +218,12 @@ int main() {
     g_order.store(static_cast<int>(std::lround(order_knob.get_value())), std::memory_order_relaxed);
 
     Knob balance_knob;
-    balance_knob.set_bound(168, 90, 136, 132)
-        .set_title("Pulse / Noise")
-        .set_range(0.0f, 1.0f, 0.01f, 0.1f)
-        .set_value(0.1f)
+    balance_knob.set_bound(124, 90, 92, 132)
+        .set_title("Pulse/Noise")
+        .set_range(0.0f, 1.0f, 0.01f, 0.01f)
+        .set_value(0.01f)
         .set_sensitivity(2)
-        .set_name_font_size(17)
+        .set_name_font_size(12)
         .set_number_font_size(13)
         .set_fore_color(Color{235, 235, 238, 255})
         .set_bg_color(Color{24, 26, 29, 255});
@@ -239,13 +231,27 @@ int main() {
     balance_knob.on_value_change = [](float value) { g_noise_mix.store(value, std::memory_order_relaxed); };
     g_noise_mix.store(balance_knob.get_value(), std::memory_order_relaxed);
 
+    Knob effort_knob;
+    effort_knob.set_bound(224, 90, 92, 132)
+        .set_title("Effort")
+        .set_range(0.5f, 2.7f, 0.01f, 0.6f)
+        .set_value(0.6f)
+        .set_sensitivity(2)
+        .set_name_font_size(12)
+        .set_number_font_size(13)
+        .set_fore_color(Color{235, 235, 238, 255})
+        .set_bg_color(Color{24, 26, 29, 255});
+    effort_knob.value_to_text_function = [](float value) { return std::format("Rd {:.2f}", value); };
+    effort_knob.on_value_change = [](float value) { g_effort.store(value, std::memory_order_relaxed); };
+    g_effort.store(effort_knob.get_value(), std::memory_order_relaxed);
+
     Knob threshold_knob;
-    threshold_knob.set_bound(316, 90, 136, 132)
-        .set_title("Voicing Thresh")
+    threshold_knob.set_bound(324, 90, 92, 132)
+        .set_title("Voicing")
         .set_range(0.1f, 0.9f, 0.01f, 0.6f)
         .set_value(0.6f)
         .set_sensitivity(2)
-        .set_name_font_size(17)
+        .set_name_font_size(12)
         .set_number_font_size(13)
         .set_fore_color(Color{235, 235, 238, 255})
         .set_bg_color(Color{24, 26, 29, 255});
@@ -253,13 +259,27 @@ int main() {
     threshold_knob.on_value_change = [](float value) { g_voicing_threshold.store(value, std::memory_order_relaxed); };
     g_voicing_threshold.store(threshold_knob.get_value(), std::memory_order_relaxed);
 
+    Knob pitch_knob;
+    pitch_knob.set_bound(424, 90, 92, 132)
+        .set_title("Pitch Shift")
+        .set_range(-24.0f, 24.0f, 1.0f, 0.0f)
+        .set_value(0.0f)
+        .set_sensitivity(2)
+        .set_name_font_size(12)
+        .set_number_font_size(13)
+        .set_fore_color(Color{235, 235, 238, 255})
+        .set_bg_color(Color{24, 26, 29, 255});
+    pitch_knob.value_to_text_function = [](float value) { return std::format("{:+.0f} st", value); };
+    pitch_knob.on_value_change = [](float value) { g_pitch_offset_semitones.store(value, std::memory_order_relaxed); };
+    g_pitch_offset_semitones.store(pitch_knob.get_value(), std::memory_order_relaxed);
+
     Knob mix_knob;
-    mix_knob.set_bound(464, 90, 136, 132)
+    mix_knob.set_bound(524, 90, 92, 132)
         .set_title("Mix")
         .set_range(0.0f, 1.0f, 0.01f, 1.0f)
         .set_value(1.0f)
         .set_sensitivity(2)
-        .set_name_font_size(17)
+        .set_name_font_size(12)
         .set_number_font_size(13)
         .set_fore_color(Color{235, 235, 238, 255})
         .set_bg_color(Color{24, 26, 29, 255});
@@ -299,10 +319,12 @@ int main() {
         }
 
         BeginDrawing();
-        DrawPanel(input_view, output_view, audio_running);
+        DrawPanel(input_view, output_view);
         order_knob.display();
         balance_knob.display();
+        effort_knob.display();
         threshold_knob.display();
+        pitch_knob.display();
         mix_knob.display();
         EndDrawing();
     }
