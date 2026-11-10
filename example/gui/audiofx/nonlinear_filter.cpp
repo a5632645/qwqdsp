@@ -15,7 +15,7 @@
 #include "qwqdsp/oscillator/polyblep.hpp"
 
 // ------------------------------------------------------------
-// copy filter implement
+// copy filter implement (used by nonlinear filter)
 // ------------------------------------------------------------
 
 static float Nonlinear(float x) noexcept;
@@ -480,7 +480,7 @@ static constexpr std::array<float, 65> kHalfbandCoeffs = {
 };
 
 int main(void) {
-    InitWindow(kWidth, kHeight, "saw filter");
+    InitWindow(kWidth, kHeight, "nonlinear filter");
 
     InitAudioDevice();
     SetAudioStreamBufferSizeDefault(512);
