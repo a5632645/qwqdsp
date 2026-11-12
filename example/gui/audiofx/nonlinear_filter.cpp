@@ -234,6 +234,94 @@ private:
     float s1_{};
     float s2_{};
 };
+
+/**
+ * NI Massive "Scream": 低通滤波器 + 内部饱和反馈.
+ * 反馈路径把低通输出放大后送进一个高通, 饱和后再与输入相加, 形成强烈的谐波和共振峰.
+ * 参考开源复刻 https://github.com/Cure-Audio/Scream
+ *  - 低通固定 Q = 1/sqrt(2)
+ *  - 高通 Q 随 resonance 从 1/sqrt(2) 变到 sqrt(2)
+ *  - 反馈增益随 resonance 从 -12dB 变到 +12dB
+ */
+class Scream {
+public:
+    void Reset() noexcept {
+        lp_ic1_ = 0;
+        lp_ic2_ = 0;
+        hp_ic1_ = 0;
+        hp_ic2_ = 0;
+        feedback_ = 0;
+    }
+
+    /**
+     * @param lp_w 低通截止频率, [0, pi]
+     * @param hp_w 反馈路径高通截止频率, [0, pi]
+     * @param res  [0,1]
+     */
+    void Set(float lp_w, float hp_w, float res) noexcept {
+        constexpr float kSqrt2 = std::numbers::sqrt2_v<float>;
+        float const lp_q = kSqrt2 * 0.5f;
+        float const hp_q = lp_q + res * (kSqrt2 - lp_q);
+        float const lp_k = 1.0f / lp_q;
+        float const hp_k = 1.0f / hp_q;
+
+        float const lp_g = std::tan(lp_w * 0.5f);
+        float const hp_g = std::tan(hp_w * 0.5f);
+
+        lp_a1_ = 1.0f / (1.0f + lp_g * (lp_g + lp_k));
+        lp_a2_ = lp_g * lp_a1_;
+        lp_a3_ = lp_g * lp_a2_;
+
+        hp_a1_ = 1.0f / (1.0f + hp_g * (hp_g + hp_k));
+        hp_a2_ = hp_g * hp_a1_;
+        hp_a3_ = hp_g * hp_a2_;
+        hp_k_ = hp_k;
+
+        feedback_gain_ = std::pow(10.0f, (res * 24.0f - 12.0f) / 20.0f);
+    }
+
+    float Tick(float x) noexcept {
+        // 前馈: 输入 + 反馈, 饱和后过低通
+        float const u = std::tanh(x + feedback_);
+        float const y = ProcessLp(u);
+
+        // 反馈: 低通输出放大 -> 高通 -> 饱和
+        feedback_ = std::tanh(ProcessHp(y * feedback_gain_));
+        return y;
+    }
+private:
+    float ProcessLp(float x) noexcept {
+        float const v3 = x - lp_ic2_;
+        float const v1 = lp_a1_ * lp_ic1_ + lp_a2_ * v3;
+        float const v2 = lp_ic2_ + lp_a2_ * lp_ic1_ + lp_a3_ * v3;
+        lp_ic1_ = 2.0f * v1 - lp_ic1_;
+        lp_ic2_ = 2.0f * v2 - lp_ic2_;
+        return v2;
+    }
+
+    float ProcessHp(float x) noexcept {
+        float const v3 = x - hp_ic2_;
+        float const v1 = hp_a1_ * hp_ic1_ + hp_a2_ * v3;
+        float const v2 = hp_ic2_ + hp_a2_ * hp_ic1_ + hp_a3_ * v3;
+        hp_ic1_ = 2.0f * v1 - hp_ic1_;
+        hp_ic2_ = 2.0f * v2 - hp_ic2_;
+        return x - hp_k_ * v1 - v2;
+    }
+
+    float lp_a1_{};
+    float lp_a2_{};
+    float lp_a3_{};
+    float hp_a1_{};
+    float hp_a2_{};
+    float hp_a3_{};
+    float hp_k_{};
+    float lp_ic1_{};
+    float lp_ic2_{};
+    float hp_ic1_{};
+    float hp_ic2_{};
+    float feedback_{};
+    float feedback_gain_{};
+};
 } // namespace qwqdsp_filter
 
 // ------------------------------------------------------------
@@ -292,9 +380,10 @@ enum FilterType {
     Ladder,
     Ladder8Pole,
     SallenKey,
+    Scream,
     NumFilterTypes
 };
-static constexpr const char* kFilterNames[]{"svf tpt", "ladder", "ladder 8p", "sallen key"};
+static constexpr const char* kFilterNames[]{"svf tpt", "ladder", "ladder 8p", "sallen key", "scream"};
 
 enum OutputMode {
     Lowpass = 0,
@@ -313,12 +402,14 @@ static std::atomic<float> cutoff_pitch{72.0f};
 static std::atomic<float> resonance{0.2f};
 static std::atomic<float> output_gain{0.35f};
 static std::atomic<float> osc_level{0.5f};
+static std::atomic<float> scream_amount{0.5f};
 
 static SawOsc saw;
 static qwqdsp_filter::SvfTPT svf_tpt;
 static qwqdsp_filter::Ladder ladder;
 static qwqdsp_filter::Ladder8Pole ladder_8pole;
 static qwqdsp_filter::TransposeSallenKey sallen_key;
+static qwqdsp_filter::Scream scream;
 
 static qwqdsp_fx::Oversample g_oversample;
 
@@ -338,7 +429,7 @@ static OutputMode effectiveOutputMode(FilterType type, OutputMode mode) noexcept
     return isOutputModeAvailable(type, mode) ? mode : OutputMode::Lowpass;
 }
 
-static void updateFilterCoeff(FilterType type, float w, float res) noexcept {
+static void updateFilterCoeff(FilterType type, float w, float res, float scream_amt) noexcept {
     switch (type) {
         case FilterType::SvfTPT:
             svf_tpt.SetCoeffSVF(w, scale(res, 1.0f, -0.5f));
@@ -352,6 +443,15 @@ static void updateFilterCoeff(FilterType type, float w, float res) noexcept {
         case FilterType::SallenKey:
             sallen_key.Set(w, scale(res, 0.0f, 2.6f));
             break;
+        case FilterType::Scream: {
+            // scream=0 时高通在低通下方约 11 个八度, scream=1 时两者重合
+            constexpr float kScreamOctaveSpan = 131.5892f / 12.0f;
+            float const lp_freq = w * kFs / kPi;
+            float const ratio = std::exp2((scream_amt - 1.0f) * kScreamOctaveSpan);
+            float const hp_freq = std::clamp(lp_freq * ratio, 5.0f, kFs * 0.9f);
+            scream.Set(w, qwqdsp::convert::Freq2W(hp_freq, kFs * 2), res);
+            break;
+        }
         default:
             break;
     }
@@ -389,6 +489,8 @@ static float tickFilter(FilterType type, OutputMode mode, float x) noexcept {
             }
             return output.lp2;
         }
+        case FilterType::Scream:
+            return scream.Tick(x);
         default:
             return 0.0f;
     }
@@ -405,6 +507,7 @@ static void audioInputCallback(void* _buffer, unsigned int frames) {
     auto const mode = output_mode.load(std::memory_order_relaxed);
     auto const gain = output_gain.load(std::memory_order_relaxed);
     auto const osc_lvl = osc_level.load(std::memory_order_relaxed);
+    auto const scream_lvl = scream_amount.load(std::memory_order_relaxed);
 
     // 2x 超采样: 振荡器与滤波器以 96kHz 运行
     saw.SetFreq(qwqdsp::convert::Pitch2Freq(pitch.load(std::memory_order_relaxed)), kFs * 2);
@@ -412,7 +515,7 @@ static void audioInputCallback(void* _buffer, unsigned int frames) {
         float const freq = qwqdsp::convert::Pitch2Freq(cutoff_pitch.load(std::memory_order_relaxed));
         float const safe_freq = std::clamp(freq, 10.0f, kFs * 2 * 0.45f);
         float const w = qwqdsp::convert::Freq2W(safe_freq, kFs * 2);
-        updateFilterCoeff(type, w, resonance.load(std::memory_order_relaxed));
+        updateFilterCoeff(type, w, resonance.load(std::memory_order_relaxed), scream_lvl);
     }
 
     static std::vector<float> up;
@@ -515,6 +618,12 @@ int main(void) {
     resonance_knob.set_range(0.0f, 1.0f, 0.001f, resonance.load(std::memory_order_relaxed));
 
     bound.x += bound.width;
+    Knob scream_knob;
+    scream_knob.on_value_change = [](float value) { scream_amount.store(value, std::memory_order_relaxed); };
+    setupKnob(scream_knob, bound, "scream");
+    scream_knob.set_range(0.0f, 1.0f, 0.001f, scream_amount.load(std::memory_order_relaxed));
+
+    bound.x += bound.width;
     Knob output_knob;
     output_knob.on_value_change = [](float value) { output_gain.store(value, std::memory_order_relaxed); };
     setupKnob(output_knob, bound, "output");
@@ -562,6 +671,7 @@ int main(void) {
             pitch_knob.display();
             cutoff_knob.display();
             resonance_knob.display();
+            scream_knob.display();
             output_knob.display();
             osc_level_knob.display();
             drive_knob.display();
