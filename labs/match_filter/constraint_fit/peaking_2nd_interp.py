@@ -13,6 +13,11 @@ Nyquist 不约束（远离钟形），其余 3 个自由度由自由节点插值
 P(0)=1 代入（``n0 = 1``），对剩余 4 个系数解 4×4，并按节点几何均值缩放
 x，避免低 fc 时条件数退化。
 
+3 个自由节点把 [0, 1] 切成 4 段；BRASIL 迭代调整节点位置，使 4 段的
+max|ΔdB| 等幅交替。``x_fc`` 是段内的强制零点，不单独切段——它是中心
+增益约束的代价，不是一段波纹。每步先按相对偏差给出目标段长，再回溯
+步长，只接受让区间极值比严格下降的候选，避免最优解附近振荡。
+
 结果（fs = 48 kHz，max|ΔdB|）：全档可解，0–0.18；4 kHz 从仓库的 0.30
 降到 0.13。
 
@@ -24,9 +29,10 @@ from pathlib import Path
 import sys
 
 import numpy as np
-from scipy.optimize import minimize
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "best_pole_fit"))
+import brasil as BRASIL  # noqa: E402
 import power_match as PM  # noqa: E402
 
 PI = PM.PI
@@ -103,50 +109,41 @@ def error_db(match, x, fc, Q, db, fs=FS):
 
 
 def design(fc, Q, db, fs=FS):
-    wc = 2.0 * PI * fc / fs
-    xc = np.sin(wc / 2.0) ** 2
-    wgrid = np.linspace(0.0, PI, 4001)
-    xgrid = np.sin(wgrid / 2.0) ** 2
+    xc = np.sin(PI * fc / fs) ** 2
+    xgrid = np.sin(np.linspace(0.0, PI, 4001) / 2.0) ** 2
 
-    def to_nodes(y):
-        x = 1.0 / (1.0 + np.exp(-np.clip(np.asarray(y, float), -30.0, 30.0)))
-        return np.sort(np.clip(x, 1e-9, 1.0 - 1e-9))
-
-    def objective(y):
-        nodes = to_nodes(y)
-        if np.min(np.diff(nodes)) < 1e-9 or np.any(np.abs(nodes - xc) < 1e-12):
-            return 1e3
+    def measure(nodes):
+        if np.any(np.abs(nodes - xc) < 1e-12):
+            return None
         match, _ = _match(fc, Q, db, nodes, fs)
         if match is None:
-            return 1e3
-        return float(np.max(np.abs(error_db(match, xgrid, fc, Q, db, fs))))
+            return None
+        return BRASIL.segment_maxima(
+            xgrid, np.abs(error_db(match, xgrid, fc, Q, db, fs)), nodes)
 
     near = max(2.0 * xc, 1e-8)
     sets = ((0.05, 0.4, 0.9), (0.1, 0.5, 0.95), (0.01, 0.2, 0.7),
             (0.3, 0.7, 0.99), (0.5, 0.85, 0.99),
             (near, 0.1, 0.6), (near, 0.5, 0.95),
             (max(1.5 * xc, 1e-8), 0.01, 0.3))
-    starts = []
-    for t in sets:
-        t = tuple(float(np.clip(v, 1e-12, 1.0 - 1e-9)) for v in t)
-        if np.any(np.abs(np.array(t) - xc) < 1e-9):
-            continue
-        starts.append([np.log(v / (1.0 - v)) for v in t])
-
     best = (np.inf, None)
-    for y0 in starts:
-        res = minimize(lambda y: objective(y), np.array(y0, float), method="Nelder-Mead",
-                       options={"xatol": 1e-9, "fatol": 1e-11,
-                                "maxiter": 600, "maxfev": 600})
-        if res.fun < best[0]:
-            best = (float(res.fun), to_nodes(res.x))
-    if best[1] is None or best[0] >= 1e3:
+    for t in sets:
+        nodes0 = np.sort(np.clip(np.asarray(t, dtype=float),
+                                 1e-9, 1.0 - 1e-9))
+        if (np.min(np.diff(nodes0)) <= 1e-12
+                or np.any(np.abs(nodes0 - xc) < 1e-12)):
+            continue
+        nodes, _, err = BRASIL.equalize(nodes0, measure)
+        if nodes is not None and err < best[0]:
+            best = (err, nodes)
+    if best[1] is None:
         return None, None, np.inf
-    match, why = _match(fc, Q, db, best[1], fs)
+    match, _ = _match(fc, Q, db, best[1], fs)
     if match is None:
         return None, None, np.inf
     xf = np.sin(np.linspace(0.0, PI, 40001) / 2.0) ** 2
-    return match, best[1], float(np.max(np.abs(error_db(match, xf, fc, Q, db, fs))))
+    return match, best[1], float(np.max(np.abs(error_db(
+        match, xf, fc, Q, db, fs))))
 
 
 def main():

@@ -1,4 +1,4 @@
-"""二阶 high shelf：结构约束 + 自由节点插值。
+"""二阶 high shelf：结构约束 + BRASIL 区间等化。
 
 模拟功率（``A = 10^(db/40)``，``r = w/wc``）
 
@@ -9,12 +9,13 @@
 
     P(0) = 1
 
-fc 与 Nyquist 都不再硬约束（分别是过渡点与高频平台），其余 4 个自由度由
-自由节点插值。低 fc 时 3 个节点无法同时描述过渡区的多个邻近零点和高频
-平台；去掉 ``P(pi)`` 换成第 4 个节点后低 fc 才解得动。
+fc 与 Nyquist 都不再硬约束（分别是过渡点与高频平台），其余 4 个自由节点
+把 [0, 1] 切成 5 段，BRASIL 调整节点位置使 5 段 max|ΔdB| 等幅。低 fc 时
+3 个节点无法同时描述过渡区的多个邻近零点和高频平台；去掉 ``P(pi)`` 换成
+第 4 个节点后低 fc 才解得动。
 
-结果（fs = 48 kHz，max|ΔdB|）：0–0.43；23.9 kHz / Q=2 / +12 dB 从仓库的
-2.99 dB 降到 0.43 dB。
+结果（fs = 48 kHz，max|ΔdB|）：0–0.358；23.9 kHz / Q=2 / +12 dB 从仓库
+的 2.99 dB 降到 0.358 dB。
 
 运行：``python qwqdsp/labs/match_filter/constraint_fit/highshelf_2nd_interp.py``
 """
@@ -24,9 +25,10 @@ from pathlib import Path
 import sys
 
 import numpy as np
-from scipy.optimize import minimize
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "best_pole_fit"))
+import brasil as BRASIL  # noqa: E402
 import power_match as PM  # noqa: E402
 
 PI = PM.PI
@@ -101,51 +103,45 @@ def error_db(match, x, fc, Q, db, fs=FS):
 
 
 def design(fc, Q, db, fs=FS):
-    wgrid = np.linspace(0.0, PI, 4001)
-    xgrid = np.sin(wgrid / 2.0) ** 2
+    xgrid = np.sin(np.linspace(0.0, PI, 4001) / 2.0) ** 2
 
-    def to_nodes(y):
-        x = 1.0 / (1.0 + np.exp(-np.clip(np.asarray(y, float), -30.0, 30.0)))
-        return np.sort(np.clip(x, 1e-9, 1.0 - 1e-9))
-
-    def objective(y):
-        nodes = to_nodes(y)
-        if np.min(np.diff(nodes)) < 1e-9 or np.any(nodes > 1.0 - 1e-8):
-            return 1e3
+    def measure(nodes):
         match, _ = _match(fc, Q, db, nodes, fs)
         if match is None:
-            return 1e3
-        return float(np.max(np.abs(error_db(match, xgrid, fc, Q, db, fs))))
+            return None
+        return BRASIL.segment_maxima(
+            xgrid, np.abs(error_db(match, xgrid, fc, Q, db, fs)), nodes)
 
     wc = 2.0 * PI * fc / fs
     xc = np.sin(wc / 2.0) ** 2
     sets = ((max(2.0 * xc, 1e-12), max(10.0 * xc, 1e-10), 0.1, 0.7),
             (max(2.0 * xc, 1e-12), 0.001, 0.1, 0.6),
             (max(2.0 * xc, 1e-12), max(10.0 * xc, 1e-10), 0.3, 0.9),
-            (0.05, 0.4, 0.9, 0.99), (0.01, 0.2, 0.7, 0.98))
-    starts = []
-    for t in sets:
-        t = tuple(float(np.clip(v, 1e-12, 1.0 - 1e-9)) for v in t)
-        starts.append([np.log(v / (1.0 - v)) for v in t])
-
+            (0.05, 0.4, 0.9, 0.99), (0.01, 0.2, 0.7, 0.98),
+            (0.05, 0.3, 0.95, 0.999),
+            (0.5 * xc, xc, 2.0 * xc, 0.85),
+            (0.01 * xc, 0.1 * xc, 0.7 * xc, 0.75),
+            (0.05 * xc, 0.2 * xc, xc, 0.8))
     best = (np.inf, None)
-    for y0 in starts:
-        res = minimize(lambda y: objective(y), np.array(y0, float), method="Nelder-Mead",
-                       options={"xatol": 1e-9, "fatol": 1e-11,
-                                "maxiter": 600, "maxfev": 600})
-        if res.fun < best[0]:
-            best = (float(res.fun), to_nodes(res.x))
-    if best[1] is None or best[0] >= 1e3:
+    for t in sets:
+        nodes0 = np.sort(np.clip(np.asarray(t, float), 1e-12, 1.0 - 1e-9))
+        if np.min(np.diff(nodes0)) <= 1e-12:
+            continue
+        nodes, _, err = BRASIL.equalize(nodes0, measure)
+        if nodes is not None and err < best[0]:
+            best = (err, nodes)
+    if best[1] is None:
         return None, None, np.inf
-    match, why = _match(fc, Q, db, best[1], fs)
+    match, _ = _match(fc, Q, db, best[1], fs)
     if match is None:
         return None, None, np.inf
     xf = np.sin(np.linspace(0.0, PI, 40001) / 2.0) ** 2
-    return match, best[1], float(np.max(np.abs(error_db(match, xf, fc, Q, db, fs))))
+    return match, best[1], float(np.max(np.abs(error_db(
+        match, xf, fc, Q, db, fs))))
 
 
 def main():
-    print(f"fs = {FS:g} Hz；二阶 high shelf：结构约束 + 自由节点")
+    print(f"fs = {FS:g} Hz；二阶 high shelf：结构约束 + BRASIL")
     print(f"{'':>14}" + "".join(f"{fc:>12.1f}" for fc in FC_LIST))
     rows = {}
     for Q in Q_LIST:

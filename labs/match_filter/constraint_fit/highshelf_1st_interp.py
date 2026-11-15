@@ -1,4 +1,4 @@
-"""一阶 high shelf：结构约束 + 自由节点插值。
+"""一阶 high shelf：结构约束 + BRASIL 区间等化。
 
 模拟功率（``g = 10^(db/20)``，``r = w/wc``）
 
@@ -8,8 +8,9 @@
 
     P(0) = 1,   P(pi) = Pa(pi)   （直流与高频增益）
 
-fc 不作为硬约束，其余 3 个自由度由自由节点插值。结果（fs = 48 kHz，
-max|ΔdB|）：0–0.052，全部档均可解。
+fc 不作为硬约束，其余 3 个自由节点把 [0, 1] 切成 4 段，BRASIL 调整
+节点位置使 4 段 max|ΔdB| 等幅。结果（fs = 48 kHz，max|ΔdB|）：
+0–0.052，全部档均可解。
 
 运行：``python qwqdsp/labs/match_filter/constraint_fit/highshelf_1st_interp.py``
 """
@@ -19,9 +20,10 @@ from pathlib import Path
 import sys
 
 import numpy as np
-from scipy.optimize import minimize
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "best_pole_fit"))
+import brasil as BRASIL  # noqa: E402
 import power_match as PM  # noqa: E402
 
 PI = PM.PI
@@ -94,47 +96,37 @@ def error_db(match, x, fc, db, fs=FS):
 
 
 def design(fc, db, fs=FS):
-    wgrid = np.linspace(0.0, PI, 4001)
-    xgrid = np.sin(wgrid / 2.0) ** 2
+    xgrid = np.sin(np.linspace(0.0, PI, 4001) / 2.0) ** 2
 
-    def to_nodes(y):
-        x = 1.0 / (1.0 + np.exp(-np.clip(np.asarray(y, float), -30.0, 30.0)))
-        return np.sort(np.clip(x, 1e-9, 1.0 - 1e-9))
-
-    def objective(y):
-        nodes = to_nodes(y)
-        if np.min(np.diff(nodes)) < 1e-9:
-            return 1e3
+    def measure(nodes):
         match, _ = _match(fc, db, nodes, fs)
         if match is None:
-            return 1e3
-        return float(np.max(np.abs(error_db(match, xgrid, fc, db, fs))))
+            return None
+        return BRASIL.segment_maxima(
+            xgrid, np.abs(error_db(match, xgrid, fc, db, fs)), nodes)
 
     sets = ((0.05, 0.4, 0.9), (0.1, 0.5, 0.95), (0.01, 0.2, 0.7),
             (0.3, 0.7, 0.99), (0.5, 0.85, 0.99))
-    starts = []
-    for t in sets:
-        t = tuple(float(np.clip(v, 1e-4, 1.0 - 1e-4)) for v in t)
-        starts.append([np.log(v / (1.0 - v)) for v in t])
-
     best = (np.inf, None)
-    for y0 in starts:
-        res = minimize(lambda y: objective(y), np.array(y0, float), method="Nelder-Mead",
-                       options={"xatol": 1e-9, "fatol": 1e-11,
-                                "maxiter": 600, "maxfev": 600})
-        if res.fun < best[0]:
-            best = (float(res.fun), to_nodes(res.x))
-    if best[1] is None or best[0] >= 1e3:
+    for t in sets:
+        nodes0 = np.sort(np.clip(np.asarray(t, float), 1e-4, 1.0 - 1e-4))
+        if np.min(np.diff(nodes0)) <= 1e-12:
+            continue
+        nodes, _, err = BRASIL.equalize(nodes0, measure)
+        if nodes is not None and err < best[0]:
+            best = (err, nodes)
+    if best[1] is None:
         return None, None, np.inf
-    match, why = _match(fc, db, best[1], fs)
+    match, _ = _match(fc, db, best[1], fs)
     if match is None:
         return None, None, np.inf
     xf = np.sin(np.linspace(0.0, PI, 40001) / 2.0) ** 2
-    return match, best[1], float(np.max(np.abs(error_db(match, xf, fc, db, fs))))
+    return match, best[1], float(np.max(np.abs(error_db(
+        match, xf, fc, db, fs))))
 
 
 def main():
-    print(f"fs = {FS:g} Hz；一阶 high shelf：结构约束 + 自由节点")
+    print(f"fs = {FS:g} Hz；一阶 high shelf：结构约束 + BRASIL")
     print(f"{'':>10}" + "".join(f"{fc:>12.1f}" for fc in FC_LIST))
     rows = {}
     for db in DB_LIST:
