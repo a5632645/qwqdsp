@@ -157,4 +157,3 @@ BRASIL（Hofreither, RICAM 2020-37）把这条定理变成迭代算法：反复�
     python qwqdsp/labs/match_filter/constraint_fit/peaking_2nd_interp.py
     python qwqdsp/labs/match_filter/constraint_fit/highshelf_2nd_interp.py
     python qwqdsp/labs/match_filter/constraint_fit/highshelf_1st_interp.py
-    python qwqdsp/labs/match_filter/constraint_fit/lowpass_1st.py
