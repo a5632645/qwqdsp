@@ -1,4 +1,4 @@
-# constraint_fit — 一/二阶滤波器：硬约束与有理插值
+# constraint_fit — 一/二/三阶滤波器：硬约束与有理插值
 
 数字二阶节的功率函数在
 
@@ -139,6 +139,37 @@ BRASIL（Hofreither, RICAM 2020-37）把这条定理变成迭代算法：反复�
 平台，必然顾此失彼；二阶 shelf 去掉 `P(π)`、换成 4 个自由节点后，低 fc
 全部可解（0.0000–0.0001）。
 
+## 二阶 notch
+
+缺口要求 `P(x_fc)=0`；功率非负意味着这个零点是二重的。于是分子被
+`P(0)=1` 完全定死为 `(1-x/xc)^2`，只剩分母的 2 个自由度：2 个自由
+节点 / 3 段，BRASIL 等化 3 段极值。缺口处的 0/0 取二阶曲率比极限。
+
+| Q \ fc | 20 | 117.6 | 691.4 | 4065 | 23900 |
+|---:|---:|---:|---:|---:|---:|
+| 0.5 | 0.0000 | 0.0001 | 0.0043 | 0.1029 | 1.6954 |
+| 0.707 | 0.0000 | 0.0001 | 0.0022 | 0.0615 | 1.6360 |
+| 1 | 0.0000 | 0.0000 | 0.0011 | 0.0353 | 1.5767 |
+| 2 | 0.0000 | 0.0000 | 0.0003 | 0.0113 | 1.4671 |
+
+fc ≤ 4 kHz 为 0.0000–0.103；23.9 kHz 为 1.47–1.70（best_pole_fit
+的 notch 为 1.64–1.77）。
+
+### 三阶 notch
+
+分子增加 `(1+c x)`，分母升到三次；4 个自由参数 / 5 段。`c >= -1`
+保证分子非负；缺口二重零点与 `P(0)=1` 仍精确。
+
+| Q \ fc | 20 | 117.6 | 691.4 | 4065 | 23900 |
+|---:|---:|---:|---:|---:|---:|
+| 0.5 | 0.0000 | 0.0000 | 0.0005 | 0.0136 | 0.5959 |
+| 0.707 | 0.0000 | 0.0000 | 0.0003 | 0.0078 | 0.5548 |
+| 1 | 0.0000 | 0.0000 | 0.0001 | 0.0043 | 0.5126 |
+| 2 | 0.0000 | 0.0000 | 0.0000 | 0.0012 | 0.4303 |
+
+fc ≤ 4 kHz 为 0.0000–0.0136；23.9 kHz 为 0.430–0.596。相比二阶版，
+高频档改善约 3 倍。
+
 ## 硬约束法的负结果
 
 固定 `P(0)`、`P(fc)`、`P'(fc)` 后再加两条约束，得到 5 元非线性方程组。
@@ -155,5 +186,7 @@ BRASIL（Hofreither, RICAM 2020-37）把这条定理变成迭代算法：反复�
     python qwqdsp/labs/match_filter/constraint_fit/highpass_2nd_interp.py
     python qwqdsp/labs/match_filter/constraint_fit/bandpass_2nd_interp.py
     python qwqdsp/labs/match_filter/constraint_fit/peaking_2nd_interp.py
+    python qwqdsp/labs/match_filter/constraint_fit/notch_2nd_interp.py
+    python qwqdsp/labs/match_filter/constraint_fit/notch_3rd_interp.py
     python qwqdsp/labs/match_filter/constraint_fit/highshelf_2nd_interp.py
     python qwqdsp/labs/match_filter/constraint_fit/highshelf_1st_interp.py

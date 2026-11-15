@@ -7,7 +7,7 @@
 | `ivantsovy/` | Ivantsov《On the Ideal Bilinear and Biquadratic Digital Filter》§4 的数值验证，以及由它导出的**双点匹配**解（截止/中点 + Nyquist 同时精确）、该变换的**精确频率映射**。15 张图。 |
 | `vicanek/` | Vicanek `match_biquad.hpp` 的移植与对照：脉冲响应不变极点 + 分子拟合，**没有全局映射**、每种类型一条曲线。 |
 | `best_pole_fit/` | Vicanek 功率函数三点匹配（0 / fc / Nyquist）+ 等波纹极点；一阶低通全带峰值 0.094–0.120 dB，一阶高通 1.5e−7–0.213 dB，高 shelf（±6/±12 dB）2.3e−7–0.148 dB，二阶低通（Q=0.5–2）全带 0.07–0.70 dB（≥−60 dB 频段 0.004–0.67），二阶高通（Vicanek 两点，DC+fc）≤0.477 dB（23.9k），同结构 II 1.24–3.27；fc≤4k ≤0.065，二阶带通（归一化峰值 1）全带 0.05–0.97（23.9k 0.05–0.23），II 0.90–5.98；二阶 notch（DC+fc 两点）≤0.103（fc≤4k），23.9k 1.64–1.77，II 34.8–41.3；二阶 peaking（+12/+6/−6/−12 dB × Q=0.5–2，三点）fc≤4k ≤0.30，23.9k 0.04–0.14，同结构 II（DC+fc 两点）0.41–3.57、cut 档最高 12.2；二阶高 shelf（+12/+6/−6/−12 dB × Q=0.5–2，0/fc+斜率）fc≤4k ≤0.107，23.9k 0.07–2.99（+12/Q=2 2.99），II 0.30–13.7（cut 档 11.8–13.7）。 |
-| `constraint_fit/` | 一/二阶低通、高通、带通、peaking、high shelf：结构约束 + 自由节点插值。一阶低通 **0.026–0.080 dB**、高通 **1.1e-7–4.8e-2**；二阶低通 **0.38–0.45**、高通 **0–0.063**、带通 **0.003–0.48**、peaking **0–0.18**、high shelf **0–0.36**。硬约束只保留用途必需项，其余交给自由节点。 |
+| `constraint_fit/` | 一/二阶低通、高通、带通、notch、peaking、high shelf：结构约束 + 自由节点插值。一阶低通 **0.026–0.080 dB**、高通 **1.1e-7–4.8e-2**；二阶低通 **0.38–0.45**、高通 **0–0.063**、带通 **0.003–0.48**、notch 二阶 **0–1.70**、三阶 **0–0.60**、peaking **0–0.18**、high shelf **0–0.36**。硬约束只保留用途必需项，其余交给自由节点。 |
 
 ```bash
 python qwqdsp/labs/match_filter/ivantsovy/run_all.py           # Ivantsov 侧全部自检 + 15 张图
@@ -27,6 +27,8 @@ python qwqdsp/labs/match_filter/constraint_fit/lowpass_2nd_interp.py # 二阶低
 python qwqdsp/labs/match_filter/constraint_fit/highpass_2nd_interp.py # 二阶高通：Q=0.5–2，3 点插值
 python qwqdsp/labs/match_filter/constraint_fit/bandpass_2nd_interp.py # 二阶带通：Q=0.5–2，4 点插值
 python qwqdsp/labs/match_filter/constraint_fit/peaking_2nd_interp.py  # 二阶 peaking：boost×Q
+python qwqdsp/labs/match_filter/constraint_fit/notch_2nd_interp.py    # 二阶 notch：DC+缺口 + BRASIL
+python qwqdsp/labs/match_filter/constraint_fit/notch_3rd_interp.py    # 三阶 notch：DC+缺口 + BRASIL
 python qwqdsp/labs/match_filter/constraint_fit/highshelf_2nd_interp.py # 二阶 high shelf：boost×Q
 python qwqdsp/labs/match_filter/constraint_fit/highshelf_1st_interp.py # 一阶 high shelf：boost
 ```
