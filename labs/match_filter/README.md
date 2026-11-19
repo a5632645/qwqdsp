@@ -2,6 +2,9 @@
 
 各方法一个子目录，代码、结论与运行方式见各自的 README。
 
+- [分式 Remez 硬约束匹配](remez_fit/README.md) 覆盖 `constraint_fit` 的全部滤波器类型。
+- [自由 biquad 曲线拟合](fit/README.md) 包含 BRASIL、分式 Remez 以及 least‑p 对照。
+
 | 目录 | 内容 |
 |---|---|
 | `ivantsovy/` | Ivantsov《On the Ideal Bilinear and Biquadratic Digital Filter》§4 的数值验证，以及由它导出的**双点匹配**解（截止/中点 + Nyquist 同时精确）、该变换的**精确频率映射**。15 张图。 |
