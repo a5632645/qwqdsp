@@ -235,6 +235,175 @@ private:
     float s2_{};
 };
 
+class TransposeSallenKeyTrackingHp {
+public:
+    void Set(float lp_w, float hp_w, float k) noexcept {
+        float const lp_g = std::tan(lp_w * 0.5f);
+        float const hp_g = std::tan(hp_w * 0.5f);
+        lp_coeff_ = lp_g / (1.0f + lp_g);
+        hp_lp_coeff_ = hp_g / (1.0f + hp_g);
+        float const gain = k / (1.0f + hp_g);
+        // 保留代数环分母的余量，避免高 LP 截止频率和低 HP 截止频率下出现奇点。
+        feedback_gain_ = gain / std::max(1.0f, gain * lp_coeff_ / 0.9f);
+        inverse_ = 1.0f / (1.0f - feedback_gain_ * lp_coeff_);
+    }
+
+    auto Tick(float x) noexcept {
+        struct Output {
+            float lp2;
+            float bp2;
+            float hp2;
+        };
+
+        // 反馈取自第一级 LP，经独立的一阶 HP 返回输入。
+        float const lp1_offset = (1.0f - lp_coeff_) * lp1_state_;
+        float const u = Nonlinear((x + feedback_gain_ * (lp1_offset - hp_state_)) * inverse_);
+        float const lp1 = TickLp(u, lp1_state_, lp_coeff_);
+        TickLp(lp1, hp_state_, hp_lp_coeff_);
+        float const lp2 = TickLp(lp1, lp2_state_, lp_coeff_);
+        float const bp2 = lp1 - lp2;
+        float const hp2 = (u - lp1) - bp2;
+        return Output{lp2, bp2, hp2};
+    }
+
+private:
+    static float TickLp(float x, float& state, float coeff) noexcept {
+        float const delta = coeff * (x - state);
+        float const y = state + delta;
+        state = y + delta;
+        return y;
+    }
+
+    float lp_coeff_{};
+    float hp_lp_coeff_{};
+    float feedback_gain_{};
+    float inverse_{};
+    float lp1_state_{};
+    float lp2_state_{};
+    float hp_state_{};
+};
+
+namespace detail {
+struct SallenKey4PoleOutput {
+    float lp4;
+    float bp4;
+    float hp4;
+};
+
+static inline double TptLp(double x, double state, double coeff) noexcept {
+    return state + coeff * (x - state);
+}
+
+static inline double TickTptLp(double x, double& state, double coeff) noexcept {
+    double const y = TptLp(x, state, coeff);
+    state = 2.0 * y - state;
+    return y;
+}
+} // namespace detail
+
+// TODO: looks like that feedback network 1-bp2 and 2-hp2 are not hp_w? 
+class TransposeSallenKey4Pole {
+public:
+    void Set(float w, float zeta) noexcept {
+        double const g = std::tan(static_cast<double>(w) * 0.5);
+        double const t = std::sqrt(1.0 + zeta);
+        bp_gain_ = 4.0 - 2.0 * t;
+        hp_gain_ = -2.0 * (t - 1.0) * (t - 1.0);
+        coeff_ = g / (1.0 + g);
+
+        double const direct = coeff_ * (1.0 - coeff_);
+        inverse_ = 1.0 / (1.0 - bp_gain_ * direct - hp_gain_ * direct * direct);
+    }
+
+    detail::SallenKey4PoleOutput Tick(float x) noexcept {
+        double const lp1_offset = detail::TptLp(0.0, state_[0], coeff_);
+        double const lp2_offset = detail::TptLp(lp1_offset, state_[1], coeff_);
+        double const lp3_offset = detail::TptLp(lp2_offset, state_[2], coeff_);
+        double const lp4_offset = detail::TptLp(lp3_offset, state_[3], coeff_);
+        double const bp_offset = lp1_offset - lp2_offset;
+        double const hp_offset = (lp2_offset - lp3_offset) - (lp3_offset - lp4_offset);
+        double const feedback = bp_gain_ * bp_offset + hp_gain_ * hp_offset;
+        double const u = Nonlinear(static_cast<float>((x + feedback) * inverse_));
+
+        double const lp1 = detail::TickTptLp(u, state_[0], coeff_);
+        double const lp2 = detail::TickTptLp(lp1, state_[1], coeff_);
+        double const lp3 = detail::TickTptLp(lp2, state_[2], coeff_);
+        double const lp4 = detail::TickTptLp(lp3, state_[3], coeff_);
+        double const bp4 = (lp2 - lp3) - (lp3 - lp4);
+        double const hp4 = (u - lp1) - 3.0 * (lp1 - lp2) + (3.0 * (lp2 - lp3) - (lp3 - lp4));
+        return {static_cast<float>(lp4), static_cast<float>(bp4), static_cast<float>(hp4)};
+    }
+
+private:
+    std::array<double, 4> state_{};
+    double bp_gain_{};
+    double hp_gain_{};
+    double coeff_{};
+    double inverse_{};
+};
+
+class TransposeSallenKey4PoleTrackingHp {
+public:
+    void Set(float lp_w, float hp_w, float zeta) noexcept {
+        double const lp_g = std::tan(static_cast<double>(lp_w) * 0.5);
+        double const hp_g = std::tan(static_cast<double>(hp_w) * 0.5);
+        double const hp_ratio = hp_g / lp_g;
+        double const t = std::sqrt(1.0 + zeta);
+        bp_gain_ = 4.0 - 2.0 * t;
+        hp_gain_ = -2.0 * (t - 1.0) * (t - 1.0);
+        lp_coeff_ = lp_g / (1.0 + lp_g);
+        hp_coeff_ = hp_g / (1.0 + hp_g);
+
+        // u = x + k1·BP2(u) + k2·HP2(LP2(u))，用两条支路的直通量解 ZDF。
+        double const bp_direct = hp_coeff_ * (1.0 - hp_coeff_);
+        double const hp_direct = lp_coeff_ * (1.0 - hp_coeff_);
+        inverse_ = 1.0 / (1.0 - bp_gain_ * bp_direct - hp_gain_ * hp_direct * hp_direct);
+
+        hp_mix_ = 1.0 + 2.0 * hp_ratio;
+        hp_ratio_squared_ = hp_ratio * hp_ratio;
+    }
+
+    detail::SallenKey4PoleOutput Tick(float x) noexcept {
+        double const lp1_offset = detail::TptLp(0.0, lp_state_[0], lp_coeff_);
+        double const lp2_offset = detail::TptLp(lp1_offset, lp_state_[1], lp_coeff_);
+        double const hp_lp1_offset = detail::TptLp(lp2_offset, hp_state_[0], hp_coeff_);
+        double const hp_lp2_offset = detail::TptLp(hp_lp1_offset, hp_state_[1], hp_coeff_);
+        double const bp_lp1_offset = detail::TptLp(0.0, bp_state_[0], hp_coeff_);
+        double const bp_lp2_offset = detail::TptLp(bp_lp1_offset, bp_state_[1], hp_coeff_);
+        double const bp_offset = bp_lp1_offset - bp_lp2_offset;
+        double const hp_offset = (lp2_offset - hp_lp1_offset) - (hp_lp1_offset - hp_lp2_offset);
+        double const feedback = bp_gain_ * bp_offset + hp_gain_ * hp_offset;
+        double const u = Nonlinear(static_cast<float>((x + feedback) * inverse_));
+        double const bp_lp1 = detail::TickTptLp(u, bp_state_[0], hp_coeff_);
+        detail::TickTptLp(bp_lp1, bp_state_[1], hp_coeff_);
+        double const lp1 = detail::TickTptLp(u, lp_state_[0], lp_coeff_);
+        double const lp2 = detail::TickTptLp(lp1, lp_state_[1], lp_coeff_);
+        double const hp_branch_lp1 = detail::TickTptLp(lp2, hp_state_[0], hp_coeff_);
+        double const hp_branch_lp2 = detail::TickTptLp(hp_branch_lp1, hp_state_[1], hp_coeff_);
+        double const lp3 = detail::TickTptLp(lp2, lp_state_[2], lp_coeff_);
+        double const lp4 = detail::TickTptLp(lp3, lp_state_[3], lp_coeff_);
+
+        double const bp4 = (lp2 - lp3) - (lp3 - lp4);
+        // 使用反馈支路的状态合成 HP4，对应模拟分子 p⁴。
+        double const hp4 = (u - lp1) - hp_mix_ * (lp1 - lp2)
+                         + hp_ratio_squared_ * (3.0 * (lp2 - hp_branch_lp1)
+                                              - (hp_branch_lp1 - hp_branch_lp2));
+        return {static_cast<float>(lp4), static_cast<float>(bp4), static_cast<float>(hp4)};
+    }
+
+private:
+    std::array<double, 4> lp_state_{};
+    std::array<double, 2> bp_state_{};
+    std::array<double, 2> hp_state_{};
+    double bp_gain_{};
+    double hp_gain_{};
+    double hp_mix_{};
+    double hp_ratio_squared_{};
+    double lp_coeff_{};
+    double hp_coeff_{};
+    double inverse_{};
+};
+
 /**
  * NI Massive "Scream": 低通滤波器 + 内部饱和反馈.
  * 反馈路径把低通输出放大后送进一个高通, 饱和后再与输入相加, 形成强烈的谐波和共振峰.
@@ -370,8 +539,12 @@ static float Nonlinear(float x) noexcept {
 // app
 // ------------------------------------------------------------
 
-static constexpr int kWidth = 620;
-static constexpr int kHeight = 400;
+static constexpr int kWidth = 760;
+static constexpr int kHeight = 384;
+static constexpr Color kBackground{18, 22, 28, 255};
+static constexpr Color kPanel{28, 34, 42, 255};
+static constexpr Color kText{231, 237, 245, 255};
+static constexpr Color kMutedText{153, 167, 184, 255};
 static constexpr float kFs = 48000.0f;
 static constexpr float kPi = std::numbers::pi_v<float>;
 
@@ -379,11 +552,17 @@ enum FilterType {
     SvfTPT = 0,
     Ladder,
     Ladder8Pole,
-    SallenKey,
     Scream,
+    SallenKey,
+    SallenKeyTrackingHp,
+    SallenKey4Pole,
+    SallenKey4PoleTrackingHp,
     NumFilterTypes
 };
-static constexpr const char* kFilterNames[]{"svf tpt", "ladder", "ladder 8p", "sallen key", "scream"};
+static constexpr const char* kFilterNames[]{
+    "SVF TPT", "Ladder", "Ladder 8P", "Scream",
+    "Sallen-Key", "Sallen-Key HP", "Sallen-Key 4P", "Sallen-Key 4P HP"
+};
 
 enum OutputMode {
     Lowpass = 0,
@@ -410,6 +589,9 @@ static qwqdsp_filter::Ladder ladder;
 static qwqdsp_filter::Ladder8Pole ladder_8pole;
 static qwqdsp_filter::TransposeSallenKey sallen_key;
 static qwqdsp_filter::Scream scream;
+static qwqdsp_filter::TransposeSallenKeyTrackingHp sallen_key_tracking_hp;
+static qwqdsp_filter::TransposeSallenKey4Pole sallen_key_4pole;
+static qwqdsp_filter::TransposeSallenKey4PoleTrackingHp sallen_key_4pole_tracking_hp;
 
 static qwqdsp_fx::Oversample g_oversample;
 
@@ -422,14 +604,22 @@ static bool isOutputModeAvailable(FilterType type, OutputMode mode) noexcept {
         return true;
     }
 
-    return type == FilterType::SvfTPT || type == FilterType::Ladder || type == FilterType::SallenKey;
+    return type == FilterType::SvfTPT || type == FilterType::Ladder ||
+           type == FilterType::SallenKey || type == FilterType::SallenKeyTrackingHp ||
+           type == FilterType::SallenKey4Pole || type == FilterType::SallenKey4PoleTrackingHp;
 }
 
 static OutputMode effectiveOutputMode(FilterType type, OutputMode mode) noexcept {
     return isOutputModeAvailable(type, mode) ? mode : OutputMode::Lowpass;
 }
 
+static float TrackingHpRatio(float amount) noexcept {
+    constexpr float kScreamOctaveSpan = 131.5892f / 12.0f;
+    return std::exp2((amount - 1.0f) * kScreamOctaveSpan);
+}
+
 static void updateFilterCoeff(FilterType type, float w, float res, float scream_amt) noexcept {
+    float const zeta = scale(res, 1.0f, -0.5f);
     switch (type) {
         case FilterType::SvfTPT:
             svf_tpt.SetCoeffSVF(w, scale(res, 1.0f, -0.5f));
@@ -445,16 +635,45 @@ static void updateFilterCoeff(FilterType type, float w, float res, float scream_
             break;
         case FilterType::Scream: {
             // scream=0 时高通在低通下方约 11 个八度, scream=1 时两者重合
-            constexpr float kScreamOctaveSpan = 131.5892f / 12.0f;
             float const lp_freq = w * kFs / kPi;
-            float const ratio = std::exp2((scream_amt - 1.0f) * kScreamOctaveSpan);
+            float const ratio = TrackingHpRatio(scream_amt);
             float const hp_freq = std::clamp(lp_freq * ratio, 5.0f, kFs * 0.9f);
             scream.Set(w, qwqdsp::convert::Freq2W(hp_freq, kFs * 2), res);
             break;
         }
+        case FilterType::SallenKeyTrackingHp:
+            sallen_key_tracking_hp.Set(w, w * TrackingHpRatio(scream_amt), scale(res, 0.0f, 2.6f));
+            break;
+        case FilterType::SallenKey4Pole:
+            sallen_key_4pole.Set(w, zeta);
+            break;
+        case FilterType::SallenKey4PoleTrackingHp:
+            sallen_key_4pole_tracking_hp.Set(w, w * TrackingHpRatio(scream_amt), zeta);
+            break;
         default:
             break;
     }
+}
+
+static float SelectSallenKeyOutput(const auto& output, OutputMode mode) noexcept {
+    if (mode == OutputMode::Bandpass) {
+        return output.bp2;
+    }
+    if (mode == OutputMode::Highpass) {
+        return output.hp2;
+    }
+    return output.lp2;
+}
+
+static float SelectSallenKey4PoleOutput(const qwqdsp_filter::detail::SallenKey4PoleOutput& output,
+                                       OutputMode mode) noexcept {
+    if (mode == OutputMode::Bandpass) {
+        return output.bp4;
+    }
+    if (mode == OutputMode::Highpass) {
+        return output.hp4;
+    }
+    return output.lp4;
 }
 
 static float tickFilter(FilterType type, OutputMode mode, float x) noexcept {
@@ -479,18 +698,16 @@ static float tickFilter(FilterType type, OutputMode mode, float x) noexcept {
         }
         case FilterType::Ladder8Pole:
             return ladder_8pole.Tick(x).lp8;
-        case FilterType::SallenKey: {
-            auto const output = sallen_key.Tick(x);
-            if (mode == OutputMode::Bandpass) {
-                return output.bp2;
-            }
-            if (mode == OutputMode::Highpass) {
-                return output.hp2;
-            }
-            return output.lp2;
-        }
+        case FilterType::SallenKey:
+            return SelectSallenKeyOutput(sallen_key.Tick(x), mode);
         case FilterType::Scream:
             return scream.Tick(x);
+        case FilterType::SallenKeyTrackingHp:
+            return SelectSallenKeyOutput(sallen_key_tracking_hp.Tick(x), mode);
+        case FilterType::SallenKey4Pole:
+            return SelectSallenKey4PoleOutput(sallen_key_4pole.Tick(x), mode);
+        case FilterType::SallenKey4PoleTrackingHp:
+            return SelectSallenKey4PoleOutput(sallen_key_4pole_tracking_hp.Tick(x), mode);
         default:
             return 0.0f;
     }
@@ -540,33 +757,50 @@ static void audioInputCallback(void* _buffer, unsigned int frames) {
 
 static void setupKnob(Knob& knob, Rectangle bound, const char* title) {
     knob.set_bound(bound);
-    knob.set_bg_color(BLACK);
-    knob.set_fore_color(RAYWHITE);
+    knob.set_bg_color(kPanel);
+    knob.set_fore_color(kText);
     knob.set_title(title);
 }
 
-static void drawSelector(Rectangle bound, size_t num_items, const char* const* names, size_t selected,
-                         bool (*is_enabled)(size_t)) {
+template <size_t kCount>
+static size_t DrawSelector(Rectangle first_row, size_t columns, const char* const (&names)[kCount],
+                           size_t selected, auto is_enabled, auto on_select) {
+    constexpr float kGap = 8.0f;
+    constexpr int kFontSize = 16;
+    constexpr Color kSelected{154, 221, 205, 255};
+    constexpr Color kHovered{48, 61, 72, 255};
     auto const mouse_pos = GetMousePosition();
-    float const each_width = bound.width / static_cast<float>(num_items);
+    float const width = (first_row.width + kGap) / static_cast<float>(columns) - kGap;
+    auto item_bounds = [&](size_t i) {
+        return Rectangle{
+            first_row.x + (width + kGap) * static_cast<float>(i % columns),
+            first_row.y + (first_row.height + kGap) * static_cast<float>(i / columns),
+            width,
+            first_row.height
+        };
+    };
 
-    for (size_t i = 0; i < num_items; ++i) {
-        float const x = bound.x + static_cast<float>(i) * each_width;
-        float const y = bound.y;
-        float const w = each_width - 2.0f;
-        float const h = bound.height;
-        bool const enabled = is_enabled == nullptr || is_enabled(i);
-        Color const fore = enabled ? WHITE : DARKGRAY;
-
-        if (i == selected) {
-            DrawRectangle(x, y, w, h, WHITE);
-            DrawText(names[i], x + 4.0f, y + 8.0f, 12, BLACK);
-        }
-        else {
-            DrawRectangleLines(x, y, w, h, fore);
-            DrawText(names[i], x + 4.0f, y + 8.0f, 12, fore);
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        for (size_t i = 0; i < kCount; ++i) {
+            if (is_enabled(i) && CheckCollisionPointRec(mouse_pos, item_bounds(i))) {
+                selected = i;
+                on_select(i);
+                break;
+            }
         }
     }
+    for (size_t i = 0; i < kCount; ++i) {
+        Rectangle const item = item_bounds(i);
+        bool const enabled = is_enabled(i);
+        bool const hovered = enabled && CheckCollisionPointRec(mouse_pos, item);
+        Color const background = i == selected ? kSelected : (hovered ? kHovered : kPanel);
+        Color const foreground = i == selected ? kBackground : (enabled ? kText : GRAY);
+        DrawRectangleRounded(item, 0.24f, 6, background);
+        int const text_width = MeasureText(names[i], kFontSize);
+        DrawText(names[i], static_cast<int>(item.x + (item.width - text_width) * 0.5f),
+                 static_cast<int>(item.y + (item.height - kFontSize) * 0.5f), kFontSize, foreground);
+    }
+    return selected;
 }
 
 static constexpr std::array<float, 65> kHalfbandCoeffs = {
@@ -594,11 +828,10 @@ int main(void) {
     // 初始化 2x 超采样器（半带 FIR 系数）
     g_oversample.Init(kHalfbandCoeffs, 1);
 
-    Rectangle bound;
-    bound.x = 0;
-    bound.y = 0;
-    bound.width = 70;
-    bound.height = 60;
+    constexpr float kMargin = 24.0f;
+    constexpr float kContentWidth = kWidth - 2.0f * kMargin;
+    constexpr Rectangle kKnobPanel{kMargin, 244.0f, kContentWidth, 104.0f};
+    Rectangle bound{kMargin, 258.0f, kContentWidth / 8.0f, 76.0f};
 
     Knob pitch_knob;
     pitch_knob.on_value_change = [](float value) { pitch.store(value, std::memory_order_relaxed); };
@@ -645,28 +878,22 @@ int main(void) {
     Knob bias_knob;
     bias_knob.on_value_change = [](float value) { g_nonlinear_bias.store(value, std::memory_order_relaxed); };
     setupKnob(bias_knob, bound, "bias");
-    bias_knob.set_range(-0.1f, 0.1f, 0.001f, g_nonlinear_bias.load(std::memory_order_relaxed));
+    bias_knob.set_range(-0.3f, 0.3f, 0.001f, g_nonlinear_bias.load(std::memory_order_relaxed));
 
-    Rectangle filter_bound;
-    filter_bound.x = 0;
-    filter_bound.y = 90;
-    filter_bound.width = static_cast<float>(GetScreenWidth());
-    filter_bound.height = 30;
-
-    Rectangle mode_bound = filter_bound;
-    mode_bound.y += mode_bound.height + 8.0f;
-
-    Rectangle nonlinear_bound;
-    nonlinear_bound.x = 0;
-    nonlinear_bound.y = mode_bound.y + mode_bound.height + 8.0f;
-    nonlinear_bound.width = static_cast<float>(GetScreenWidth());
-    nonlinear_bound.height = 30;
+    constexpr Rectangle kFilterRow{kMargin, 52.0f, kContentWidth, 42.0f};
+    constexpr Rectangle kModeRow{kMargin, 178.0f, 220.0f, 38.0f};
+    constexpr Rectangle kNonlinearRow{kMargin + 244.0f, 178.0f, kContentWidth - 244.0f, 38.0f};
 
     SetTargetFPS(30);
     while (!WindowShouldClose()) {
         BeginDrawing();
         {
-            ClearBackground(BLACK);
+            ClearBackground(kBackground);
+
+            DrawText("Filter topology", kMargin, 22, 20, kText);
+            DrawText("Output mode", kModeRow.x, 154, 16, kMutedText);
+            DrawText("Nonlinearity", kNonlinearRow.x, 154, 16, kMutedText);
+            DrawRectangleRounded(kKnobPanel, 0.16f, 6, kPanel);
 
             pitch_knob.display();
             cutoff_knob.display();
@@ -677,51 +904,26 @@ int main(void) {
             drive_knob.display();
             bias_knob.display();
 
-            auto const mouse_pos = GetMousePosition();
-
-            float const filter_width = filter_bound.width / static_cast<float>(NumFilterTypes);
-            for (size_t i = 0; i < static_cast<size_t>(NumFilterTypes); ++i) {
-                Rectangle const item{filter_bound.x + static_cast<float>(i) * filter_width, filter_bound.y,
-                                     filter_width - 2.0f, filter_bound.height};
-                if (CheckCollisionPointRec(mouse_pos, item) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+            auto const always_enabled = [](size_t) { return true; };
+            auto const current_filter = static_cast<FilterType>(DrawSelector(
+                kFilterRow, 4, kFilterNames, filter_type.load(std::memory_order_relaxed), always_enabled, [](size_t i) {
                     filter_type.store(static_cast<FilterType>(i), std::memory_order_relaxed);
-                }
-            }
-
-            auto const current_filter = filter_type.load(std::memory_order_relaxed);
-            auto const mode_width = mode_bound.width / static_cast<float>(NumOutputModes);
-            for (size_t i = 0; i < static_cast<size_t>(NumOutputModes); ++i) {
-                auto const mode = static_cast<OutputMode>(i);
-                Rectangle const item{mode_bound.x + static_cast<float>(i) * mode_width, mode_bound.y, mode_width - 2.0f,
-                                     mode_bound.height};
-                if (CheckCollisionPointRec(mouse_pos, item) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)
-                    && isOutputModeAvailable(current_filter, mode)) {
-                    output_mode.store(mode, std::memory_order_relaxed);
-                }
-            }
+                }));
 
             auto const current_mode = effectiveOutputMode(current_filter, output_mode.load(std::memory_order_relaxed));
-            drawSelector(filter_bound, static_cast<size_t>(NumFilterTypes), kFilterNames,
-                         static_cast<size_t>(current_filter), nullptr);
-            drawSelector(mode_bound, static_cast<size_t>(NumOutputModes), kOutputModeNames,
-                         static_cast<size_t>(current_mode), [](size_t i) {
-                             return isOutputModeAvailable(filter_type.load(std::memory_order_relaxed),
-                                                          static_cast<OutputMode>(i));
+            DrawSelector(kModeRow, NumOutputModes, kOutputModeNames, current_mode, [current_filter](size_t i) {
+                    return isOutputModeAvailable(current_filter, static_cast<OutputMode>(i));
+                }, [](size_t i) {
+                    output_mode.store(static_cast<OutputMode>(i), std::memory_order_relaxed);
+                });
+
+            DrawSelector(kNonlinearRow, static_cast<size_t>(NonlinearType::NumTypes), kNonlinearTypeNames,
+                         static_cast<size_t>(g_nonlinear_type.load(std::memory_order_relaxed)),
+                         always_enabled, [](size_t i) {
+                             g_nonlinear_type.store(static_cast<NonlinearType>(i), std::memory_order_relaxed);
                          });
 
-            auto const current_nl_type = static_cast<size_t>(g_nonlinear_type.load(std::memory_order_relaxed));
-            float const nl_width = nonlinear_bound.width / static_cast<float>(NonlinearType::NumTypes);
-            for (size_t i = 0; i < static_cast<size_t>(NonlinearType::NumTypes); ++i) {
-                Rectangle const item{nonlinear_bound.x + static_cast<float>(i) * nl_width, nonlinear_bound.y,
-                                     nl_width - 2.0f, nonlinear_bound.height};
-                if (CheckCollisionPointRec(mouse_pos, item) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-                    g_nonlinear_type.store(static_cast<NonlinearType>(i), std::memory_order_relaxed);
-                }
-            }
-            drawSelector(nonlinear_bound, static_cast<size_t>(NonlinearType::NumTypes), kNonlinearTypeNames,
-                         current_nl_type, nullptr);
-
-            DrawText("right click knob: reset", 8, kHeight - 22, 12, DARKGRAY);
+            DrawText("Right-click a knob to reset", kMargin, 360, 13, kMutedText);
         }
         EndDrawing();
     }
